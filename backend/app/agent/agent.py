@@ -1,11 +1,12 @@
 import base64
+import json
 import logging
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..llm import get_client
+from ..llm import get_chat_client
 from ..models import ChatMessage
 from ..services.images import decode_barcodes, prepare_for_llm
 from .prompts import build_system_prompt
@@ -14,11 +15,11 @@ from .tools import FUNCTION_TOOLS, ToolContext, run_tool
 log = logging.getLogger(__name__)
 MAX_STEPS = 8
 HISTORY_TURNS = 12
-TOOLS = [{"type": "web_search"}, *FUNCTION_TOOLS]
+OPENAI_TOOLS = [{"type": "web_search"}, *FUNCTION_TOOLS]
 
 
 def _collect(resp, sources: list[dict], used: list[str]) -> list:
-    """Acumula fuentes web y nombres de herramientas; devuelve las function_calls pendientes."""
+    """Recoge function calls y citas de la Responses API de OpenAI."""
     calls = []
     for item in resp.output:
         if item.type == "function_call":
@@ -28,14 +29,78 @@ def _collect(resp, sources: list[dict], used: list[str]) -> list:
             used.append("web_search")
         elif item.type == "message":
             for part in item.content:
-                for a in getattr(part, "annotations", None) or []:
-                    if getattr(a, "type", "") == "url_citation" and all(s["url"] != a.url for s in sources):
-                        sources.append({"title": a.title, "url": a.url})
+                for annotation in getattr(part, "annotations", None) or []:
+                    if (getattr(annotation, "type", "") == "url_citation"
+                            and all(source["url"] != annotation.url for source in sources)):
+                        sources.append({"title": annotation.title, "url": annotation.url})
     return calls
 
 
+def _chat_tools() -> list[dict]:
+    """Convierte el esquema de Responses API al formato Chat Completions."""
+    return [
+        {
+            "type": "function",
+            "function": {
+                "name": tool["name"],
+                "description": tool["description"],
+                "parameters": tool["parameters"],
+            },
+        }
+        for tool in FUNCTION_TOOLS
+    ]
+
+
+def _run_huggingface(client, model: str, system: str, history: list[dict],
+                     content: list[dict], ctx: ToolContext, used: list[str]) -> str:
+    """Bucle de herramientas compatible con el endpoint Chat Completions de HF."""
+    messages = [{"role": "system", "content": system}, *history]
+    user_content = []
+    for part in content:
+        if part["type"] == "input_text":
+            user_content.append({"type": "text", "text": part["text"]})
+        elif part["type"] == "input_image":
+            user_content.append({
+                "type": "image_url",
+                "image_url": {"url": part["image_url"]},
+            })
+    messages.append({"role": "user", "content": user_content})
+    tools = _chat_tools()
+
+    for _ in range(MAX_STEPS):
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.2,
+        )
+        assistant = response.choices[0].message
+        calls = assistant.tool_calls or []
+        if not calls:
+            return assistant.content or ""
+
+        messages.append({
+            "role": "assistant",
+            "content": assistant.content,
+            "tool_calls": [call.model_dump(exclude_none=True) for call in calls],
+        })
+        for call in calls:
+            name = call.function.name
+            used.append(name)
+            output = run_tool(ctx, name, call.function.arguments)
+            messages.append({
+                "role": "tool",
+                "tool_call_id": call.id,
+                "content": output,
+            })
+    log.warning("Hugging Face MAX_STEPS alcanzado")
+    return "He alcanzado el límite de pasos de herramientas. ¿Puedes concretar un poco más?"
+
+
 def run_agent(db: Session, user_id: int, message: str, image: bytes | None = None) -> dict:
-    s, client = get_settings(), get_client()
+    s = get_settings()
+    client = get_chat_client()
     ctx = ToolContext(db, user_id)
     system = build_system_prompt(db, user_id)
 
@@ -43,38 +108,77 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
     content: list[dict] = []
     barcodes: list[str] = []
     if image:
-        barcodes = decode_barcodes(image)  # determinista, antes de llamar al modelo
+        barcodes = decode_barcodes(image)
         text += "\n\n[Sistema: " + (
-            f"códigos de barras detectados en la imagen: {', '.join(barcodes)}]" if barcodes
-            else "no se ha detectado ningún código de barras legible en la imagen]")
+            f"códigos de barras detectados en la imagen: {', '.join(barcodes)}]"
+            if barcodes else "no se ha detectado ningún código de barras legible en la imagen]"
+        )
         jpg, mime = prepare_for_llm(image)
-        content.append({"type": "input_image", "image_url": f"data:{mime};base64,{base64.b64encode(jpg).decode()}"})
+        content.append({
+            "type": "input_image",
+            "image_url": f"data:{mime};base64,{base64.b64encode(jpg).decode()}",
+        })
     content.insert(0, {"type": "input_text", "text": text})
 
-    past = db.scalars(select(ChatMessage).where(ChatMessage.user_id == user_id)
-                      .order_by(ChatMessage.id.desc()).limit(HISTORY_TURNS * 2)).all()
-    history = [{"role": m.role, "content": m.content} for m in reversed(past)]
-
-    kwargs = {"model": s.openai_model, "instructions": system, "tools": TOOLS}
-    if s.openai_reasoning_effort:
-        kwargs["reasoning"] = {"effort": s.openai_reasoning_effort}
+    past = db.scalars(
+        select(ChatMessage).where(ChatMessage.user_id == user_id)
+        .order_by(ChatMessage.id.desc()).limit(HISTORY_TURNS * 2)
+    ).all()
+    history = [{"role": item.role, "content": item.content} for item in reversed(past)]
 
     sources: list[dict] = []
     used: list[str] = []
-    resp = client.responses.create(input=[*history, {"role": "user", "content": content}], **kwargs)
-    for _ in range(MAX_STEPS):
-        calls = _collect(resp, sources, used)
-        if not calls:
-            break
-        outputs = [{"type": "function_call_output", "call_id": c.call_id,
-                    "output": run_tool(ctx, c.name, c.arguments)} for c in calls]
-        # Dentro de un turno encadenamos con previous_response_id; `instructions` NO se hereda.
-        resp = client.responses.create(input=outputs, previous_response_id=resp.id, **kwargs)
-    else:
-        log.warning("MAX_STEPS alcanzado")
+    provider = s.ai_provider.strip().lower()
 
-    reply = resp.output_text or "No he podido completar la respuesta; ¿puedes reformular la pregunta?"
-    db.add(ChatMessage(user_id=user_id, role="user", content=message.strip() + (" 📷" if image else "")))
+    if provider == "huggingface":
+        # Hugging Face no ofrece el hosted web_search de OpenAI; se conservan
+        # todas las herramientas locales (SQL, alimentos, registros y memoria).
+        system += (
+            "\n\nEste proveedor no dispone de búsqueda web integrada. No afirmes haber "
+            "consultado Internet ni inventes fuentes; si falta información externa, "
+            "explícalo claramente al usuario."
+        )
+        reply = _run_huggingface(
+            client, s.huggingface_model, system, history, content, ctx, used
+        )
+    elif provider == "openai":
+        kwargs = {"model": s.openai_model, "instructions": system, "tools": OPENAI_TOOLS}
+        if s.openai_reasoning_effort:
+            kwargs["reasoning"] = {"effort": s.openai_reasoning_effort}
+        response = client.responses.create(
+            input=[*history, {"role": "user", "content": content}], **kwargs
+        )
+        for _ in range(MAX_STEPS):
+            calls = _collect(response, sources, used)
+            if not calls:
+                break
+            outputs = [
+                {"type": "function_call_output", "call_id": call.call_id,
+                 "output": run_tool(ctx, call.name, call.arguments)}
+                for call in calls
+            ]
+            response = client.responses.create(
+                input=outputs, previous_response_id=response.id, **kwargs
+            )
+        else:
+            log.warning("OpenAI MAX_STEPS alcanzado")
+        reply = response.output_text or (
+            "No he podido completar la respuesta; ¿puedes reformular la pregunta?"
+        )
+    else:
+        raise ValueError(
+            f"AI_PROVIDER no válido: {provider!r}. Usa 'openai' o 'huggingface'."
+        )
+
+    db.add(ChatMessage(
+        user_id=user_id, role="user",
+        content=message.strip() + (" 📷" if image else ""),
+    ))
     db.add(ChatMessage(user_id=user_id, role="assistant", content=reply))
     db.commit()
-    return {"reply": reply, "sources": sources, "tools_used": list(dict.fromkeys(used)), "barcodes": barcodes}
+    return {
+        "reply": reply,
+        "sources": sources,
+        "tools_used": list(dict.fromkeys(used)),
+        "barcodes": barcodes,
+    }
