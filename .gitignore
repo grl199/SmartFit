@@ -2,7 +2,6 @@
 .env
 .env.*
 !.env.example
-.env.example/
 *.pem
 *.key
 .streamlit/secrets.toml
@@ -15,7 +14,6 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-.envgit rm --cached -r --ignore-unmatch .DS_Store backend/.DS_Store backend/.env backend/.venv
 build/
 dist/
 .python-version
@@ -47,6 +45,3 @@ uploads/
 .idea/
 .DS_Store
 Thumbs.db
-
-# --- Skills
-.agents
