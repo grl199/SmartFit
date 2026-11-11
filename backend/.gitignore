@@ -1,0 +1,48 @@
+# --- Secretos (NUNCA al repo) ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+.streamlit/secrets.toml
+vault-data/
+*.token
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+venv/
+build/
+dist/
+.python-version
+
+# --- Tests / cobertura / linters ---
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# --- Streamlit ---
+.streamlit/cache/
+
+# --- Docker / datos locales ---
+pgdata/
+*.sqlite3
+*.dump
+*.sql.gz
+
+# --- Subidas y logs ---
+uploads/
+*.log
+
+# --- Editor / SO ---
+.vscode/*
+!.vscode/launch.json
+!.vscode/settings.json
+.idea/
+.DS_Store
+Thumbs.db
