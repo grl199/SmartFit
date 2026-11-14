@@ -41,5 +41,5 @@ def clear_history(db: Session = Depends(get_db), uid: int = Depends(current_user
 
 @router.post("/rag/reindex")
 def reindex(db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    """Backfill: genera/actualiza el resumen vectorizado de todos los días con registros."""
-    return {"days_indexed": reindex_all(db, uid)}
+    """Recrea los embeddings existentes y actualiza los resúmenes diarios."""
+    return reindex_all(db, uid)

@@ -51,20 +51,14 @@ def _chat_tools() -> list[dict]:
     ]
 
 
-def _run_huggingface(client, model: str, system: str, history: list[dict],
-                     content: list[dict], ctx: ToolContext, used: list[str]) -> str:
-    """Bucle de herramientas compatible con el endpoint Chat Completions de HF."""
-    messages = [{"role": "system", "content": system}, *history]
-    user_content = []
-    for part in content:
-        if part["type"] == "input_text":
-            user_content.append({"type": "text", "text": part["text"]})
-        elif part["type"] == "input_image":
-            user_content.append({
-                "type": "image_url",
-                "image_url": {"url": part["image_url"]},
-            })
-    messages.append({"role": "user", "content": user_content})
+def _run_chat_completions(client, model: str, system: str, history: list[dict],
+                          user_text: str, ctx: ToolContext, used: list[str]) -> str:
+    """Bucle de herramientas compatible con la API Chat Completions."""
+    messages = [
+        {"role": "system", "content": system},
+        *history,
+        {"role": "user", "content": user_text},
+    ]
     tools = _chat_tools()
 
     for _ in range(MAX_STEPS):
@@ -94,7 +88,7 @@ def _run_huggingface(client, model: str, system: str, history: list[dict],
                 "tool_call_id": call.id,
                 "content": output,
             })
-    log.warning("Hugging Face MAX_STEPS alcanzado")
+    log.warning("Chat Completions MAX_STEPS alcanzado")
     return "He alcanzado el límite de pasos de herramientas. ¿Puedes concretar un poco más?"
 
 
@@ -105,7 +99,6 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
     system = build_system_prompt(db, user_id)
 
     text = message.strip() or ("Analiza esta imagen." if image else "")
-    content: list[dict] = []
     barcodes: list[str] = []
     if image:
         barcodes = decode_barcodes(image)
@@ -113,12 +106,6 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
             f"códigos de barras detectados en la imagen: {', '.join(barcodes)}]"
             if barcodes else "no se ha detectado ningún código de barras legible en la imagen]"
         )
-        jpg, mime = prepare_for_llm(image)
-        content.append({
-            "type": "input_image",
-            "image_url": f"data:{mime};base64,{base64.b64encode(jpg).decode()}",
-        })
-    content.insert(0, {"type": "input_text", "text": text})
 
     past = db.scalars(
         select(ChatMessage).where(ChatMessage.user_id == user_id)
@@ -130,18 +117,26 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
     used: list[str] = []
     provider = s.ai_provider.strip().lower()
 
-    if provider == "huggingface":
-        # Hugging Face no ofrece el hosted web_search de OpenAI; se conservan
-        # todas las herramientas locales (SQL, alimentos, registros y memoria).
+    if provider == "openrouter":
+        # Este modelo es solo de texto; los códigos de barras sí se decodifican localmente.
         system += (
-            "\n\nEste proveedor no dispone de búsqueda web integrada. No afirmes haber "
-            "consultado Internet ni inventes fuentes; si falta información externa, "
-            "explícalo claramente al usuario."
+            "\n\nNo puedes analizar imágenes ni consultar Internet. La aplicación puede "
+            "decodificar códigos de barras localmente, pero no leer etiquetas en fotos. "
+            "No afirmes haber visto una imagen ni consultado Internet; si falta esa "
+            "información, explícalo claramente."
         )
-        reply = _run_huggingface(
-            client, s.huggingface_model, system, history, content, ctx, used
+        reply = _run_chat_completions(
+            client, s.openrouter_model, system, history, text, ctx, used
         )
     elif provider == "openai":
+        content = []
+        if image:
+            jpg, mime = prepare_for_llm(image)
+            content.append({
+                "type": "input_image",
+                "image_url": f"data:{mime};base64,{base64.b64encode(jpg).decode()}",
+            })
+        content.insert(0, {"type": "input_text", "text": text})
         kwargs = {"model": s.openai_model, "instructions": system, "tools": OPENAI_TOOLS}
         if s.openai_reasoning_effort:
             kwargs["reasoning"] = {"effort": s.openai_reasoning_effort}
@@ -167,7 +162,7 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
         )
     else:
         raise ValueError(
-            f"AI_PROVIDER no válido: {provider!r}. Usa 'openai' o 'huggingface'."
+            f"AI_PROVIDER no válido: {provider!r}. Usa 'openrouter' o 'openai'."
         )
 
     db.add(ChatMessage(

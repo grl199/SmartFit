@@ -1,8 +1,4 @@
-"""Memoria a largo plazo: embeddings en pgvector.
-
-El proveedor de embeddings sigue AI_PROVIDER: Hugging Face evita llamadas de
-embeddings a OpenAI cuando está seleccionado.
-"""
+"""Memoria a largo plazo: embeddings en pgvector."""
 import logging
 from datetime import date
 
@@ -75,11 +71,34 @@ def index_day_task(user_id: int, day: date) -> None:
         log.exception("Fallo indexando %s", day)
 
 
-def reindex_all(db: Session, user_id: int) -> int:
+def reindex_all(db: Session, user_id: int) -> dict[str, int]:
+    chunks = db.scalars(
+        select(MemoryChunk).where(MemoryChunk.user_id == user_id)
+    ).all()
+    existing_summaries = {
+        chunk.ref_date: chunk.content
+        for chunk in chunks
+        if chunk.kind == "daily_summary" and chunk.ref_date is not None
+    }
+    for start in range(0, len(chunks), 64):
+        batch = chunks[start:start + 64]
+        vectors = embed([chunk.content for chunk in batch])
+        for chunk, vector in zip(batch, vectors, strict=True):
+            chunk.embedding = vector
+    db.commit()
+
     days = db.scalars(
         select(FoodLog.log_date).where(FoodLog.user_id == user_id).distinct()
     ).all()
-    return sum(index_day(db, user_id, day) for day in days)
+    days_indexed = 0
+    for day in days:
+        summary = build_daily_summary(db, user_id, day)
+        if summary is None:
+            continue
+        if existing_summaries.get(day) != summary:
+            _upsert(db, user_id, "daily_summary", summary, day)
+        days_indexed += 1
+    return {"chunks_reembedded": len(chunks), "days_indexed": days_indexed}
 
 
 def add_note(db: Session, user_id: int, text: str) -> None:

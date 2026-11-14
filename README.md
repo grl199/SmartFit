@@ -1,31 +1,39 @@
 # HealthApp
 
-Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de IA es seleccionable por variable de entorno: Hugging Face u OpenAI.
+Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de IA es seleccionable por variable de entorno: OpenRouter u OpenAI.
 
 ```
 Streamlit ──HTTP──▶ FastAPI ──▶ PostgreSQL (+pgvector)
                       │
-                      ├─▶ Agente (Hugging Face Chat Completions u OpenAI Responses API)
+                      ├─▶ Agente (OpenRouter Chat Completions u OpenAI Responses API)
                       │     ├─ herramientas locales: resúmenes SQL, barcode, foods, log_food, RAG, remember
                       │     └─ web_search alojado (solo OpenAI)
-                      ├─▶ Embeddings RAG (Hugging Face u OpenAI según AI_PROVIDER)
+                      ├─▶ Embeddings RAG (OpenRouter u OpenAI según AI_PROVIDER)
                       ├─▶ Open Food Facts (barcode → nutrientes)
                       ├─▶ zxing-cpp (decodifica el código de la foto, determinista)
-                      └─▶ Vault (API key de OpenAI)
+                      └─▶ Vault (opcional, API key de OpenAI directo)
 ```
 
 ## Puesta en marcha
 
 ```bash
-docker compose --profile vault up -d          # Postgres+pgvector y Vault (opcional)
+docker compose up -d db                       # Postgres+pgvector
+# Solo si usas OpenAI con Vault: docker compose --profile vault up -d
 
-cd backend && python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env                          # ajusta AI_PROVIDER, HUGGINGFACE_API_KEY y API_TOKEN
-uvicorn app.main:app --reload                 # http://localhost:8000/docs
+cd backend
+python3 -m venv .venv                          # solo la primera vez
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+test -f .env || cp .env.example .env            # después configura OPENROUTER_API_KEY y API_TOKEN
+python -m uvicorn app.main:app --reload        # http://localhost:8000/docs
 
-cd ../frontend && pip install -r requirements.txt
-API_TOKEN=<el mismo> streamlit run Home.py
+# En otra terminal:
+cd frontend
+python3 -m venv .venv                          # solo la primera vez
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+export API_TOKEN="$(sed -n 's/^API_TOKEN=//p' ../backend/.env)"
+python -m streamlit run Home.py
 ```
 
 ## Selección del proveedor
@@ -33,19 +41,20 @@ API_TOKEN=<el mismo> streamlit run Home.py
 En `backend/.env`:
 
 ```dotenv
-# Recomendado para evitar consumo de créditos OpenAI
-AI_PROVIDER=huggingface
-HUGGINGFACE_API_KEY=hf_...
-HUGGINGFACE_MODEL=Qwen/Qwen2.5-VL-7B-Instruct
+# OpenRouter
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=openai/gpt-oss-20b:free
+OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 
 # Para volver a OpenAI:
 # AI_PROVIDER=openai
 # OPENAI_MODEL=gpt-5.5
 ```
 
-Hugging Face usa el router OpenAI-compatible para chat y su endpoint de inferencia para embeddings. El token de Hugging Face es necesario incluso para modelos públicos. El nivel gratuito de Inference Providers tiene cuotas, límites de velocidad y disponibilidad de modelos/proveedores variables; no implica uso ilimitado ni SLA. El modelo seleccionado debe estar disponible en un proveedor compatible y admitir llamadas a herramientas. El modelo Qwen VL conserva la entrada de imágenes cuando el proveedor la soporta.
+`openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente, pero no se pueden leer etiquetas o analizar imágenes.
 
-Con `AI_PROVIDER=huggingface`, no se consulta Vault ni se hacen llamadas de chat/embeddings a OpenAI. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas. La búsqueda web alojada de OpenAI no está disponible en Hugging Face; el asistente lo indicará en lugar de fingir una búsqueda. OpenAI mantiene su flujo original, incluido `web_search`, cuando se selecciona.
+Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRouter. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`.
 
 ## Decisiones de diseño
 
@@ -54,7 +63,7 @@ Con `AI_PROVIDER=huggingface`, no se consulta Vault ni se hacen llamadas de chat
 - **Datos exactos con SQL, memoria difusa con RAG.** pgvector indexa resúmenes diarios + notas (`remember`).
 - **Perfil → system prompt**, junto con objetivos y totales de hoy, en cada turno.
 - **`log_food` exige confirmación** (instrucción del prompt).
-- Los embeddings multilingües de Hugging Face (384 dimensiones) se completan con ceros hasta la dimensión pgvector actual (1536 por defecto). Así se evita una migración destructiva de los vectores ya almacenados. Al cambiar de proveedor/modelo conviene reindexar el histórico para que todos los vectores usen el mismo espacio semántico.
+- Al cambiar de proveedor o modelo de embeddings, reindexa la memoria existente desde `POST /rag/reindex` para que todos los vectores compartan el mismo espacio semántico. La operación usa el modelo de embeddings configurado y puede tener coste.
 
 ## Tests
 
