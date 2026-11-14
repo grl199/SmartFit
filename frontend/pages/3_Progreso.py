@@ -2,8 +2,10 @@ import pandas as pd
 import streamlit as st
 
 import api
+import auth
 
 st.set_page_config(page_title="Progreso", page_icon="📈", layout="wide")
+auth.require_login()
 st.title("📈 Progreso")
 
 days = st.sidebar.radio("Periodo", [7, 14, 30, 90], index=1, format_func=lambda d: f"{d} días")

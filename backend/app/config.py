@@ -8,8 +8,16 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://health:health@localhost:5432/health"
     timezone: str = "Europe/Madrid"
-    api_token: str | None = None
-    default_user_id: int = 1  # MVP monousuario; ver deps.current_user_id
+
+    # --- Autenticación ---
+    # Clave para firmar los JWT. Genera una con: python -c "import secrets; print(secrets.token_urlsafe(48))"
+    # Si falta, se genera una aleatoria al arrancar (las sesiones se pierden en cada reinicio).
+    secret_key: str | None = None
+    token_ttl_hours: int = 12
+    allow_registration: bool = True
+    # Credenciales para el usuario 1 ya existente (solo se aplican si aún no tiene contraseña).
+    bootstrap_username: str | None = None
+    bootstrap_password: str | None = None
 
     # Proveedor de chat y embeddings: "openrouter" o "openai".
     ai_provider: str = "openrouter"
@@ -36,6 +44,9 @@ class Settings(BaseSettings):
     vault_key: str = "api_key"
 
     off_user_agent: str = "HealthApp/0.1 (tu-email@ejemplo.com)"
+    # Búsqueda de texto de Open Food Facts (search-a-licious). OFF limita a 10 búsquedas/min/IP.
+    off_search_url: str = "https://search.openfoodfacts.org/search"
+    off_search_per_minute: int = 8
 
 
 @lru_cache

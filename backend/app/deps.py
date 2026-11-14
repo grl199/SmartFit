@@ -1,23 +1,35 @@
-import secrets
+from fastapi import Depends, HTTPException, UploadFile
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from sqlalchemy.orm import Session
 
-from fastapi import Header, HTTPException, UploadFile
-
-from .config import get_settings
+from .db import get_db
+from .models import User
+from .security import decode_token
 
 ALLOWED_IMAGES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_MB = 10
+_bearer = HTTPBearer(auto_error=False)
 
 
-def verify_api_key(x_api_key: str | None = Header(default=None)) -> None:
-    token = get_settings().api_token
-    if token and not secrets.compare_digest(x_api_key or "", token):
-        raise HTTPException(401, "API key inválida")
+def current_user(creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+                 db: Session = Depends(get_db)) -> User:
+    """Usuario autenticado por JWT. Se comprueba en BD en cada petición para que borrar una cuenta
+    invalide sus tokens al instante."""
+    uid = decode_token(creds.credentials) if creds else None
+    user = db.get(User, uid) if uid else None
+    if user is None:
+        raise HTTPException(401, "Sesión no válida o caducada", headers={"WWW-Authenticate": "Bearer"})
+    return user
 
 
-def current_user_id() -> int:
-    """MVP monousuario. Para multiusuario: valida un JWT/OIDC aquí y devuelve su user id;
-    el resto del código ya filtra siempre por user_id."""
-    return get_settings().default_user_id
+def current_user_id(user: User = Depends(current_user)) -> int:
+    return user.id
+
+
+def require_onboarded(user: User = Depends(current_user)) -> None:
+    """Bloquea las funciones de la app hasta completar el perfil inicial."""
+    if not user.onboarding_completed:
+        raise HTTPException(403, "onboarding_required")
 
 
 def read_image(upload: UploadFile) -> bytes:

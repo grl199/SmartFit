@@ -6,16 +6,18 @@ from ..deps import current_user_id, read_image
 from ..models import Food
 from ..schemas import BarcodeOut, FoodCreate, FoodOut
 from ..services.images import decode_barcodes
-from ..services.nutrition import search_foods
+from ..services.food_search import search_hybrid
 from ..services.openfoodfacts import normalize_barcode, resolve_barcode
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
 
 @router.get("/search", response_model=list[FoodOut])
-def search(q: str = Query(min_length=1), limit: int = Query(10, le=30),
+def search(q: str = Query(min_length=1), limit: int = Query(10, le=30), online: bool = True,
            db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    return search_foods(db, uid, q, limit)
+    """Búsqueda mientras se escribe: BD local; si hay pocos resultados, completa con Open Food Facts
+    (limitado y cacheado) y persiste lo encontrado."""
+    return search_hybrid(db, uid, q, limit, online)
 
 
 @router.get("/barcode/{code}", response_model=BarcodeOut)

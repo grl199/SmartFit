@@ -23,7 +23,7 @@ def _read(img: Image.Image) -> list[str]:
     out: list[str] = []
     for r in zxingcpp.read_barcodes(img):
         t = r.text.strip()
-        if t.isdigit() and len(t) in (8, 12, 13) and t not in out:  # EAN-8 / UPC-A / EAN-13
+        if t.isdigit() and 8 <= len(t) <= 32 and t not in out:  # EAN/UPC/GTIN y códigos internos largos
             out.append(t)
     return out
 

@@ -3,9 +3,11 @@ from datetime import date
 import streamlit as st
 
 import api
+import auth
 from components import MEALS, progress_block, quick_add_bar
 
 st.set_page_config(page_title="Salud · Hoy", page_icon="🥗", layout="wide")
+auth.require_login()
 st.title("🥗 Hoy")
 
 today_resp = api.get("/meta/today")

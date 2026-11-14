@@ -3,48 +3,93 @@ from datetime import date
 import streamlit as st
 
 import api
+import auth
 
 st.set_page_config(page_title="Perfil", page_icon="👤", layout="wide")
+me = auth.require_login()
 st.title("👤 Perfil y objetivos")
 
+opts = api.options()
 p = api.get("/profile") or {}
 t = api.get("/targets") or {}
 
+
+def pick(label, key, current, **kw):
+    """Selectbox sobre una lista cerrada (permite «sin indicar» si el dato está vacío)."""
+    codes = list(opts[key])
+    if current is None:
+        codes = [None, *codes]
+    return st.selectbox(label, codes, index=codes.index(current) if current in codes else 0,
+                        format_func=lambda c: "— sin indicar —" if c is None else opts[key][c], **kw)
+
+
+# ───────── Objetivos ─────────
 st.subheader("Objetivos diarios")
+src = {"llm": "🤖 Generados por la IA", "manual": "✍️ Editados a mano"}.get(t.get("source"), "")
+st.caption(src)
+if t.get("rationale"):
+    st.info(t["rationale"])
+if t.get("training_plan"):
+    with st.expander("📋 Plan de entrenamiento recomendado"):
+        st.markdown(t["training_plan"])
+
+if st.button("🤖 Recalcular objetivos con IA (usa tu perfil y peso actuales)"):
+    with st.spinner("La IA está calculando…"):
+        res = api.post("/targets/generate", timeout=api.LONG_TIMEOUT)
+    if res:
+        st.success("Objetivos actualizados")
+        auth.show_targets(res)
+        st.stop()
+
 with st.form("targets"):
     cols = st.columns(5)
     new_t = {
-        "kcal": cols[0].number_input("kcal", 500.0, 10000.0, float(t.get("kcal", 2000)), step=50.0),
+        "kcal": cols[0].number_input("kcal", 800.0, 8000.0, float(t.get("kcal", 2000)), step=50.0),
         "protein_g": cols[1].number_input("Proteína (g)", 0.0, 500.0, float(t.get("protein_g", 120)), step=5.0),
         "carbs_g": cols[2].number_input("Hidratos (g)", 0.0, 1000.0, float(t.get("carbs_g", 220)), step=5.0),
         "fat_g": cols[3].number_input("Grasa (g)", 0.0, 500.0, float(t.get("fat_g", 65)), step=5.0),
         "fiber_g": cols[4].number_input("Fibra (g)", 0.0, 200.0, float(t.get("fiber_g", 30)), step=1.0),
-        "workouts_per_week": st.number_input("Entrenos por semana", 0, 14, int(t.get("workouts_per_week", 3))),
     }
-    if st.form_submit_button("Guardar objetivos") and api.put("/targets", new_t):
+    new_t["workouts_per_week"] = st.number_input("Entrenos por semana", 0, 14, int(t.get("workouts_per_week", 3)))
+    if st.form_submit_button("Guardar objetivos manualmente") and api.put("/targets", new_t):
         st.success("Guardado")
 
+# ───────── Perfil ─────────
 st.subheader("Perfil (se inyecta en el contexto del asistente)")
-SEX = ["", "hombre", "mujer", "otro"]
 with st.form("profile"):
     c = st.columns(3)
-    sex = c[0].selectbox("Sexo", SEX, index=SEX.index(p["sex"]) if p.get("sex") in SEX else 0)
+    sex = pick("Sexo", "sex", p.get("sex"))
     bd = c[1].date_input("Fecha de nacimiento", value=date.fromisoformat(p["birth_date"]) if p.get("birth_date") else None,
-                         min_value=date(1900, 1, 1), max_value=date.today())
+                         min_value=date(1920, 1, 1), max_value=date.today())
     h = c[2].number_input("Altura (cm)", 0.0, 250.0, float(p.get("height_cm") or 0), step=1.0)
-    act = st.text_input("Nivel de actividad", p.get("activity_level") or "", placeholder="sedentario, moderado, muy activo…")
-    goal = st.text_input("Objetivo", p.get("goal") or "", placeholder="perder grasa, ganar músculo, mantener…")
+    c = st.columns(3)
+    goal = pick("Objetivo principal", "goal", p.get("goal"))
+    act = pick("Nivel de actividad", "activity_level", p.get("activity_level"))
+    exp = pick("Experiencia entrenando", "experience_level", p.get("experience_level"))
+    days = st.slider("Días disponibles para entrenar", 1, 7, int(p.get("available_training_days") or 3))
     restr = st.text_area("Alergias / restricciones", p.get("dietary_restrictions") or "")
     notes = st.text_area("Notas para el asistente", p.get("context_notes") or "",
                          placeholder="Lesiones, rutina de entrenamiento, horarios, preferencias…")
     if st.form_submit_button("Guardar perfil"):
-        body = {"sex": sex or None, "birth_date": bd.isoformat() if bd else None, "height_cm": h or None,
-                "activity_level": act or None, "goal": goal or None,
+        body = {"sex": sex, "birth_date": bd.isoformat() if bd else None, "height_cm": h or None, "activity_level": act,
+                "goal": goal, "experience_level": exp, "available_training_days": days,
                 "dietary_restrictions": restr or None, "context_notes": notes or None}
         if api.put("/profile", body):
-            st.success("Guardado")
+            st.success("Guardado. Pulsa «Recalcular objetivos con IA» si quieres actualizar tus objetivos.")
 
 if st.button("🔄 Reindexar histórico para el RAG"):
     r = api.post("/rag/reindex")
     if r:
         st.success(f"{r['days_indexed']} días indexados")
+
+# ───────── Zona de peligro ─────────
+st.divider()
+with st.expander("⚠️ Eliminar mi cuenta"):
+    st.warning(f"Se borrarán **todos** los datos de «{me['name']}» (diario, entrenos, peso, chat, memoria, alimentos creados). "
+               "No se puede deshacer.")
+    pw = st.text_input("Confirma con tu contraseña", type="password", key="del_pw")
+    sure = st.checkbox("Entiendo que es irreversible", key="del_sure")
+    if st.button("Eliminar cuenta definitivamente", type="primary", disabled=not (pw and sure)):
+        if api.call("DELETE", "/auth/me", json={"password": pw}):
+            api.logout("Tu cuenta ha sido eliminada.")
+            st.rerun()

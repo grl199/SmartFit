@@ -2,43 +2,66 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from sqlalchemy import func, select
 
+from . import enums
 from .config import get_settings
 from .db import SessionLocal, init_db
-from .deps import verify_api_key
-from .models import User, UserProfile, UserTarget
-from .routers import chat, dashboard, foods, logs, profile, training
+from .deps import require_onboarded
+from .models import User
+from .routers import auth, chat, dashboard, foods, logs, profile, training
+from .security import hash_password
 from .services.nutrition import today_local
 
 logging.basicConfig(level=logging.INFO)
+log = logging.getLogger(__name__)
 
 
-def _ensure_default_user() -> None:
-    uid = get_settings().default_user_id
+def _bootstrap_existing_user() -> None:
+    """Pone credenciales al usuario 1 (el de antes de existir el login) usando BOOTSTRAP_USERNAME/PASSWORD.
+    Solo actúa si ese usuario existe y aún no tiene contraseña; nunca pisa una contraseña existente."""
+    s = get_settings()
+    if not (s.bootstrap_username and s.bootstrap_password):
+        return
     with SessionLocal() as db:
-        if not db.get(User, uid):
-            db.add(User(id=uid, name="Usuario"))
-            db.flush()
-            db.add_all([UserProfile(user_id=uid), UserTarget(user_id=uid)])
-            db.commit()
+        user = db.get(User, 1)
+        if user is None or user.password_hash is not None:
+            return
+        taken = db.scalar(select(User).where(func.lower(User.name) == s.bootstrap_username.strip().lower()))
+        if taken:
+            log.warning("BOOTSTRAP_USERNAME %r ya lo usa otro usuario; el usuario 1 sigue sin credenciales", s.bootstrap_username)
+            return
+        user.name, user.password_hash = s.bootstrap_username.strip(), hash_password(s.bootstrap_password)
+        db.commit()
+        log.info("Credenciales establecidas para el usuario 1 (%s)", user.name)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
-    _ensure_default_user()
+    _bootstrap_existing_user()
     yield
 
 
-app = FastAPI(title="HealthApp API", version="0.1.0", lifespan=lifespan,
-              dependencies=[Depends(verify_api_key)])
-for r in (foods.router, logs.router, dashboard.router, profile.router, training.router, chat.router):
-    app.include_router(r)
+app = FastAPI(title="SmartFit API", version="0.2.0", lifespan=lifespan)
+
+# Públicas / solo autenticadas: auth (login, registro) y perfil (incluye el onboarding).
+app.include_router(auth.router)
+app.include_router(profile.router)
+# Resto: requieren sesión Y onboarding completado.
+for r in (foods.router, logs.router, dashboard.router, training.router, chat.router):
+    app.include_router(r, dependencies=[Depends(require_onboarded)])
 
 
 @app.get("/meta/today")
 def meta_today():
     return {"date": today_local().isoformat()}
+
+
+@app.get("/meta/options")
+def meta_options():
+    """Listas cerradas (código -> etiqueta) para los formularios del frontend."""
+    return enums.OPTIONS
 
 
 @app.get("/health")

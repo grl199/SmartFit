@@ -1,8 +1,10 @@
 import streamlit as st
 
 import api
+import auth
 
 st.set_page_config(page_title="Asistente", page_icon="💬", layout="wide")
+auth.require_login()
 st.title("💬 Asistente")
 
 if "chat" not in st.session_state:
