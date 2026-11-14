@@ -4,14 +4,19 @@ import pandas as pd
 import streamlit as st
 
 import api
+import auth
 
 st.set_page_config(page_title="Entrenamiento", page_icon="🏋️", layout="wide")
+auth.require_login()
 st.title("🏋️ Entrenamiento")
 
 workouts = api.get("/workouts", days=60) or []
 targets = api.get("/targets") or {"workouts_per_week": 3}
 week_start = date.today() - timedelta(days=date.today().weekday())
 this_week = [w for w in workouts if date.fromisoformat(w["performed_on"]) >= week_start]
+if targets.get("training_plan"):
+    with st.expander("📋 Plan de entrenamiento recomendado" + (" (IA)" if targets.get("source") == "llm" else "")):
+        st.markdown(targets["training_plan"])
 st.metric("Entrenos esta semana", f"{len(this_week)} / {targets['workouts_per_week']}")
 st.progress(min(len(this_week) / max(targets["workouts_per_week"], 1), 1.0))
 

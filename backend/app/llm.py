@@ -69,3 +69,19 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
                 f"pgvector espera {s.embedding_dim}."
             )
     return vectors
+
+
+def chat_text(messages: list[dict], json_mode: bool = False) -> str:
+    """Llamada simple de chat (sin herramientas) con el proveedor configurado. Devuelve el texto."""
+    s = get_settings()
+    provider = s.ai_provider.strip().lower()
+    client = get_chat_client()
+    kwargs: dict = {"messages": messages}
+    if provider == "openrouter":
+        kwargs.update(model=s.openrouter_model, temperature=0.2)  # json_mode no se fuerza: no todos los modelos gratuitos lo soportan
+    else:
+        kwargs["model"] = s.openai_model
+        if json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+    resp = client.chat.completions.create(**kwargs)
+    return resp.choices[0].message.content or ""

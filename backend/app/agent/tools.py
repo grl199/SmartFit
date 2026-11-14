@@ -8,8 +8,9 @@ from sqlalchemy.orm import Session
 
 from ..models import NUTRIENTS, BodyMetric, Food
 from ..services import rag
+from ..services.food_search import search_hybrid
 from ..services.nutrition import (
-    create_log, daily_series, day_overview, get_targets, search_foods, today_local, workouts_between,
+    create_log, daily_series, day_overview, get_targets, today_local, workouts_between,
 )
 from ..services.openfoodfacts import normalize_barcode, resolve_barcode
 
@@ -35,7 +36,7 @@ FUNCTION_TOOLS = [
     _fn("get_period_summary",
         "Totales por día, medias (solo de días con registros), entrenos y pesos en un rango de fechas.",
         {"start_date": _DATE, "end_date": _DATE}, ("start_date", "end_date")),
-    _fn("search_foods", "Busca alimentos en la base de datos local por nombre o marca.",
+    _fn("search_foods", "Busca alimentos por nombre o marca en la base de datos local y, si hay pocos resultados, en Open Food Facts (los resultados se guardan).",
         {"query": {"type": "string"}}, ("query",)),
     _fn("lookup_barcode",
         "Busca un producto por código de barras (BD local y luego Open Food Facts). Devuelve nutrientes por 100 g.",
@@ -93,7 +94,7 @@ def get_period_summary(ctx: ToolContext, start_date: str, end_date: str) -> dict
 
 
 def t_search_foods(ctx: ToolContext, query: str) -> dict:
-    return {"results": [_food_dict(f) for f in search_foods(ctx.db, ctx.user_id, query, 8)]}
+    return {"results": [_food_dict(f) for f in search_hybrid(ctx.db, ctx.user_id, query, 8)]}
 
 
 def lookup_barcode(ctx: ToolContext, barcode: str) -> dict:
@@ -102,6 +103,8 @@ def lookup_barcode(ctx: ToolContext, barcode: str) -> dict:
         return {"status": res.status, "food": _food_dict(res.food)}
     hint = {"incomplete": "El producto existe en Open Food Facts pero sin datos nutricionales; busca en la web.",
             "not_found": "No está en Open Food Facts; busca en la web.",
+            "nonstandard": "Código no estándar (interno de tienda o peso variable): no está en Open Food Facts. "
+                           "Pide al usuario los valores por 100 g para guardarlos con create_food (incluye el barcode).",
             "error": "Open Food Facts no responde; reintenta o busca en la web."}[res.status]
     return {"status": res.status, "name": res.name, "brand": res.brand, "hint": hint}
 

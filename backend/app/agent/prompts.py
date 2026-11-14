@@ -1,7 +1,12 @@
+from datetime import timedelta
+
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from ..models import UserProfile
+from .. import enums
+from ..models import BodyMetric, User, UserProfile, UserTarget
 from ..services.nutrition import day_overview, latest_weight, today_local
+from ..services.plan import _age as plan_age, energy
 
 WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 
@@ -16,6 +21,9 @@ Hoy es {today} ({weekday}).
 
 ## Objetivos diarios
 {targets}
+
+## Plan de entrenamiento recomendado
+{plan}
 
 ## Registrado hoy hasta ahora
 {totals}
@@ -41,23 +49,53 @@ dietas muy restrictivas, recomienda consultar a un profesional sanitario.
 """
 
 
+def _weight_line(db: Session, user_id: int) -> str | None:
+    last = latest_weight(db, user_id)
+    if not last:
+        return None
+    line = f"Peso actual: {last.weight_kg:.1f} kg ({last.measured_on.isoformat()})"
+    if last.body_fat_pct:
+        line += f", {last.body_fat_pct:.0f}% de grasa"
+    first = db.scalar(select(BodyMetric).where(BodyMetric.user_id == user_id,
+                                               BodyMetric.measured_on >= today_local() - timedelta(days=30))
+                      .order_by(BodyMetric.measured_on).limit(1))
+    if first and first.id != last.id:
+        line += f"; variación en 30 días: {last.weight_kg - first.weight_kg:+.1f} kg"
+    return line
+
+
 def _profile_text(db: Session, user_id: int) -> str:
-    p = db.get(UserProfile, user_id)
-    lines = []
+    u, p = db.get(User, user_id), db.get(UserProfile, user_id)
+    lines = [f"Nombre de usuario: {u.name}"] if u else []
+    last = latest_weight(db, user_id)
     if p:
-        if p.sex: lines.append(f"Sexo: {p.sex}")
+        if p.sex: lines.append(f"Sexo: {enums.SEX.get(p.sex, p.sex)}")
         if p.birth_date:
-            t = today_local()
-            age = t.year - p.birth_date.year - ((t.month, t.day) < (p.birth_date.month, p.birth_date.day))
-            lines.append(f"Edad: {age} años")
+            lines.append(f"Edad: {plan_age(p.birth_date)} años")
         if p.height_cm: lines.append(f"Altura: {p.height_cm:.0f} cm")
-        if p.activity_level: lines.append(f"Nivel de actividad: {p.activity_level}")
-        if p.goal: lines.append(f"Objetivo: {p.goal}")
-        if p.dietary_restrictions: lines.append(f"Restricciones/alergias: {p.dietary_restrictions}")
-        if p.context_notes: lines.append(f"Notas: {p.context_notes}")
-    if w := latest_weight(db, user_id):
-        lines.append(f"Peso más reciente: {w.weight_kg:.1f} kg ({w.measured_on.isoformat()})")
+    if w := _weight_line(db, user_id):
+        lines.append(w)
+        if p and p.height_cm:
+            lines.append(f"IMC: {last.weight_kg / (p.height_cm / 100) ** 2:.1f}")
+    if p:
+        if p.activity_level: lines.append(f"Nivel de actividad: {enums.ACTIVITY_LEVEL.get(p.activity_level, p.activity_level)}")
+        if p.goal: lines.append(f"Objetivo principal: {enums.GOAL.get(p.goal, p.goal)}")
+        if p.experience_level: lines.append(f"Experiencia entrenando: {enums.EXPERIENCE_LEVEL.get(p.experience_level, p.experience_level)}")
+        if p.available_training_days: lines.append(f"Días disponibles para entrenar: {p.available_training_days}/semana")
+        if p.dietary_restrictions: lines.append(f"Alergias/restricciones dietéticas: {p.dietary_restrictions}")
+        if p.context_notes: lines.append(f"Notas del usuario: {p.context_notes}")
+        if p.sex and p.birth_date and p.height_cm and p.activity_level and last:
+            bmr, tdee = energy(p.sex, last.weight_kg, p.height_cm, plan_age(p.birth_date), p.activity_level)
+            lines.append(f"Gasto energético estimado: metabolismo basal {bmr} kcal, gasto total diario {tdee} kcal")
     return "\n".join(f"- {l}" for l in lines) or "Sin datos de perfil todavía."
+
+
+def _plan_text(db: Session, user_id: int) -> str:
+    t = db.get(UserTarget, user_id)
+    if not t or not t.training_plan:
+        return "Sin plan de entrenamiento definido."
+    origin = "generado por IA" if t.source == "llm" else "objetivos editados manualmente después"
+    return f"({origin})\n{t.training_plan[:1500]}" + (f"\nMotivo: {t.rationale[:500]}" if t.rationale else "")
 
 
 def build_system_prompt(db: Session, user_id: int) -> str:
@@ -69,4 +107,4 @@ def build_system_prompt(db: Session, user_id: int) -> str:
     totals = (f"{t['kcal']:.0f} kcal · proteína {t['protein_g']:.0f} g · hidratos {t['carbs_g']:.0f} g · "
               f"grasa {t['fat_g']:.0f} g · fibra {t['fiber_g']:.0f} g ({len(ov['entries'])} registros)")
     return SYSTEM_TEMPLATE.format(today=today.isoformat(), weekday=WEEKDAYS[today.weekday()],
-                                  profile=_profile_text(db, user_id), targets=targets, totals=totals)
+                                  profile=_profile_text(db, user_id), targets=targets, plan=_plan_text(db, user_id), totals=totals)

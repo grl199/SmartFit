@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 Meal = Literal["breakfast", "lunch", "snack", "dinner"]
 
@@ -69,25 +69,103 @@ class FrequentFood(BaseModel):
     last_logged: datetime
 
 
+SexCode = Literal["male", "female"]
+ActivityCode = Literal["sedentary", "light", "moderate", "high", "very_high"]
+GoalCode = Literal["gain_muscle", "lose_fat", "definition", "recomposition", "maintain"]
+ExperienceCode = Literal["beginner", "intermediate", "advanced"]
+MIN_AGE = 18
+
+
+def _age(birth: date) -> int:
+    t = date.today()
+    return t.year - birth.year - ((t.month, t.day) < (birth.month, birth.day))
+
+
 class ProfileIO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
-    sex: str | None = None
+    sex: SexCode | None = None
     birth_date: date | None = None
-    height_cm: float | None = Field(None, gt=0, lt=300)
-    activity_level: str | None = None
-    goal: str | None = None
-    dietary_restrictions: str | None = None
-    context_notes: str | None = None
+    height_cm: float | None = Field(None, ge=100, le=250)
+    activity_level: ActivityCode | None = None
+    goal: GoalCode | None = None
+    experience_level: ExperienceCode | None = None
+    available_training_days: int | None = Field(None, ge=1, le=7)
+    dietary_restrictions: str | None = Field(None, max_length=500)
+    context_notes: str | None = Field(None, max_length=2000)
+
+    @field_validator("birth_date")
+    @classmethod
+    def _adult(cls, v: date | None):
+        if v is not None and not (MIN_AGE <= _age(v) <= 100):
+            raise ValueError(f"La app está pensada para personas de {MIN_AGE} a 100 años")
+        return v
+
+
+class OnboardingIn(ProfileIO):
+    """Perfil inicial: todos los datos necesarios para calcular objetivos son obligatorios."""
+    sex: SexCode
+    birth_date: date
+    height_cm: float = Field(ge=100, le=250)
+    weight_kg: float = Field(gt=30, lt=300)
+    activity_level: ActivityCode
+    goal: GoalCode
+    experience_level: ExperienceCode
+    available_training_days: int = Field(ge=1, le=7)
 
 
 class TargetIO(BaseModel):
+    """Objetivos editables a mano."""
     model_config = ConfigDict(from_attributes=True)
-    kcal: float = Field(gt=0)
-    protein_g: float = Field(ge=0)
-    carbs_g: float = Field(ge=0)
-    fat_g: float = Field(ge=0)
-    fiber_g: float = Field(ge=0)
+    kcal: float = Field(ge=800, le=8000)
+    protein_g: float = Field(ge=0, le=500)
+    carbs_g: float = Field(ge=0, le=1000)
+    fat_g: float = Field(ge=0, le=500)
+    fiber_g: float = Field(ge=0, le=200)
     workouts_per_week: int = Field(ge=0, le=14)
+
+
+class TargetOut(TargetIO):
+    training_plan: str | None = None
+    rationale: str | None = None
+    source: str = "manual"
+
+
+class OnboardingOut(BaseModel):
+    profile: ProfileIO
+    targets: TargetOut
+    bmr: float
+    tdee: float
+
+
+class Credentials(BaseModel):
+    name: str = Field(min_length=3, max_length=40, description="Nombre de usuario")
+    password: str = Field(min_length=8, max_length=128)
+
+    @field_validator("name")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        v = v.strip()
+        if len(v) < 3:
+            raise ValueError("El nombre debe tener al menos 3 caracteres")
+        return v
+
+
+class UserOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    onboarding_completed: bool
+    created_at: datetime
+
+
+class TokenOut(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
+class DeleteAccountIn(BaseModel):
+    password: str
 
 
 class WorkoutIn(BaseModel):

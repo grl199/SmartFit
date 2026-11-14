@@ -1,11 +1,14 @@
 from datetime import date
 
 import streamlit as st
+from streamlit_searchbox import st_searchbox
 
 import api
+import auth
 from components import MEALS, food_log_form, quick_add_bar
 
 st.set_page_config(page_title="Registrar", page_icon="➕", layout="wide")
+auth.require_login()
 st.title("➕ Registrar comida")
 
 today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isoformat()})["date"])
@@ -19,25 +22,42 @@ with st.expander("⭐ Habituales", expanded=True):
 
 tab_search, tab_scan, tab_manual = st.tabs(["🔎 Buscar", "📷 Código de barras", "✍️ Crear manual"])
 
+# ───────── Búsqueda dinámica ─────────
 with tab_search:
-    q = st.text_input("Nombre o marca", placeholder="p. ej. yogur griego")
-    if q:
-        foods = api.get("/foods/search", q=q) or []
-        if not foods:
-            st.info("Sin resultados. Prueba con el escáner, el chat (busca en la web) o créalo a mano.")
-        else:
-            food = st.selectbox("Resultados", foods, format_func=lambda f: f"{f['name']}" + (f" · {f['brand']}" if f["brand"] else "") + f" ({f['kcal']:.0f} kcal/100 g)")
-            food_log_form(food, f"s{food['id']}", **kw)
+    online = st.toggle("Incluir Open Food Facts", value=True,
+                       help="Si hay pocos resultados locales, busca también en Open Food Facts y guarda lo encontrado "
+                            "(la primera búsqueda de un término puede tardar un segundo).")
 
+    def _search(term: str):
+        if not term or len(term.strip()) < 2:
+            return []
+        foods = api.get("/foods/search", q=term.strip(), limit=10, online=str(online).lower()) or []
+        st.session_state.setdefault("_foods", {}).update({f["id"]: f for f in foods})
+        return [(f"{f['name']}" + (f" · {f['brand']}" if f["brand"] else "") + f" — {f['kcal']:.0f} kcal/100 g"
+                 + (" 🌐" if f["source"] == "openfoodfacts" else ""), f["id"]) for f in foods]
+
+    selected = st_searchbox(_search, placeholder="Empieza a escribir: yogur griego, avena, plátano…",
+                            key="food_search", debounce=500, clear_on_submit=False)
+    if selected is not None and (food := st.session_state.get("_foods", {}).get(selected)):
+        food_log_form(food, f"s{food['id']}", **kw)
+    st.caption("🌐 = producto de Open Food Facts (guardado en tu base de datos para próximas búsquedas).")
+
+# ───────── Código de barras ─────────
+STATUS_HELP = {
+    "nonstandard": "Es un código interno de tienda o de peso variable (no es un EAN/UPC estándar), así que no existe en Open Food Facts.",
+    "not_found": "Open Food Facts no conoce este producto.",
+    "incomplete": "Open Food Facts conoce el producto pero sin datos nutricionales.",
+    "error": "Open Food Facts no responde ahora mismo.",
+}
 with tab_scan:
-    st.caption("Haz una foto al código o súbela. Si el producto no está en Open Food Facts, pregúntaselo al chat.")
+    st.caption("Haz una foto al código o súbela; también puedes escribirlo.")
     photo = st.camera_input("Foto del código de barras") or st.file_uploader("…o sube una imagen", type=["jpg", "jpeg", "png", "webp"])
-    manual_code = st.text_input("…o escribe el código", max_chars=14)
+    manual_code = st.text_input("…o escribe el código (8 a 32 dígitos)", max_chars=32)
     if photo and st.session_state.get("scan_id") != photo.file_id:
         res = api.post("/foods/barcode-image", files={"image": (photo.name, photo.getvalue(), photo.type)})
         st.session_state.update(scan_id=photo.file_id, scan_res=res)
     elif manual_code and st.button("Buscar código"):
-        st.session_state.update(scan_id=None, scan_res=api.get(f"/foods/barcode/{manual_code}"))
+        st.session_state.update(scan_id=None, scan_res=api.get(f"/foods/barcode/{manual_code.strip()}"))
     res = st.session_state.get("scan_res")
     if res:
         if res["food"]:
@@ -45,10 +65,19 @@ with tab_scan:
         elif res["status"] == "no_barcode":
             st.warning("No se detecta ningún código. Acércate más, con buena luz y el código plano.")
         else:
-            st.warning(f"Códigos {res['barcodes']}: producto sin datos nutricionales utilizables ({res['status']}). "
-                       "Pídele al chat que lo busque en la web y lo guarde.")
+            code = (res.get("barcodes") or [""])[0]
+            st.warning(f"Código {code}: {STATUS_HELP.get(res['status'], res['status'])}")
+            if res.get("name"):
+                st.caption(f"Producto: {res['name']}" + (f" · {res['brand']}" if res.get("brand") else ""))
+            if st.button("✍️ Crear este producto manualmente", key="prefill_btn"):
+                st.session_state["prefill_barcode"] = code
+                st.info("Código copiado. Ve a la pestaña «Crear manual»: la próxima vez que lo escanees se reconocerá solo.")
 
+# ───────── Crear manual ─────────
 with tab_manual:
+    prefill = st.session_state.get("prefill_barcode", "")
+    if prefill:
+        st.info(f"Creando producto para el código {prefill}")
     with st.form("new_food", clear_on_submit=True):
         name = st.text_input("Nombre *")
         brand = st.text_input("Marca")
@@ -57,7 +86,12 @@ with tab_manual:
         vals = {k: cols[i % 4].number_input(lbl, min_value=0.0, step=0.1) for i, (k, lbl) in enumerate(
             [("kcal", "kcal"), ("protein_g", "Proteína"), ("carbs_g", "Hidratos"), ("fat_g", "Grasa"),
              ("sugars_g", "Azúcares"), ("sat_fat_g", "Saturadas"), ("fiber_g", "Fibra"), ("sodium_mg", "Sodio (mg)")])}
-        barcode = st.text_input("Código de barras (opcional)")
+        barcode = st.text_input("Código de barras (opcional, hasta 32 dígitos)", value=prefill, max_chars=32)
         if st.form_submit_button("Crear alimento") and name:
-            if api.post("/foods", json={"name": name, "brand": brand or None, "barcode": barcode or None, **vals}):
-                st.success("Creado. Ya puedes buscarlo en la pestaña «Buscar».")
+            created = api.post("/foods", json={"name": name, "brand": brand or None, "barcode": barcode or None, **vals})
+            if created:
+                st.session_state.pop("prefill_barcode", None)
+                st.session_state["just_created"] = created
+    if created := st.session_state.get("just_created"):
+        st.success("Creado. Puedes registrarlo ahora:")
+        food_log_form(created, f"n{created['id']}", **kw)
