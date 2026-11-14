@@ -44,7 +44,6 @@ with tab_search:
 
 # ───────── Código de barras ─────────
 STATUS_HELP = {
-    "nonstandard": "Es un código interno de tienda o de peso variable (no es un EAN/UPC estándar), así que no existe en Open Food Facts.",
     "not_found": "Open Food Facts no conoce este producto.",
     "incomplete": "Open Food Facts conoce el producto pero sin datos nutricionales.",
     "error": "Open Food Facts no responde ahora mismo.",

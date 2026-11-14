@@ -102,9 +102,7 @@ def lookup_barcode(ctx: ToolContext, barcode: str) -> dict:
     if res.food:
         return {"status": res.status, "food": _food_dict(res.food)}
     hint = {"incomplete": "El producto existe en Open Food Facts pero sin datos nutricionales; busca en la web.",
-            "not_found": "No está en Open Food Facts; busca en la web.",
-            "nonstandard": "Código no estándar (interno de tienda o peso variable): no está en Open Food Facts. "
-                           "Pide al usuario los valores por 100 g para guardarlos con create_food (incluye el barcode).",
+            "not_found": "No está en Open Food Facts; busca en la web o pide al usuario los valores por 100 g para guardarlos con create_food (incluye el barcode).",
             "error": "Open Food Facts no responde; reintenta o busca en la web."}[res.status]
     return {"status": res.status, "name": res.name, "brand": res.brand, "hint": hint}
 

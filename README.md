@@ -90,9 +90,9 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
   `foods`, de modo que la siguiente búsqueda ya es local.
 - Open Food Facts limita las búsquedas a **10/min/IP**, por eso hay debounce en la interfaz, un límite propio
   (`OFF_SEARCH_PER_MINUTE`) y una caché de consultas recientes. Si OFF falla, la búsqueda local sigue funcionando.
-- **Por código de barras:** cualquier código de 8 a 32 dígitos. Los EAN/UPC/GTIN se consultan en OFF; los demás (códigos internos de
-  tienda, peso variable) solo se resuelven contra tu base de datos: créalos una vez a mano y se reconocerán al escanearlos.
-- `python scripts/check_off_search.py "yogur griego"` comprueba la búsqueda de OFF con la red real y muestra el formato de los datos.
+- **Por código de barras:** cualquier código de 8 a 32 dígitos, incluidos los de tienda de 24 dígitos (p. ej. los de Mercadona),
+  que Open Food Facts también tiene. Primero se busca en tu base de datos y después en OFF; el resultado se guarda.
+- `python scripts/check_off_search.py "yogur griego"` (o un código: `... 232839950000100350003502`) comprueba OFF con la red real y muestra el formato de los datos.
 - El agente usa la misma búsqueda híbrida en su herramienta `search_foods`.
 
 ## Decisiones de diseño

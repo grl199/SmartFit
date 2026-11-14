@@ -20,18 +20,15 @@ OFF_FIELDS = "code,product_name,product_name_es,brands,nutriments,serving_quanti
 
 @dataclass
 class BarcodeResult:
-    status: str  # db | openfoodfacts | incomplete | not_found | nonstandard | error
+    status: str  # db | openfoodfacts | incomplete | not_found | error
     food: Food | None = None
     name: str | None = None
     brand: str | None = None
 
 
-GTIN_LENGTHS = (8, 13, 14)  # EAN-8, EAN-13/UPC-A (normalizado a 13) y GTIN-14: los únicos que existen en Open Food Facts
-
-
 def normalize_barcode(raw: str) -> str:
-    """Solo dígitos, 8-32. UPC-A (12) se normaliza a EAN-13. Se admiten otras longitudes (códigos internos
-    de tienda, peso variable...), que se guardan tal cual pero no se buscan en Open Food Facts."""
+    """Solo dígitos, 8-32. UPC-A (12) se normaliza a EAN-13. Se admiten otras longitudes: OFF también guarda
+    códigos de tienda/peso variable (p. ej. los de 24 dígitos de Mercadona), que se consultan igual."""
     digits = re.sub(r"\D", "", raw or "")
     if len(digits) == 12:
         digits = "0" + digits
@@ -72,9 +69,6 @@ def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
     code = normalize_barcode(raw)
     if food := db.scalar(select(Food).where(Food.barcode == code)):
         return BarcodeResult("db", food, food.name, food.brand)
-
-    if len(code) not in GTIN_LENGTHS:
-        return BarcodeResult("nonstandard")  # código interno / peso variable: no está en OFF
 
     try:
         r = httpx.get(
@@ -153,7 +147,7 @@ def parse_search_hit(hit: dict) -> dict | None:
     name = hit.get("product_name")
     if isinstance(name, dict):  # a veces viene por idioma
         name = name.get("es") or name.get("main") or next(iter(name.values()), None)
-    if not code or len(code) not in GTIN_LENGTHS + (12,) or not name:
+    if not code or not name:
         return None
     brands = hit.get("brands")
     brand = (brands[0] if isinstance(brands, list) and brands else str(brands or "").split(",")[0]).strip() or None
