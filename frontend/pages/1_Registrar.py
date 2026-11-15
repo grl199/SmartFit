@@ -5,9 +5,11 @@ from streamlit_searchbox import st_searchbox
 
 import api
 import auth
+import ui
 from components import MEALS, food_log_form, quick_add_bar
 
 st.set_page_config(page_title="Registrar", page_icon="➕", layout="wide")
+ui.inject_css()
 auth.require_login()
 st.title("➕ Registrar comida")
 
@@ -28,19 +30,27 @@ with tab_search:
                        help="Si hay pocos resultados locales, busca también en Open Food Facts y guarda lo encontrado "
                             "(la primera búsqueda de un término puede tardar un segundo).")
 
+    def _label(f: dict) -> str:
+        """Una línea por resultado: nombre · marca · kcal · Nutri-Score · 🏷 código de barras."""
+        parts = [f["name"]] + ([f["brand"]] if f["brand"] else []) + [f"{f['kcal']:.0f} kcal/100 g"]
+        if f.get("nutriscore_grade"):
+            parts.append(f"Nutri-Score {f['nutriscore_grade'].upper()}")
+        if f.get("barcode"):
+            parts.append(f"🏷 {f['barcode']}")
+        return " · ".join(parts) + (" 🌐" if f["source"] == "openfoodfacts" else "")
+
     def _search(term: str):
         if not term or len(term.strip()) < 2:
             return []
         foods = api.get("/foods/search", q=term.strip(), limit=10, online=str(online).lower()) or []
         st.session_state.setdefault("_foods", {}).update({f["id"]: f for f in foods})
-        return [(f"{f['name']}" + (f" · {f['brand']}" if f["brand"] else "") + f" — {f['kcal']:.0f} kcal/100 g"
-                 + (" 🌐" if f["source"] == "openfoodfacts" else ""), f["id"]) for f in foods]
+        return [(_label(f), f["id"]) for f in foods]
 
     selected = st_searchbox(_search, placeholder="Empieza a escribir: yogur griego, avena, plátano…",
                             key="food_search", debounce=500, clear_on_submit=False)
     if selected is not None and (food := st.session_state.get("_foods", {}).get(selected)):
         food_log_form(food, f"s{food['id']}", **kw)
-    st.caption("🌐 = producto de Open Food Facts (guardado en tu base de datos para próximas búsquedas).")
+    st.caption("🌐 = producto de Open Food Facts (se guarda en tu base de datos para próximas búsquedas) · 🏷 = código de barras.")
 
 # ───────── Código de barras ─────────
 STATUS_HELP = {

@@ -7,7 +7,7 @@ from ..models import Food
 from ..schemas import BarcodeOut, FoodCreate, FoodOut
 from ..services.images import decode_barcodes
 from ..services.food_search import search_hybrid
-from ..services.openfoodfacts import normalize_barcode, resolve_barcode
+from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
 
 router = APIRouter(prefix="/foods", tags=["foods"])
 
@@ -55,4 +55,15 @@ def create_food(body: FoodCreate, db: Session = Depends(get_db), uid: int = Depe
     food = Food(user_id=uid, source="manual", **data)
     db.add(food)
     db.commit()
+    return food
+
+
+@router.get("/{food_id}", response_model=FoodOut)
+def get_food(food_id: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
+    """Ficha del alimento. Si viene de Open Food Facts y aún no tiene sus metadatos (foto, Nutri-Score, NOVA,
+    alérgenos, ingredientes), se completan ahora con una sola consulta."""
+    food = db.get(Food, food_id)
+    if not food or food.user_id not in (None, uid):
+        raise HTTPException(404, "Alimento no encontrado")
+    enrich_food_from_off(db, food)
     return food

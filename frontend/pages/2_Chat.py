@@ -2,8 +2,10 @@ import streamlit as st
 
 import api
 import auth
+import ui
 
 st.set_page_config(page_title="Asistente", page_icon="💬", layout="wide")
+ui.inject_css()
 auth.require_login()
 st.title("💬 Asistente")
 

@@ -62,9 +62,8 @@ GOOD_PLAN = {"kcal": 2900, "protein_g": 160, "carbs_g": 380, "fat_g": 80, "fiber
              "rationale": "Superávit moderado sobre el gasto total para ganar músculo con proteína alta."}
 
 
-@pytest.fixture
-def onboarded(client):
-    """Usuario con onboarding completado (LLM simulado)."""
+def onboard_new_user(client):
+    """Registra un usuario y completa su onboarding (LLM simulado)."""
     import json
     from unittest.mock import patch
     u = register(client)
@@ -72,3 +71,8 @@ def onboarded(client):
         r = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
     assert r.status_code == 200, r.text
     return u
+
+
+@pytest.fixture
+def onboarded(client):
+    return onboard_new_user(client)

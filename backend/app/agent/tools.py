@@ -52,6 +52,10 @@ FUNCTION_TOOLS = [
         {"food_id": {"type": "integer"}, "grams": _NUM,
          "meal": {"type": "string", "enum": ["breakfast", "lunch", "snack", "dinner"]},
          "date": {**_DATE, "description": "Si se omite, hoy"}}, ("food_id", "grams")),
+    _fn("get_workout_log",
+        "Sesiones de entrenamiento en un rango de fechas con ejercicios, series (reps x peso), calorías estimadas y "
+        "volumen por grupo muscular.",
+        {"start_date": _DATE, "end_date": _DATE}, ("start_date", "end_date")),
     _fn("search_history",
         "Búsqueda semántica en la memoria del usuario (resúmenes diarios antiguos y notas guardadas).",
         {"query": {"type": "string"}, "k": {"type": "integer", "description": "1-10, por defecto 5"}}, ("query",)),
@@ -62,7 +66,9 @@ FUNCTION_TOOLS = [
 
 def _food_dict(f: Food) -> dict:
     return {"id": f.id, "name": f.name, "brand": f.brand, "barcode": f.barcode, "source": f.source,
-            "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS}}
+            "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS},
+            "nutriscore": f.nutriscore_grade, "nova_group": f.nova_group, "quantity": f.quantity,
+            "allergens": f.allergens or None}
 
 
 def _d(s: str | None) -> date:
@@ -136,6 +142,24 @@ def log_food(ctx: ToolContext, food_id: int, grams: float, meal: str | None = No
             "day_totals": day_overview(ctx.db, ctx.user_id, log.log_date)["totals"]}
 
 
+def get_workout_log(ctx: ToolContext, start_date: str, end_date: str) -> dict:
+    from ..models import Workout, WorkoutSet
+    from ..services.training import muscle_summary, workout_sets_summary
+    start, end = _d(start_date), _d(end_date)
+    if (end - start).days > 366:
+        raise ValueError("Rango máximo: 366 días")
+    ws = ctx.db.scalars(select(Workout).where(Workout.user_id == ctx.user_id, Workout.performed_on.between(start, end))
+                        .order_by(Workout.performed_on)).all()
+    sessions = []
+    for w in ws:
+        sets = list(ctx.db.scalars(select(WorkoutSet).where(WorkoutSet.workout_id == w.id).order_by(WorkoutSet.id)))
+        sessions.append({"date": w.performed_on.isoformat(), "title": w.kind, "category": w.category,
+                         "duration_min": w.duration_min, "kcal_burned": w.kcal_burned, "kcal_source": w.kcal_source,
+                         "intensity": w.intensity, "exercises": workout_sets_summary(sets)})
+    m = muscle_summary(ctx.db, ctx.user_id, start, end)["muscles"]
+    return {"sessions": sessions, "weighted_sets_per_muscle": {k: v["sets"] for k, v in m.items() if v["sets"]}}
+
+
 def search_history(ctx: ToolContext, query: str, k: int = 5) -> dict:
     return {"results": rag.search_memory(ctx.db, ctx.user_id, query, max(1, min(k, 10)))}
 
@@ -146,7 +170,7 @@ def remember(ctx: ToolContext, note: str) -> dict:
 
 
 HANDLERS = {
-    "get_day_summary": get_day_summary, "get_period_summary": get_period_summary,
+    "get_day_summary": get_day_summary, "get_period_summary": get_period_summary, "get_workout_log": get_workout_log,
     "search_foods": t_search_foods, "lookup_barcode": lookup_barcode, "create_food": create_food,
     "log_food": log_food, "search_history": search_history, "remember": remember,
 }

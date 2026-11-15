@@ -1,21 +1,11 @@
 import streamlit as st
 
 import api
+import ui
 
 MEALS = {"breakfast": "Desayuno", "lunch": "Comida", "snack": "Snack", "dinner": "Cena"}
 NUTRIENT_LABELS = {"kcal": "kcal", "protein_g": "Proteína (g)", "carbs_g": "Hidratos (g)", "fat_g": "Grasa (g)",
-                   "sugars_g": "Azúcares (g)", "fiber_g": "Fibra (g)", "sodium_mg": "Sodio (mg)"}
-
-
-def progress_block(totals: dict, targets: dict) -> None:
-    items = [("kcal", "Calorías", "kcal"), ("protein_g", "Proteína", "g"), ("carbs_g", "Hidratos", "g"),
-             ("fat_g", "Grasa", "g"), ("fiber_g", "Fibra", "g")]
-    for col, (key, label, unit) in zip(st.columns(len(items)), items):
-        val, goal = totals.get(key, 0), targets.get(key) or 0
-        with col:
-            st.metric(label, f"{val:.0f} / {goal:.0f} {unit}",
-                      delta=f"{val - goal:+.0f}" if goal and val > goal else None, delta_color="inverse")
-            st.progress(min(val / goal, 1.0) if goal else 0.0)
+                   "sugars_g": "Azúcares (g)", "sat_fat_g": "Saturadas (g)", "fiber_g": "Fibra (g)"}
 
 
 def quick_add_bar(limit: int = 12, per_row: int = 4) -> None:
@@ -34,19 +24,37 @@ def quick_add_bar(limit: int = 12, per_row: int = 4) -> None:
                     st.rerun()
 
 
+def full_food(food: dict) -> dict:
+    """Ficha completa: si el alimento viene de Open Food Facts, el backend completa foto, Nutri-Score,
+    NOVA, alérgenos e ingredientes la primera vez que se selecciona. Se cachea en la sesión."""
+    cache = st.session_state.setdefault("_food_full", {})
+    if food["id"] not in cache:
+        cache[food["id"]] = api.get(f"/foods/{food['id']}") or food
+    return cache[food["id"]]
+
+
 def food_log_form(food: dict, key: str, log_date: str | None = None, meal: str | None = None) -> None:
-    """Gramos -> vista previa de nutrientes consumidos -> registrar."""
-    st.markdown(f"**{food['name']}**" + (f" · {food['brand']}" if food.get("brand") else ""))
-    st.caption("Valores por 100 g: " + " · ".join(
-        f"{lbl} {food[k]:.1f}" for k, lbl in NUTRIENT_LABELS.items() if k in ("kcal", "protein_g", "carbs_g", "fat_g")))
-    default = float(food.get("serving_g") or 100)
-    grams = st.number_input("Cantidad (g)", min_value=1.0, max_value=5000.0, value=default, step=5.0, key=f"g_{key}")
-    cols = st.columns(len(NUTRIENT_LABELS))
-    for col, (k, lbl) in zip(cols, NUTRIENT_LABELS.items()):
-        col.metric(lbl, f"{food[k] * grams / 100:.1f}")
-    if st.button("➕ Añadir al diario", key=f"add_{key}", type="primary"):
-        payload = {"food_id": food["id"], "grams": grams, "meal": meal, "log_date": log_date}
-        if api.post("/logs", json=payload):
-            st.toast("Registrado", icon="✅")
-            st.session_state.pop("scanned_food", None)
-            st.rerun()
+    """Ficha del alimento -> gramos -> vista previa de nutrientes consumidos -> registrar."""
+    food = full_food(food)
+    with st.container(border=True):
+        ui.html(ui.food_header(food))
+        if food.get("ingredients") or food.get("categories"):
+            with st.expander("Ingredientes y categorías"):
+                if food.get("categories"):
+                    ui.html(ui.chips(food["categories"], "blue"))
+                if food.get("ingredients"):
+                    st.caption(food["ingredients"])
+        st.caption("Valores por 100 g: " + " · ".join(
+            f"{lbl} {food[k]:.1f}" for k, lbl in NUTRIENT_LABELS.items() if k in ("kcal", "protein_g", "carbs_g", "fat_g")))
+        default = float(food.get("serving_g") or 100)
+        grams = st.number_input("Cantidad (g)", min_value=1.0, max_value=5000.0, value=default, step=5.0, key=f"g_{key}")
+        cols = st.columns(len(NUTRIENT_LABELS) + 1)
+        for col, (k, lbl) in zip(cols, NUTRIENT_LABELS.items()):
+            col.metric(lbl, f"{food[k] * grams / 100:.1f}")
+        cols[-1].metric("Sal (g)", f"{food['sodium_mg'] * 2.5 * grams / 100000:.2f}")
+        if st.button("➕ Añadir al diario", key=f"add_{key}", type="primary"):
+            payload = {"food_id": food["id"], "grams": grams, "meal": meal, "log_date": log_date}
+            if api.post("/logs", json=payload):
+                st.toast("Registrado", icon="✅")
+                st.session_state.pop("scanned_food", None)
+                st.rerun()

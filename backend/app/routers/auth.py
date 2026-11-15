@@ -9,7 +9,7 @@ from ..config import get_settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import (
-    BodyMetric, ChatMessage, Food, FoodLog, MemoryChunk, User, UserProfile, UserTarget, Workout,
+    BodyMetric, ChatMessage, Exercise, Food, FoodLog, MemoryChunk, User, UserProfile, UserTarget, Workout, WorkoutSet,
 )
 from ..schemas import Credentials, DeleteAccountIn, TokenOut, UserOut
 from ..security import (
@@ -67,9 +67,10 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(current_user), db
         raise HTTPException(401, "Contraseña incorrecta")
     uid = user.id
     # Orden: primero lo que referencia a otras tablas. Los alimentos compartidos (user_id NULL) no se tocan.
-    for model in (MemoryChunk, ChatMessage, FoodLog, Workout, BodyMetric):
+    for model in (MemoryChunk, ChatMessage, FoodLog, WorkoutSet, Workout, BodyMetric):
         db.execute(delete(model).where(model.user_id == uid))
     db.execute(delete(Food).where(Food.user_id == uid))
+    db.execute(delete(Exercise).where(Exercise.user_id == uid))
     db.execute(delete(UserTarget).where(UserTarget.user_id == uid))
     db.execute(delete(UserProfile).where(UserProfile.user_id == uid))
     db.execute(delete(User).where(User.id == uid))

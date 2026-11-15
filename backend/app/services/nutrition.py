@@ -6,7 +6,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import NUTRIENTS, BodyMetric, Food, FoodLog, UserTarget, Workout
+from ..models import NUTRIENTS, BodyMetric, Exercise, Food, FoodLog, UserTarget, Workout, WorkoutSet
 
 TARGET_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g", "fiber_g")
 
@@ -120,6 +120,18 @@ def latest_weight(db: Session, user_id: int) -> BodyMetric | None:
                      .order_by(BodyMetric.measured_on.desc()).limit(1))
 
 
+def _workouts_with_exercises(db: Session, user_id: int, day: date) -> list[dict]:
+    ws = workouts_between(db, user_id, day, day)
+    names: dict[int, list[str]] = {}
+    if ws:
+        for wid, name in db.execute(select(WorkoutSet.workout_id, Exercise.name).join(Exercise, Exercise.id == WorkoutSet.exercise_id)
+                                    .where(WorkoutSet.workout_id.in_([w.id for w in ws])).order_by(WorkoutSet.id)):
+            if name not in names.setdefault(wid, []):
+                names[wid].append(name)
+    return [{"id": w.id, "kind": w.kind, "category": w.category, "duration_min": w.duration_min,
+             "kcal_burned": w.kcal_burned, "exercises": names.get(w.id, [])} for w in ws]
+
+
 def day_overview(db: Session, user_id: int, day: date) -> dict:
     logs = db.scalars(select(FoodLog).where(FoodLog.user_id == user_id, FoodLog.log_date == day)
                       .order_by(FoodLog.logged_at)).all()
@@ -132,6 +144,5 @@ def day_overview(db: Session, user_id: int, day: date) -> dict:
             "meal": l.meal, "food": l.food.name, "brand": l.food.brand, "grams": l.grams,
             "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "fat_g": l.fat_g,
         } for l in logs],
-        "workouts": [{"id": w.id, "kind": w.kind, "duration_min": w.duration_min,
-                      "kcal_burned": w.kcal_burned} for w in workouts_between(db, user_id, day, day)],
+        "workouts": _workouts_with_exercises(db, user_id, day),
     }

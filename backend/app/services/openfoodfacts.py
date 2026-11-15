@@ -15,7 +15,15 @@ from ..models import Food
 
 log = logging.getLogger(__name__)
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
-OFF_FIELDS = "code,product_name,product_name_es,brands,nutriments,serving_quantity"
+OFF_FIELDS = ("code,product_name,product_name_es,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
+              "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,allergens_tags,"
+              "ingredients_text_es,ingredients_text,categories,labels")
+
+ALLERGENS_ES = {
+    "gluten": "Gluten", "milk": "Leche", "eggs": "Huevos", "nuts": "Frutos secos", "peanuts": "Cacahuetes",
+    "soybeans": "Soja", "fish": "Pescado", "crustaceans": "Crustáceos", "molluscs": "Moluscos", "celery": "Apio",
+    "mustard": "Mostaza", "sesame-seeds": "Sésamo", "sulphur-dioxide-and-sulphites": "Sulfitos", "lupin": "Altramuces",
+}
 
 
 @dataclass
@@ -64,6 +72,60 @@ def parse_off_product(product: dict) -> dict | None:
     )
 
 
+def _grade(v) -> str | None:
+    v = str(v or "").strip().lower()
+    return v if v in ("a", "b", "c", "d", "e") else None  # OFF también devuelve "unknown" / "not-applicable"
+
+
+def parse_off_meta(product: dict) -> dict:
+    """Metadatos de producto (todo opcional) -> columnas de Food. Tolerante: lo que falte queda en None / vacío."""
+    try:
+        nova = int(product.get("nova_group"))
+        nova = nova if 1 <= nova <= 4 else None
+    except (TypeError, ValueError):
+        nova = None
+    allergens = []
+    for tag in product.get("allergens_tags") or []:
+        code = str(tag).split(":", 1)[-1]
+        allergens.append(ALLERGENS_ES.get(code, code.replace("-", " ").capitalize()))
+    cats = product.get("categories")
+    cats = [c.strip() for c in cats.split(",")] if isinstance(cats, str) else [str(c).split(":", 1)[-1] for c in (cats or [])]
+    ingredients = product.get("ingredients_text_es") or product.get("ingredients_text")
+    extra = {k: v for k, v in {
+        "allergens": allergens, "ingredients": (ingredients or "")[:1500] or None, "categories": [c for c in cats if c][:6],
+    }.items() if v}
+    qty = product.get("quantity")
+    return dict(
+        nutriscore_grade=_grade(product.get("nutriscore_grade")), nova_group=nova,
+        ecoscore_grade=_grade(product.get("ecoscore_grade") or product.get("environmental_score_grade")),
+        image_url=product.get("image_front_small_url") or product.get("image_front_url") or product.get("image_url") or None,
+        quantity=str(qty)[:100] if qty else None, extra=extra,
+    )
+
+
+def enrich_food_from_off(db: Session, food: Food) -> bool:
+    """Completa metadatos (foto, Nutri-Score, NOVA, alérgenos...) de un producto ya guardado. Una consulta a la API
+    de producto (100/min). Marca off_enriched solo si OFF respondió. Nunca lanza."""
+    if food.source != "openfoodfacts" or not food.barcode or (food.extra or {}).get("off_enriched"):
+        return False
+    try:
+        r = httpx.get(OFF_URL.format(code=food.barcode), params={"fields": OFF_FIELDS}, timeout=6,
+                      headers={"User-Agent": get_settings().off_user_agent}, follow_redirects=True)
+        if not r.is_success or r.json().get("status") != 1:
+            return False
+        meta = parse_off_meta(r.json()["product"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("No se pudo completar %s desde OFF: %s", food.barcode, e)
+        return False
+    for col in ("nutriscore_grade", "nova_group", "ecoscore_grade", "image_url", "quantity"):
+        if meta[col] is not None:
+            setattr(food, col, meta[col])
+    food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
+    db.add(food)
+    db.commit()
+    return True
+
+
 def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
     """BD local -> Open Food Facts -> (el agente completa con web_search si hace falta)."""
     code = normalize_barcode(raw)
@@ -91,7 +153,9 @@ def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
         return BarcodeResult("incomplete", None, name, brand)
 
     serving = _num(p, "serving_quantity")
-    food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients)
+    meta = parse_off_meta(p)
+    meta["extra"]["off_enriched"] = True  # la consulta por código ya trae todos los campos
+    food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients, **meta)
     db.add(food)
     db.commit()
     return BarcodeResult("openfoodfacts", food, name, brand)
@@ -156,12 +220,13 @@ def parse_search_hit(hit: dict) -> dict | None:
     except ValueError:
         return None
     return {"code": norm, "name": str(name).strip(), "brand": brand, "serving_g": _num(hit, "serving_quantity"),
-            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))})}
+            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}),
+            "meta": parse_off_meta(hit)}
 
 
 def _store(db: Session, item: dict) -> bool:
     stmt = (pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
-                                   source="openfoodfacts", serving_g=item["serving_g"], extra={}, **item["nutrients"])
+                                   source="openfoodfacts", serving_g=item["serving_g"], **item["nutrients"], **item["meta"])
             .on_conflict_do_nothing(index_elements=["barcode"]).returning(Food.id))
     return db.execute(stmt).scalar() is not None  # rowcount no es fiable con ON CONFLICT (-1 en psycopg)
 

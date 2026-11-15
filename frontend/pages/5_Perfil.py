@@ -4,8 +4,10 @@ import streamlit as st
 
 import api
 import auth
+import ui
 
 st.set_page_config(page_title="Perfil", page_icon="👤", layout="wide")
+ui.inject_css()
 me = auth.require_login()
 st.title("👤 Perfil y objetivos")
 

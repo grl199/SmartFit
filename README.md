@@ -81,7 +81,7 @@ Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRout
 Todas las tablas y columnas llevan `comment=` en `app/models.py`, que se aplica como `COMMENT ON` en cada arranque
 (`\d+ tabla` en psql, o el panel de DBeaver/pgAdmin). Un test impide añadir columnas sin documentar.
 `app/migrations.py` añade de forma idempotente las columnas nuevas a bases de datos de versiones anteriores y normaliza
-los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando el esquema se estabilice, pasa a Alembic.
+los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando el esquema se estabilice, pasa a Alembic. Al arrancar también se siembra el catálogo de ejercicios.
 
 ## Búsqueda de alimentos
 
@@ -94,6 +94,28 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
   que Open Food Facts también tiene. Primero se busca en tu base de datos y después en OFF; el resultado se guarda.
 - `python scripts/check_off_search.py "yogur griego"` (o un código: `... 232839950000100350003502`) comprueba OFF con la red real y muestra el formato de los datos.
 - El agente usa la misma búsqueda híbrida en su herramienta `search_foods`.
+- **Metadatos de Open Food Facts** (se guardan y se muestran en la ficha del alimento): foto, **Nutri-Score**, grupo **NOVA**
+  (nivel de procesamiento), **Eco-Score**, **alérgenos** (traducidos), ingredientes, categorías y tamaño del envase. El código de barras
+  aparece en cada resultado de búsqueda y en la ficha. Si el buscador no los trae, se completan con una consulta al seleccionar el producto.
+
+## Entrenamiento
+
+- **Sesiones por tipo** (pierna, empuje, tirón, tren superior, cuerpo completo, core, cardio, otro). Al elegir el tipo, el catálogo se
+  filtra por los músculos que le corresponden. Hay ~45 ejercicios base (extensión de piernas, aductores, abductores, sentadilla, peso
+  muerto, press banca, jalón, remos, curls...) con su músculo principal y secundarios; puedes crear los tuyos.
+- **Registro a nivel de serie:** una tabla editable por ejercicio (repeticiones, peso, RPE) precargada con **lo que hiciste la última vez**.
+- **Calorías con IA:** la IA estima la **intensidad y el MET** a partir del tipo, la duración y las series; el **código** calcula
+  `kcal = MET × peso(kg) × horas` con tu peso a esa fecha y valida rangos. Si falla, la sesión se guarda igualmente y se puede
+  recalcular desde el Historial. También puedes introducir las kcal a mano o no registrarlas.
+- **Mapa muscular** (frontal y posterior) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5), con
+  ranking por músculo y lista de los que no has trabajado. **Progresión** por ejercicio (peso máximo, 1RM estimado de Epley, volumen).
+- El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
+
+## Interfaz
+
+Tema y componentes propios (`frontend/ui.py`, `.streamlit/config.toml`): anillo de calorías restantes y barras de macros, navegación
+por días, comidas en tarjetas, fichas de producto con fotos e insignias, y adaptación a modo claro/oscuro. Los datos de terceros (nombres,
+marcas, ingredientes) se escapan antes de pintarse como HTML. Requiere **Python 3.11 o superior**.
 
 ## Decisiones de diseño
 

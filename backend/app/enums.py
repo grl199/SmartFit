@@ -43,3 +43,64 @@ OPTIONS = {
     "goal": GOAL,
     "experience_level": EXPERIENCE_LEVEL,
 }
+
+
+# ───────────── Entrenamiento ─────────────
+WORKOUT_CATEGORY = {
+    "legs": "Pierna",
+    "push": "Empuje (pecho, hombro, tríceps)",
+    "pull": "Tirón (espalda, bíceps)",
+    "upper": "Tren superior",
+    "full_body": "Cuerpo completo",
+    "core": "Core / abdomen",
+    "cardio": "Cardio",
+    "other": "Otro",
+}
+
+MUSCLE_GROUP = {
+    "chest": "Pecho",
+    "lats": "Dorsales",
+    "upper_back": "Espalda alta / trapecio",
+    "lower_back": "Lumbares",
+    "shoulders": "Hombros",
+    "biceps": "Bíceps",
+    "triceps": "Tríceps",
+    "forearms": "Antebrazos",
+    "abs": "Abdominales",
+    "obliques": "Oblicuos",
+    "glutes": "Glúteos",
+    "quadriceps": "Cuádriceps",
+    "hamstrings": "Isquiotibiales",
+    "adductors": "Aductores",
+    "abductors": "Abductores",
+    "calves": "Gemelos",
+}
+
+EQUIPMENT = {
+    "barbell": "Barra",
+    "dumbbell": "Mancuernas",
+    "machine": "Máquina",
+    "cable": "Polea",
+    "bodyweight": "Peso corporal",
+    "other": "Otro",
+}
+
+# Músculos que se muestran al elegir cada tipo de sesión (filtra el catálogo de ejercicios).
+CATEGORY_MUSCLES = {
+    "legs": ["quadriceps", "hamstrings", "glutes", "adductors", "abductors", "calves"],
+    "push": ["chest", "shoulders", "triceps"],
+    "pull": ["lats", "upper_back", "biceps", "forearms", "lower_back"],
+    "upper": ["chest", "shoulders", "triceps", "lats", "upper_back", "biceps", "forearms"],
+    "core": ["abs", "obliques", "lower_back"],
+    "full_body": list(MUSCLE_GROUP),
+    "cardio": [],
+    "other": list(MUSCLE_GROUP),
+}
+
+SECONDARY_WEIGHT = 0.5  # una serie cuenta 1 para el músculo principal y 0,5 para cada secundario
+
+OPTIONS.update({
+    "workout_category": WORKOUT_CATEGORY,
+    "muscle_group": MUSCLE_GROUP,
+    "equipment": EQUIPMENT,
+})

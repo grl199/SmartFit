@@ -20,6 +20,19 @@ _COLUMNS = [
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS source VARCHAR(10) NOT NULL DEFAULT 'manual'",
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT now()",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_name_lower ON users (lower(name))",
+    # Open Food Facts: metadatos de producto
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS nutriscore_grade VARCHAR(1)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS nova_group INTEGER",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS ecoscore_grade VARCHAR(1)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS image_url TEXT",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS quantity VARCHAR(100)",
+    # Entrenamiento: categoría y calorías estimadas
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS category VARCHAR(20)",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kcal_source VARCHAR(10)",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS met DOUBLE PRECISION",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS intensity VARCHAR(10)",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kcal_note TEXT",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercises_owner_name ON exercises (coalesce(user_id, 0), lower(name))",
 ]
 
 # Los usuarios que ya existían antes de añadir el onboarding se consideran onboarded (default TRUE
@@ -55,5 +68,6 @@ def _normalize_legacy_values(conn: Connection) -> None:
 def run_migrations(conn: Connection) -> None:
     for stmt in _COLUMNS:
         conn.execute(text(stmt))
+    conn.execute(text("UPDATE workouts SET kcal_source = 'manual' WHERE kcal_burned IS NOT NULL AND kcal_source IS NULL"))
     conn.execute(text(_ONBOARDING))
     _normalize_legacy_values(conn)

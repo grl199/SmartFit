@@ -30,6 +30,15 @@ class FoodOut(FoodBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     source: str
+    # Metadatos de Open Food Facts (None / vacío si no constan)
+    image_url: str | None = None
+    nutriscore_grade: str | None = None
+    nova_group: int | None = None
+    ecoscore_grade: str | None = None
+    quantity: str | None = None
+    allergens: list[str] = []
+    ingredients: str | None = None
+    categories: list[str] = []
 
 
 class BarcodeOut(BaseModel):
@@ -168,18 +177,77 @@ class DeleteAccountIn(BaseModel):
     password: str
 
 
+WorkoutCategory = Literal["legs", "push", "pull", "upper", "full_body", "core", "cardio", "other"]
+MuscleCode = Literal["chest", "lats", "upper_back", "lower_back", "shoulders", "biceps", "triceps", "forearms", "abs",
+                     "obliques", "glutes", "quadriceps", "hamstrings", "adductors", "abductors", "calves"]
+EquipmentCode = Literal["barbell", "dumbbell", "machine", "cable", "bodyweight", "other"]
+
+
+class ExerciseIn(BaseModel):
+    name: str = Field(min_length=2, max_length=150)
+    primary_muscle: MuscleCode
+    secondary_muscles: list[MuscleCode] = []
+    equipment: EquipmentCode = "other"
+
+
+class ExerciseOut(ExerciseIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int | None = None
+
+
+class SetIn(BaseModel):
+    exercise_id: int
+    reps: int = Field(ge=1, le=200)
+    weight_kg: float | None = Field(None, ge=0, le=1000)
+    rpe: float | None = Field(None, ge=1, le=10)
+
+
+class SetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    exercise_id: int
+    set_number: int
+    reps: int
+    weight_kg: float | None = None
+    rpe: float | None = None
+
+
 class WorkoutIn(BaseModel):
     performed_on: date | None = None
-    kind: str = Field(min_length=1, max_length=100)
+    kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
+    category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
-    kcal_burned: float | None = Field(None, ge=0)
-    notes: str | None = None
+    kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
+    notes: str | None = Field(None, max_length=1000)
+    sets: list[SetIn] = Field(default=[], max_length=300)
+    estimate_calories: bool = True
 
 
-class WorkoutOut(WorkoutIn):
+class WorkoutOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     performed_on: date
+    kind: str
+    category: str | None = None
+    duration_min: int
+    kcal_burned: float | None = None
+    kcal_source: str | None = None
+    met: float | None = None
+    intensity: str | None = None
+    kcal_note: str | None = None
+    notes: str | None = None
+
+
+class WorkoutExerciseOut(BaseModel):
+    exercise_id: int
+    exercise: str
+    primary_muscle: str
+    sets: list[dict]
+
+
+class WorkoutDetail(WorkoutOut):
+    exercises: list[WorkoutExerciseOut] = []
 
 
 class WeightIn(BaseModel):

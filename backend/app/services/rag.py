@@ -36,7 +36,9 @@ def build_daily_summary(db: Session, user_id: int, day: date) -> str | None:
         )
     lines += [f"{meal}: {', '.join(items)}." for meal, items in by_meal.items()]
     for workout in ov["workouts"]:
-        lines.append(f"Entrenamiento: {workout['kind']}, {workout['duration_min']} min.")
+        exercises = f" ({', '.join(workout['exercises'])})" if workout.get("exercises") else ""
+        kcal = f", ~{workout['kcal_burned']:.0f} kcal" if workout.get("kcal_burned") else ""
+        lines.append(f"Entrenamiento: {workout['kind']}, {workout['duration_min']} min{kcal}{exercises}.")
     return "\n".join(lines)
 
 

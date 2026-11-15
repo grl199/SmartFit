@@ -3,8 +3,10 @@ import streamlit as st
 
 import api
 import auth
+import ui
 
 st.set_page_config(page_title="Progreso", page_icon="📈", layout="wide")
+ui.inject_css()
 auth.require_login()
 st.title("📈 Progreso")
 
@@ -38,3 +40,15 @@ if weights:
     st.subheader("Peso")
     wdf = pd.DataFrame(weights).assign(measured_on=lambda d: pd.to_datetime(d.measured_on)).set_index("measured_on")
     st.line_chart(wdf[["weight_kg"]])
+
+# ───────── Entrenamiento del periodo ─────────
+workouts = api.get("/workouts", days=days) or []
+if workouts:
+    st.subheader("Entrenamiento")
+    wdf = pd.DataFrame(workouts).assign(performed_on=lambda x: pd.to_datetime(x["performed_on"]))
+    k = st.columns(3)
+    k[0].metric("Sesiones", len(wdf))
+    k[1].metric("Tiempo total", f"{wdf['duration_min'].sum() / 60:.1f} h")
+    k[2].metric("Kcal quemadas (estimadas)", f"{wdf['kcal_burned'].fillna(0).sum():.0f}")
+    st.caption("Kcal quemadas por día")
+    st.bar_chart(wdf.groupby("performed_on")["kcal_burned"].sum().rename("kcal"))
