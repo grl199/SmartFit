@@ -7,14 +7,17 @@ LABELS = {
     "obliques": "Oblicuos", "glutes": "Glúteos", "quadriceps": "Cuádriceps", "hamstrings": "Isquiotibiales",
     "adductors": "Aductores", "abductors": "Abductores", "calves": "Gemelos",
 }
-BASE, EMPTY, STROKE = "#cbd5e1", "#e8edf3", "#94a3b8"
+# (silueta, músculo sin trabajar, contorno, texto)
+LIGHT = ("#cbd5e1", "#e8edf3", "#94a3b8", "#64748b")
+DARK = ("#334155", "#475569", "#64748b", "#94a3b8")
+EMPTY = LIGHT[1]
 STOPS = [(0.0, (253, 224, 71)), (0.5, (249, 115, 22)), (1.0, (153, 27, 27))]  # amarillo -> naranja -> rojo oscuro
 
 
-def heat_color(sets: float, max_sets: float = 16) -> str:
+def heat_color(sets: float, max_sets: float = 16, empty: str = EMPTY) -> str:
     """0 series = gris; >0 = escala amarillo→naranja→rojo hasta `max_sets` series ponderadas."""
     if sets <= 0:
-        return EMPTY
+        return empty
     t = min(sets / max_sets, 1.0)
     for (t0, c0), (t1, c1) in zip(STOPS, STOPS[1:]):
         if t <= t1:
@@ -28,18 +31,19 @@ def _ell(cx, cy, rx, ry, rot=0, **kw):
     return f'<ellipse cx="{cx:.1f}" cy="{cy:.1f}" rx="{rx}" ry="{ry}"{t}'
 
 
-def body_svg(sets: dict[str, float], max_sets: float = 16) -> str:
+def body_svg(sets: dict[str, float], max_sets: float = 16, dark: bool = False) -> str:
     """`sets`: músculo -> series ponderadas. Devuelve un SVG autocontenido (sin dependencias externas)."""
+    BASE_C, EMPTY_C, STROKE_C, TEXT_C = DARK if dark else LIGHT
     out: list[str] = []
 
     def muscle(m: str, shape: str):
         v = sets.get(m, 0)
         title = f"{LABELS[m]}: {v:g} series" if v else f"{LABELS[m]}: sin trabajar"
-        out.append(f'{shape} fill="{heat_color(v, max_sets)}" stroke="{STROKE}" stroke-width="0.8"><title>{escape(title)}</title>'
+        out.append(f'{shape} fill="{heat_color(v, max_sets, EMPTY_C)}" stroke="{STROKE_C}" stroke-width="0.8"><title>{escape(title)}</title>'
                    f'{"</ellipse>" if shape.startswith("<ellipse") else "</rect>" if shape.startswith("<rect") else "</path>"}')
 
     def base(shape: str):
-        out.append(f'{shape} fill="{BASE}" opacity="0.75"/>')
+        out.append(f'{shape} fill="{BASE_C}" opacity="0.75"/>')
 
     def silhouette(cx: float):
         base(f'<circle cx="{cx}" cy="28" r="20"')
@@ -86,13 +90,13 @@ def body_svg(sets: dict[str, float], max_sets: float = 16) -> str:
 
     # ───────── Títulos y leyenda ─────────
     lg0, lg1 = 70, 390
-    out.append(f'<text x="{f}" y="470" text-anchor="middle" font-size="12" fill="#64748b" font-family="sans-serif">Frontal</text>')
-    out.append(f'<text x="{b}" y="470" text-anchor="middle" font-size="12" fill="#64748b" font-family="sans-serif">Posterior</text>')
+    out.append(f'<text x="{f}" y="470" text-anchor="middle" font-size="12" fill="{TEXT_C}" font-family="sans-serif">Frontal</text>')
+    out.append(f'<text x="{b}" y="470" text-anchor="middle" font-size="12" fill="{TEXT_C}" font-family="sans-serif">Posterior</text>')
     out.append('<defs><linearGradient id="hg" x1="0" x2="1">' + "".join(
         f'<stop offset="{o}" stop-color="{heat_color(max_sets * o if o else 0.01, max_sets)}"/>' for o in (0, 0.25, 0.5, 0.75, 1)) +
         '</linearGradient></defs>')
-    out.append(f'<rect x="{lg0}" y="490" width="{lg1 - lg0}" height="10" rx="5" fill="url(#hg)" stroke="{STROKE}" stroke-width="0.5"/>')
+    out.append(f'<rect x="{lg0}" y="490" width="{lg1 - lg0}" height="10" rx="5" fill="url(#hg)" stroke="{STROKE_C}" stroke-width="0.5"/>')
     for x, t in ((lg0, "0"), ((lg0 + lg1) / 2, f"{max_sets / 2:g}"), (lg1, f"{max_sets:g}+")):
-        out.append(f'<text x="{x}" y="516" text-anchor="middle" font-size="11" fill="#64748b" font-family="sans-serif">{t}</text>')
-    out.append(f'<text x="{(lg0 + lg1) / 2}" y="532" text-anchor="middle" font-size="11" fill="#64748b" font-family="sans-serif">series ponderadas</text>')
+        out.append(f'<text x="{x}" y="516" text-anchor="middle" font-size="11" fill="{TEXT_C}" font-family="sans-serif">{t}</text>')
+    out.append(f'<text x="{(lg0 + lg1) / 2}" y="532" text-anchor="middle" font-size="11" fill="{TEXT_C}" font-family="sans-serif">series ponderadas</text>')
     return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 545" width="460" height="545">' + "".join(out) + "</svg>"

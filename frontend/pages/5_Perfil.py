@@ -79,6 +79,12 @@ with st.form("profile"):
         if api.put("/profile", body):
             st.success("Guardado. Pulsa «Recalcular objetivos con IA» si quieres actualizar tus objetivos.")
 
+if st.button("🌐 Traducir al español los nombres de productos pendientes"):
+    with st.spinner("Traduciendo…"):
+        r = api.post("/foods/translate-names", timeout=api.LONG_TIMEOUT)
+    if r:
+        st.success(f"{r['translated']} nombres traducidos" + (f"; quedan {r['pending']} (vuelve a pulsar)." if r["pending"] else "."))
+
 if st.button("🔄 Reindexar histórico para el RAG"):
     r = api.post("/rag/reindex")
     if r:

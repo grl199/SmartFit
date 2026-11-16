@@ -52,11 +52,13 @@ def search_foods(db: Session, user_id: int, query: str, limit: int = 10) -> list
     tokens = [t for t in re.split(r"\s+", query.strip()) if t]
     if not tokens:
         return []
-    conds = [
-        or_(func.unaccent(Food.name).ilike(func.unaccent(f"%{t}%")),
-            func.unaccent(func.coalesce(Food.brand, "")).ilike(func.unaccent(f"%{t}%")))
-        for t in tokens
-    ]
+    def hit(token: str):
+        pat = func.unaccent(f"%{token}%")
+        extra_text = lambda key: func.unaccent(func.coalesce(Food.extra[key].astext, ""))
+        return or_(func.unaccent(Food.name).ilike(pat), func.unaccent(func.coalesce(Food.brand, "")).ilike(pat),
+                   extra_text("original_name").ilike(pat), extra_text("generic_name").ilike(pat))
+
+    conds = [hit(t) for t in tokens]
     used = (select(FoodLog.food_id, func.count().label("n")).where(FoodLog.user_id == user_id)
             .group_by(FoodLog.food_id).subquery())
     q = (select(Food).outerjoin(used, used.c.food_id == Food.id)
@@ -129,7 +131,8 @@ def _workouts_with_exercises(db: Session, user_id: int, day: date) -> list[dict]
             if name not in names.setdefault(wid, []):
                 names[wid].append(name)
     return [{"id": w.id, "kind": w.kind, "category": w.category, "duration_min": w.duration_min,
-             "kcal_burned": w.kcal_burned, "exercises": names.get(w.id, [])} for w in ws]
+             "kcal_burned": w.kcal_burned, "exercises": names.get(w.id, []),
+             "distance_km": w.distance_km, "steps": w.steps, "elevation_gain_m": w.elevation_gain_m} for w in ws]
 
 
 def day_overview(db: Session, user_id: int, day: date) -> dict:

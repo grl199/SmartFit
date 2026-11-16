@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 Meal = Literal["breakfast", "lunch", "snack", "dinner"]
 
@@ -39,6 +39,9 @@ class FoodOut(FoodBase):
     allergens: list[str] = []
     ingredients: str | None = None
     categories: list[str] = []
+    generic_name: str | None = None      # «Denominación general» en español
+    original_name: str | None = None     # nombre original de OFF si se limpió o tradujo
+    barcode_ambiguous: bool = False      # código de uso restringido de tienda (puede repetirse entre productos)
 
 
 class BarcodeOut(BaseModel):
@@ -177,7 +180,7 @@ class DeleteAccountIn(BaseModel):
     password: str
 
 
-WorkoutCategory = Literal["legs", "push", "pull", "upper", "full_body", "core", "cardio", "other"]
+WorkoutCategory = Literal["legs", "push", "pull", "upper", "full_body", "core", "walking", "running", "cardio", "other"]
 MuscleCode = Literal["chest", "lats", "upper_back", "lower_back", "shoulders", "biceps", "triceps", "forearms", "abs",
                      "obliques", "glutes", "quadriceps", "hamstrings", "adductors", "abductors", "calves"]
 EquipmentCode = Literal["barbell", "dumbbell", "machine", "cable", "bodyweight", "other"]
@@ -219,6 +222,10 @@ class WorkoutIn(BaseModel):
     category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
     kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
+    distance_km: float | None = Field(None, gt=0, le=500)
+    elevation_gain_m: float | None = Field(None, ge=0, le=10000)
+    steps: int | None = Field(None, ge=0, le=200000)
+    avg_hr_bpm: int | None = Field(None, ge=30, le=230)
     notes: str | None = Field(None, max_length=1000)
     sets: list[SetIn] = Field(default=[], max_length=300)
     estimate_calories: bool = True
@@ -236,7 +243,22 @@ class WorkoutOut(BaseModel):
     met: float | None = None
     intensity: str | None = None
     kcal_note: str | None = None
+    distance_km: float | None = None
+    elevation_gain_m: float | None = None
+    steps: int | None = None
+    avg_hr_bpm: int | None = None
     notes: str | None = None
+
+    @computed_field
+    @property
+    def pace_min_km(self) -> float | None:
+        """Ritmo medio en min/km (solo con distancia)."""
+        return round(self.duration_min / self.distance_km, 2) if self.distance_km else None
+
+    @computed_field
+    @property
+    def speed_kmh(self) -> float | None:
+        return round(self.distance_km / (self.duration_min / 60), 2) if self.distance_km else None
 
 
 class WorkoutExerciseOut(BaseModel):
@@ -263,6 +285,8 @@ class WeightOut(WeightIn):
 
 
 class ChatOut(BaseModel):
+    conversation_id: int
+    conversation_title: str
     reply: str
     sources: list[dict] = []
     tools_used: list[str] = []
@@ -274,3 +298,16 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(min_length=1, max_length=120)

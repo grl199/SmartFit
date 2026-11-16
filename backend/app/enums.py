@@ -53,7 +53,9 @@ WORKOUT_CATEGORY = {
     "upper": "Tren superior",
     "full_body": "Cuerpo completo",
     "core": "Core / abdomen",
-    "cardio": "Cardio",
+    "walking": "Andar",
+    "running": "Correr",
+    "cardio": "Otro cardio (bici, nadar, elíptica…)",
     "other": "Otro",
 }
 
@@ -93,9 +95,22 @@ CATEGORY_MUSCLES = {
     "upper": ["chest", "shoulders", "triceps", "lats", "upper_back", "biceps", "forearms"],
     "core": ["abs", "obliques", "lower_back"],
     "full_body": list(MUSCLE_GROUP),
+    "walking": [],
+    "running": [],
     "cardio": [],
     "other": list(MUSCLE_GROUP),
 }
+
+# Músculos implicados en andar/correr (no hay series que contar). La carga se convierte en "series equivalentes":
+#   series_eq = minutos / min_per_set x factor_de_intensidad ; principales cuentan 1, secundarios SECONDARY_WEIGHT.
+# Es una estimación orientativa para el mapa muscular, no una medida fisiológica.
+CARDIO_PROFILES = {
+    "running": {"primary": ["quadriceps", "hamstrings", "glutes", "calves"],
+                "secondary": ["abs", "lower_back", "adductors", "abductors"], "min_per_set": 6},
+    "walking": {"primary": ["calves", "quadriceps", "glutes", "hamstrings"],
+                "secondary": ["abductors", "adductors", "lower_back"], "min_per_set": 10},
+}
+INTENSITY_FACTOR = {"low": 0.7, "moderate": 1.0, "high": 1.4}
 
 SECONDARY_WEIGHT = 0.5  # una serie cuenta 1 para el músculo principal y 0,5 para cada secundario
 
@@ -103,4 +118,5 @@ OPTIONS.update({
     "workout_category": WORKOUT_CATEGORY,
     "muscle_group": MUSCLE_GROUP,
     "equipment": EQUIPMENT,
+    "cardio_muscles": {k: {"primary": v["primary"], "secondary": v["secondary"]} for k, v in CARDIO_PROFILES.items()},
 })

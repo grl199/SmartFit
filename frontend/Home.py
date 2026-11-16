@@ -81,4 +81,4 @@ if data["workouts"]:
         category = cats.get(w["category"], w["category"] or "Sesión")
         minutes = f'{w["duration_min"]} min'
         ui.card(f'<h4>🏋️ {ui.escape(w["kind"])}</h4>{ui.chip(category, "blue")}{ui.chip(minutes)}{ui.escape(kcal)}'
-                f'<div style="margin-top:4px">{ui.chips(w["exercises"])}</div>')
+                f'<div style="margin-top:4px">{ui.cardio_chips(w)}{ui.chips(w["exercises"])}</div>')

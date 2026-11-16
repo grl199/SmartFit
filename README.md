@@ -98,6 +98,19 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
   (nivel de procesamiento), **Eco-Score**, **alérgenos** (traducidos), ingredientes, categorías y tamaño del envase. El código de barras
   aparece en cada resultado de búsqueda y en la ficha. Si el buscador no los trae, se completan con una consulta al seleccionar el producto.
 
+- **Nombres en español.** Open Food Facts guarda el nombre comercial del envase («Milbona Cottage Cheese – 200 g»). Al guardar un
+  producto se limpia (se quitan la marca y la cantidad repetidas) y se muestra su «denominación general» en español; además la IA
+  traduce los nombres en segundo plano (`TRANSLATE_NAMES`) y el original se conserva y también se busca. Perfil → «Traducir nombres
+  pendientes» lo fuerza para los productos ya guardados.
+- **Códigos de tienda ambiguos.** Los códigos que empiezan por 2 (y los de 24 dígitos de tienda) son de circulación restringida:
+  distintas tiendas pueden reutilizarlos para productos diferentes. La app lo avisa con ⚠ y la ficha lo explica.
+
+## Chat
+
+Cada conversación se guarda y tiene su propio historial: la barra lateral las agrupa por fecha (hoy, ayer, últimos 7 días…) y permite
+saltar de una a otra, renombrarlas y eliminarlas. La primera pregunta da título a la conversación. Los mensajes que había antes de esta
+versión quedan en «Conversación anterior».
+
 ## Entrenamiento
 
 - **Sesiones por tipo** (pierna, empuje, tirón, tren superior, cuerpo completo, core, cardio, otro). Al elegir el tipo, el catálogo se
@@ -109,9 +122,20 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
   recalcular desde el Historial. También puedes introducir las kcal a mano o no registrarlas.
 - **Mapa muscular** (frontal y posterior) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5), con
   ranking por músculo y lista de los que no has trabajado. **Progresión** por ejercicio (peso máximo, 1RM estimado de Epley, volumen).
+- **Andar y correr** tienen sus propias métricas: distancia, **ritmo** (min/km) y velocidad (derivados), **desnivel positivo**,
+  **pasos** (andar) y frecuencia cardiaca. Sus músculos (piernas, glúteos, gemelos y core) se encienden en el mapa como «series
+  equivalentes» según el tiempo y la intensidad (por ritmo o velocidad; el desnivel alto sube un nivel). Es una estimación orientativa.
+  Progresión de ritmo/velocidad, kilómetros por semana y desnivel en Entrenamiento → Progresión.
+  *Preparado para Strava:* una actividad importada solo tendría que rellenar estos mismos campos (distancia, tiempo, desnivel, FC).
 - El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
 
 ## Interfaz
+
+**Modo claro/oscuro:** menú ⋮ (arriba a la derecha) → Settings → Theme. Por defecto sigue el modo de tu sistema, y el mapa muscular y
+los gráficos se adaptan.
+
+**Progreso:** resumen con medias frente a objetivo, calorías por día coloreadas (verde = en objetivo ±10 %, azul = por debajo, rojo =
+por encima) con línea de objetivo, reparto de macros frente al objetivo, peso con media móvil y entrenamiento por semana.
 
 Tema y componentes propios (`frontend/ui.py`, `.streamlit/config.toml`): anillo de calorías restantes y barras de macros, navegación
 por días, comidas en tarjetas, fichas de producto con fotos e insignias, y adaptación a modo claro/oscuro. Los datos de terceros (nombres,

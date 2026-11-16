@@ -108,6 +108,7 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
             raise HTTPException(422, f"Ejercicios no válidos: {sorted(ex_ids - valid)}")
     w = Workout(user_id=uid, performed_on=body.performed_on or today_local(), kind=body.kind.strip(), category=body.category,
                 duration_min=body.duration_min, notes=body.notes, kcal_burned=body.kcal_burned,
+                distance_km=body.distance_km, elevation_gain_m=body.elevation_gain_m, steps=body.steps, avg_hr_bpm=body.avg_hr_bpm,
                 kcal_source="manual" if body.kcal_burned is not None else None)
     db.add(w)
     db.flush()

@@ -36,7 +36,7 @@ with tab_search:
         if f.get("nutriscore_grade"):
             parts.append(f"Nutri-Score {f['nutriscore_grade'].upper()}")
         if f.get("barcode"):
-            parts.append(f"🏷 {f['barcode']}")
+            parts.append(f"🏷 {f['barcode']}" + (" ⚠" if f.get("barcode_ambiguous") else ""))
         return " · ".join(parts) + (" 🌐" if f["source"] == "openfoodfacts" else "")
 
     def _search(term: str):
@@ -50,7 +50,7 @@ with tab_search:
                             key="food_search", debounce=500, clear_on_submit=False)
     if selected is not None and (food := st.session_state.get("_foods", {}).get(selected)):
         food_log_form(food, f"s{food['id']}", **kw)
-    st.caption("🌐 = producto de Open Food Facts (se guarda en tu base de datos para próximas búsquedas) · 🏷 = código de barras.")
+    st.caption("🌐 = producto de Open Food Facts (se guarda en tu base de datos para próximas búsquedas) · 🏷 = código de barras (⚠ = código de tienda, puede repetirse entre productos).")
 
 # ───────── Código de barras ─────────
 STATUS_HELP = {

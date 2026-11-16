@@ -7,6 +7,7 @@ from ..models import Food
 from ..schemas import BarcodeOut, FoodCreate, FoodOut
 from ..services.images import decode_barcodes
 from ..services.food_search import search_hybrid
+from ..services.names import pending_count, translate_pending_names
 from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
 
 router = APIRouter(prefix="/foods", tags=["foods"])
@@ -56,6 +57,17 @@ def create_food(body: FoodCreate, db: Session = Depends(get_db), uid: int = Depe
     db.add(food)
     db.commit()
     return food
+
+
+@router.post("/translate-names")
+def translate_names_now(limit: int = Query(20, ge=1, le=40), db: Session = Depends(get_db)):
+    """Traduce al español (con IA) los nombres de productos de Open Food Facts que aún no se han procesado."""
+    try:
+        done = translate_pending_names(db, limit)
+    except Exception as e:  # noqa: BLE001
+        db.rollback()
+        raise HTTPException(502, f"No se pudo traducir ahora mismo: {str(e)[:150]}")
+    return {"translated": done, "pending": pending_count(db)}
 
 
 @router.get("/{food_id}", response_model=FoodOut)

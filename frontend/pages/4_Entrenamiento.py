@@ -6,6 +6,7 @@ import streamlit as st
 
 import api
 import auth
+import charts
 import ui
 from muscles import body_svg
 
@@ -16,6 +17,7 @@ st.title("🏋️ Entrenamiento")
 
 opts = api.options()
 CATS, MUSCLES, EQUIP = opts.get("workout_category", {}), opts.get("muscle_group", {}), opts.get("equipment", {})
+CARDIO_MUSCLES = opts.get("cardio_muscles", {})
 if not CATS:
     st.error("No se pudieron cargar las opciones. Reinicia el frontend y comprueba que el backend está actualizado.")
     st.stop()
@@ -24,7 +26,7 @@ today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isof
 
 # Tras guardar una sesión se limpia el formulario (hay que hacerlo ANTES de crear los widgets)
 if st.session_state.pop("reset_form", False):
-    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_"))]:
+    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_"))]:
         del st.session_state[k]
 
 tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan = st.tabs(
@@ -71,6 +73,26 @@ def exercise_block(ex: dict) -> pd.DataFrame:
                                                      help="Esfuerzo percibido 1-10 (opcional)")})
 
 
+def cardio_inputs(cat: str, dur: int) -> dict:
+    """Métricas de andar/correr. Devuelve los campos opcionales del payload."""
+    running = cat == "running"
+    c = st.columns(4 if not running else 3)
+    dist = c[0].number_input("Distancia (km)", 0.0, 500.0, 0.0, step=0.1, format="%.2f", key=f"dist_{cat}")
+    elev = c[1].number_input("Desnivel positivo (m)", 0, 10000, 0, step=10, key=f"elev_{cat}")
+    steps = 0 if running else c[2].number_input("Pasos", 0, 200000, 0, step=100, key=f"steps_{cat}")
+    hr = c[-1].number_input("FC media (ppm)", 0, 230, 0, key=f"hr_{cat}", help="Opcional")
+    if dist > 0:
+        ui.html(ui.cardio_chips({"distance_km": dist, "duration_min": dur, "elevation_gain_m": elev or None,
+                                 "steps": steps or None, "avg_hr_bpm": hr if hr >= 30 else None}))
+    prof = CARDIO_MUSCLES.get(cat)
+    if prof:
+        st.caption("Músculos implicados: " + ", ".join(MUSCLES[m] for m in prof["primary"]) + " (principales) y "
+                   + ", ".join(MUSCLES[m] for m in prof["secondary"]) + " (secundarios). Se encienden en el mapa muscular según el "
+                   "tiempo y el ritmo. La IA estima las calorías con la distancia, el ritmo y el desnivel.")
+    return {"distance_km": dist or None, "elevation_gain_m": float(elev) or None, "steps": int(steps) or None,
+            "avg_hr_bpm": int(hr) if hr >= 30 else None}
+
+
 def sets_from(ex_id: int, df: pd.DataFrame) -> list[dict]:
     out = []
     for _, r in df.iterrows():
@@ -84,12 +106,16 @@ def sets_from(ex_id: int, df: pd.DataFrame) -> list[dict]:
 with tab_reg:
     if saved := st.session_state.pop("saved_workout", None):
         worked = sorted({MUSCLES.get(e["primary_muscle"], e["primary_muscle"]) for e in saved["exercises"]})
+        if saved.get("category") in CARDIO_MUSCLES:
+            worked = [MUSCLES[m] for m in CARDIO_MUSCLES[saved["category"]]["primary"]]
         body = f"<h4>✅ Sesión guardada: {escape(saved['kind'])}</h4>"
         if saved.get("kcal_burned") is not None:
             origin = "estimadas por la IA" if saved.get("kcal_source") == "llm" else "introducidas por ti"
             body += f"<div class='sf-big'>🔥 {saved['kcal_burned']:.0f} kcal <span class='sf-muted'>{origin}</span></div>"
             if saved.get("intensity"):
                 body += ui.chip(INTENSITY.get(saved["intensity"], saved["intensity"]), "orange") + ui.chip(f"MET {saved['met']:g}")
+        if ui.cardio_chips(saved):
+            body += f"<div>{ui.cardio_chips(saved)}</div>"
         if saved.get("kcal_note"):
             body += f"<div class='sf-muted'>{escape(saved['kcal_note'])}</div>"
         if worked:
@@ -104,8 +130,11 @@ with tab_reg:
 
     selected: list[int] = []
     edited: dict[int, pd.DataFrame] = {}
-    if cat == "cardio":
-        st.info("Para cardio basta con el título (por ejemplo «Correr 5 km») y la duración; la IA estimará las calorías.")
+    metrics: dict = {}
+    if cat in ("walking", "running"):
+        metrics = cardio_inputs(cat, int(dur))
+    elif cat == "cardio":
+        st.info("Para otro cardio (bici, nadar, elíptica…) basta con el título y la duración; la IA estimará las calorías.")
     else:
         exercises = api.get("/exercises", category=cat) or []
         by_id = {e["id"]: e for e in exercises}
@@ -138,6 +167,7 @@ with tab_reg:
         sets = [s for ex_id in selected for s in sets_from(ex_id, edited[ex_id])]
         payload = {"performed_on": d.isoformat(), "kind": title.strip() or CATS[cat], "category": cat,
                    "duration_min": int(dur), "notes": notes.strip() or None, "sets": sets, "estimate_calories": mode == "ia"}
+        payload.update(metrics)
         if mode == "manual":
             payload["kcal_burned"] = manual_kcal
         with st.spinner("Guardando" + (" y estimando calorías con IA…" if mode == "ia" else "…")):
@@ -152,6 +182,10 @@ with tab_hist:
     workouts = api.get("/workouts", days=90) or []
     if not workouts:
         st.info("Aún no hay sesiones registradas en los últimos 90 días.")
+    else:
+        present = [c for c in CATS if any(w["category"] == c for w in workouts)]
+        flt = st.pills("Filtrar por tipo", present, format_func=lambda c: CATS[c], selection_mode="multi", key="hist_filter")
+        workouts = [w for w in workouts if not flt or w["category"] in flt]
     for w in workouts:
         kcal = f" · 🔥 {w['kcal_burned']:.0f} kcal" if w["kcal_burned"] else ""
         with st.expander(f"{w['performed_on']} · {w['kind']} · {w['duration_min']} min{kcal}"):
@@ -163,6 +197,8 @@ with tab_hist:
             if w["met"]:
                 tags += ui.chip(f"MET {w['met']:g}")
             ui.html(tags)
+            if ui.cardio_chips(w):
+                ui.html(ui.cardio_chips(w))
             if w["kcal_note"]:
                 st.caption(w["kcal_note"])
             if w["notes"]:
@@ -182,27 +218,74 @@ with tab_hist:
                 st.rerun()
 
 # ═════════════════════════ Progresión ═════════════════════════
-with tab_prog:
+def strength_progress() -> None:
     used = api.get("/exercises", used="true") or []
     if not used:
         st.info("Registra series en algún ejercicio para ver su progresión.")
+        return
+    by_used = {e["id"]: e for e in used}
+    ex_id = st.selectbox("Ejercicio", list(by_used), format_func=lambda i: by_used[i]["name"])
+    prog = api.get(f"/exercises/{ex_id}/progress") or []
+    if not prog:
+        return
+    df = pd.DataFrame(prog).assign(date=lambda x: pd.to_datetime(x["date"]))
+    m = st.columns(3)
+    best = df["est_1rm_kg"].max()
+    m[0].metric("Mejor 1RM estimado", f"{best:.1f} kg" if pd.notna(best) else "—",
+                help="Fórmula de Epley, solo con series de 1 a 12 repeticiones con peso.")
+    m[1].metric("Peso máximo", f"{df['best_weight_kg'].max():.1f} kg" if df["best_weight_kg"].notna().any() else "—")
+    m[2].metric("Sesiones", len(df))
+    if df["best_weight_kg"].notna().any():
+        st.markdown("**Peso máximo y 1RM estimado por sesión (kg)**")
+        long = df.melt(id_vars="date", value_vars=["best_weight_kg", "est_1rm_kg"], var_name="Serie", value_name="kg").dropna()
+        long["Serie"] = long["Serie"].map({"best_weight_kg": "Peso máx.", "est_1rm_kg": "1RM estimado"})
+        st.altair_chart(charts._finish(charts.alt.Chart(long).mark_line(strokeWidth=2.5, point=charts.alt.OverlayMarkDef(size=55, filled=True)).encode(
+            x=charts._x(), y=charts.alt.Y("kg:Q", scale=charts.alt.Scale(zero=False), title="kg"),
+            color=charts.alt.Color("Serie:N", scale=charts.alt.Scale(range=[ui.ORANGE, ui.GREEN]), legend=charts.alt.Legend(orient="bottom", title=None)),
+            tooltip=[charts.alt.Tooltip("date:T", title="Día", format="%d %b %Y"), "Serie:N", charts.alt.Tooltip("kg:Q", format=".1f")])), width="stretch")
+    st.markdown("**Volumen total por sesión (kg × reps)**")
+    st.altair_chart(charts.simple_bars(df, "date", "volume_kg", "kg", ui.PURPLE), width="stretch")
+
+
+def distance_progress(kind: str) -> None:
+    running = kind == "running"
+    sessions = [w for w in (api.get("/workouts", days=365) or []) if w["category"] == kind and w["distance_km"]]
+    if not sessions:
+        st.info("Registra sesiones de " + ("correr" if running else "andar") + " con distancia para ver tu evolución.")
+        return
+    df = pd.DataFrame(sessions).assign(date=lambda x: pd.to_datetime(x["performed_on"])).sort_values("date")
+    df["pace"] = df["pace_min_km"]
+    df["label"] = df["pace"].apply(ui.fmt_pace) + " /km"
+    k = st.columns(4)
+    k[0].metric("Sesiones", len(df))
+    k[1].metric("Distancia total", f"{df['distance_km'].sum():.1f} km")
+    if running:
+        k[2].metric("Mejor ritmo", f"{ui.fmt_pace(df['pace'].min())} /km")
+        k[3].metric("Sesión más larga", f"{df['distance_km'].max():.1f} km")
     else:
-        by_used = {e["id"]: e for e in used}
-        ex_id = st.selectbox("Ejercicio", list(by_used), format_func=lambda i: by_used[i]["name"])
-        prog = api.get(f"/exercises/{ex_id}/progress") or []
-        if prog:
-            df = pd.DataFrame(prog).assign(date=lambda x: pd.to_datetime(x["date"])).set_index("date")
-            m = st.columns(3)
-            best = df["est_1rm_kg"].max()
-            m[0].metric("Mejor 1RM estimado", f"{best:.1f} kg" if pd.notna(best) else "—",
-                        help="Fórmula de Epley, solo con series de 1 a 12 repeticiones con peso.")
-            m[1].metric("Peso máximo", f"{df['best_weight_kg'].max():.1f} kg" if df["best_weight_kg"].notna().any() else "—")
-            m[2].metric("Sesiones", len(df))
-            if df["best_weight_kg"].notna().any():
-                st.caption("Peso máximo y 1RM estimado por sesión (kg)")
-                st.line_chart(df[["best_weight_kg", "est_1rm_kg"]].rename(columns={"best_weight_kg": "Peso máx.", "est_1rm_kg": "1RM estimado"}))
-            st.caption("Volumen total por sesión (kg × reps)")
-            st.bar_chart(df[["volume_kg"]].rename(columns={"volume_kg": "Volumen"}))
+        k[2].metric("Velocidad media", f"{df['speed_kmh'].mean():.1f} km/h")
+        k[3].metric("Pasos totales", f"{int(df['steps'].fillna(0).sum()):,}".replace(",", ".") if df["steps"].notna().any() else "—")
+    st.markdown("**Ritmo por sesión** (arriba = más rápido)" if running else "**Velocidad media por sesión**")
+    st.altair_chart(charts.pace_chart(df) if running else charts.speed_chart(df), width="stretch")
+    left, right = st.columns(2)
+    weekly = df.groupby(pd.Grouper(key="date", freq="W-MON", label="left", closed="left"))["distance_km"].sum().reset_index()
+    left.markdown("**Kilómetros por semana**")
+    left.altair_chart(charts.simple_bars(weekly, "date", "distance_km", "km", ui.BLUE, tooltip_y_fmt=".1f", size=30), width="stretch")
+    if df["elevation_gain_m"].notna().any():
+        right.markdown("**Desnivel positivo por sesión (m)**")
+        right.altair_chart(charts.simple_bars(df.dropna(subset=["elevation_gain_m"]), "date", "elevation_gain_m", "m", ui.ORANGE), width="stretch")
+    elif not running and df["steps"].notna().any():
+        right.markdown("**Pasos por sesión**")
+        right.altair_chart(charts.simple_bars(df.dropna(subset=["steps"]), "date", "steps", "pasos", ui.PURPLE), width="stretch")
+
+
+with tab_prog:
+    kind = st.radio("Ver", ["strength", "running", "walking"], horizontal=True, label_visibility="collapsed",
+                    format_func={"strength": "🏋️ Fuerza", "running": "🏃 Correr", "walking": "🚶 Andar"}.get)
+    if kind == "strength":
+        strength_progress()
+    else:
+        distance_progress(kind)
 
 # ═════════════════════════ Músculos ═════════════════════════
 with tab_muscles:
@@ -212,14 +295,16 @@ with tab_muscles:
         weekly = {m: v["sets"] * 7 / days for m, v in data["muscles"].items()}   # media semanal comparable entre periodos
         left, right = st.columns([3, 2])
         with left:
-            st.image(body_svg(weekly), width="stretch")
+            st.image(body_svg(weekly, dark=ui.is_dark()), width="stretch")
         with right:
-            st.caption(f"{data['sessions']} sesiones con series registradas. Color = series ponderadas **por semana** "
-                       "(músculo principal = 1, secundarios = 0,5). Referencia habitual para hipertrofia: 10-20 series/semana (orientativo).")
-            rows = sorted(((MUSCLES[m], w, data["muscles"][m]["volume_kg"]) for m, w in weekly.items() if w > 0), key=lambda r: -r[1])
+            st.caption(f"{data['sessions']} sesiones con series o carga registrada. Color = series ponderadas **por semana** "
+                       "(músculo principal = 1, secundarios = 0,5). Andar y correr suman **series equivalentes** estimadas con el tiempo "
+                       "y el ritmo. Referencia habitual para hipertrofia: 10-20 series/semana (orientativo).")
+            rows = sorted(((MUSCLES[m], w, data["muscles"][m]["strength_sets"] * 7 / days, data["muscles"][m]["cardio_sets"] * 7 / days,
+                            data["muscles"][m]["volume_kg"]) for m, w in weekly.items() if w > 0), key=lambda r: -r[1])
             if rows:
-                df = pd.DataFrame(rows, columns=["Músculo", "Series/semana", "Volumen (kg)"]).round(1)
-                st.bar_chart(df.set_index("Músculo")[["Series/semana"]], horizontal=True)
+                df = pd.DataFrame(rows, columns=["Músculo", "Series/semana", "Fuerza", "Andar/correr", "Volumen (kg)"]).round(1)
+                st.bar_chart(df.set_index("Músculo")[["Fuerza", "Andar/correr"]], horizontal=True, color=[ui.ORANGE, ui.GREEN])
             idle = [MUSCLES[m] for m, w in weekly.items() if w == 0]
             if idle:
                 st.markdown("**Sin trabajar en este periodo**")

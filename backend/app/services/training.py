@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from .. import enums
 from ..models import Exercise, Workout, WorkoutSet
+from .cardio import muscle_load
 
 
 def estimated_1rm(weight: float | None, reps: int) -> float | None:
@@ -17,27 +18,38 @@ def estimated_1rm(weight: float | None, reps: int) -> float | None:
 
 
 def muscle_summary(db: Session, user_id: int, start: date, end: date) -> dict:
-    """Series ponderadas por músculo (principal = 1, cada secundario = 0,5) y volumen (kg x reps)."""
+    """Series ponderadas por músculo (principal = 1, cada secundario = 0,5) y volumen (kg x reps).
+    `sets` = fuerza + andar/correr (series equivalentes); se devuelven también por separado."""
     rows = db.execute(
         select(WorkoutSet, Workout.performed_on).join(Workout, Workout.id == WorkoutSet.workout_id)
         .where(WorkoutSet.user_id == user_id, Workout.performed_on.between(start, end))
     ).all()
-    out = {m: {"sets": 0.0, "volume_kg": 0.0, "exercises": set()} for m in enums.MUSCLE_GROUP}
-    sessions = set()
-    for s, day in rows:
-        sessions.add((day, s.workout_id))
+    out = {m: {"strength": 0.0, "cardio": 0.0, "volume_kg": 0.0, "exercises": set()} for m in enums.MUSCLE_GROUP}
+    sessions: set[int] = set()
+    for s, _day in rows:
+        sessions.add(s.workout_id)
         ex = s.exercise
         vol = (s.weight_kg or 0) * s.reps
         targets = [(ex.primary_muscle, 1.0)] + [(m, enums.SECONDARY_WEIGHT) for m in (ex.secondary_muscles or [])]
         for muscle, w in targets:
             if muscle in out:
-                out[muscle]["sets"] += w
+                out[muscle]["strength"] += w
                 out[muscle]["volume_kg"] += vol * w
                 out[muscle]["exercises"].add(ex.name)
+    cardio = db.scalars(select(Workout).where(
+        Workout.user_id == user_id, Workout.performed_on.between(start, end), Workout.category.in_(list(enums.CARDIO_PROFILES))))
+    for w in cardio:
+        load = muscle_load(w.category, w.duration_min, w.distance_km, w.elevation_gain_m, w.intensity)
+        if load:
+            sessions.add(w.id)
+        for muscle, eq in load.items():
+            out[muscle]["cardio"] += eq
+            out[muscle]["exercises"].add(enums.WORKOUT_CATEGORY[w.category])
     return {
-        "start": start.isoformat(), "end": end.isoformat(), "sessions": len({w for _, w in sessions}),
-        "muscles": {m: {"sets": round(v["sets"], 1), "volume_kg": round(v["volume_kg"]), "exercises": sorted(v["exercises"])}
-                    for m, v in out.items()},
+        "start": start.isoformat(), "end": end.isoformat(), "sessions": len(sessions),
+        "muscles": {m: {"sets": round(v["strength"] + v["cardio"], 1), "strength_sets": round(v["strength"], 1),
+                        "cardio_sets": round(v["cardio"], 1), "volume_kg": round(v["volume_kg"]),
+                        "exercises": sorted(v["exercises"])} for m, v in out.items()},
     }
 
 

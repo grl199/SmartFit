@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from ..models import Food
 from .nutrition import search_foods
+from .names import schedule_translation
 from .openfoodfacts import online_search_allowed, search_off_and_store
 
 log = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ def search_hybrid(db: Session, user_id: int, query: str, limit: int = 10, online
         return local
     try:
         if search_off_and_store(db, q):
+            schedule_translation()  # nombres al español en segundo plano; saldrán traducidos en las próximas búsquedas
             return search_foods(db, user_id, query, limit)  # ya persistidos: vuelve a leer de BD
     except Exception as e:  # OFF caído, 503, JSON inesperado... nunca rompe la búsqueda local
         db.rollback()

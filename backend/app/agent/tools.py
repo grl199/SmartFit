@@ -68,7 +68,8 @@ def _food_dict(f: Food) -> dict:
     return {"id": f.id, "name": f.name, "brand": f.brand, "barcode": f.barcode, "source": f.source,
             "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS},
             "nutriscore": f.nutriscore_grade, "nova_group": f.nova_group, "quantity": f.quantity,
-            "allergens": f.allergens or None}
+            "allergens": f.allergens or None, "generic_name": f.generic_name,
+            "barcode_ambiguous": f.barcode_ambiguous or None}
 
 
 def _d(s: str | None) -> date:

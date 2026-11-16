@@ -41,8 +41,42 @@ button[kind="secondary"] {border-radius: 999px;}
 """
 
 
+def is_dark() -> bool:
+    """¿Está la app en modo oscuro? (st.context.theme existe desde Streamlit 1.46; si falla, se asume claro)."""
+    try:
+        return st.context.theme.type == "dark"
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def inject_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
+
+
+def fmt_pace(pace_min_km: float | None) -> str:
+    """5.49 -> '5:29' (min:seg por km)."""
+    if not pace_min_km:
+        return "—"
+    m, sec = divmod(round(pace_min_km * 60), 60)
+    return f"{m}:{sec:02d}"
+
+
+def cardio_chips(w: dict) -> str:
+    """Distancia, ritmo, velocidad, desnivel, pasos y FC de una sesión de andar/correr (vacío si no hay datos)."""
+    out = []
+    dist, dur = w.get("distance_km"), w.get("duration_min")
+    if dist:
+        out.append(chip(f"📏 {dist:g} km", "blue"))
+        if dur:
+            out.append(chip(f"⏱ {fmt_pace(dur / dist)} /km", "green"))
+            out.append(chip(f"{dist / (dur / 60):.1f} km/h"))
+    if w.get("elevation_gain_m"):
+        out.append(chip(f"⛰ +{w['elevation_gain_m']:g} m"))
+    if w.get("steps"):
+        out.append(chip(f"👣 {w['steps']:,} pasos".replace(",", ".")))
+    if w.get("avg_hr_bpm"):
+        out.append(chip(f"❤ {w['avg_hr_bpm']} ppm", "red"))
+    return "".join(out)
 
 
 def chip(text: str, color: str = "") -> str:
@@ -107,13 +141,25 @@ def safe_image(url: str | None) -> str:
     return f'<img class="sf-img" src="{escape(url, quote=True)}" alt="" loading="lazy"/>' if url and url.startswith("https://") else ""
 
 
+AMBIGUOUS_HELP = ("Código de uso restringido de una tienda o empresa: distintos productos y tiendas pueden usar el mismo número. "
+                  "Comprueba que los datos corresponden al producto que tienes delante.")
+
+
+def ambiguous_chip() -> str:
+    return f'<span class="sf-chip orange" title="{escape(AMBIGUOUS_HELP, quote=True)}">⚠ Código de tienda (ambiguo)</span>'
+
+
 def food_header(food: dict) -> str:
     """Cabecera de ficha: foto, nombre, marca, código de barras, envase y distintivos."""
     sub = " · ".join(escape(x) for x in (food.get("brand"), food.get("quantity")) if x)
     code = f'<span class="sf-chip">🏷 {escape(food["barcode"])}</span>' if food.get("barcode") else ""
+    code += ambiguous_chip() if food.get("barcode_ambiguous") else ""
+    generic = f'<div class="sf-muted">{escape(food["generic_name"])}</div>' if food.get("generic_name") else ""
+    original = (f'<div class="sf-muted">Nombre original: {escape(food["original_name"])}</div>'
+                if food.get("original_name") and food["original_name"] != food["name"] else "")
     badges = nutriscore(food.get("nutriscore_grade")) + nova(food.get("nova_group")) + ecoscore(food.get("ecoscore_grade"))
     allergens = chips([f"⚠ {a}" for a in food.get("allergens") or []], "orange")
     return (f'<div class="sf-food">{safe_image(food.get("image_url"))}<div>'
-            f'<div class="sf-big">{escape(food["name"])}</div><div class="sf-muted">{sub}</div>'
+            f'<div class="sf-big">{escape(food["name"])}</div><div class="sf-muted">{sub}</div>{generic}'
             f'<div>{code}{chip("🌐 Open Food Facts") if food.get("source") == "openfoodfacts" else ""}</div>'
-            f'<div style="margin-top:4px">{badges}</div><div>{allergens}</div></div></div>')
+            f'<div style="margin-top:4px">{badges}</div><div>{allergens}</div>{original}</div></div>')

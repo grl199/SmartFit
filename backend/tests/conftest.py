@@ -12,6 +12,7 @@ if TEST_DB:
     os.environ["DATABASE_URL"] = TEST_DB  # antes de importar app.*
 os.environ.setdefault("SECRET_KEY", "test-secret-key-test-secret-key-test")
 os.environ["ALLOW_REGISTRATION"] = "true"
+os.environ["TRANSLATE_NAMES"] = "false"  # nada de hilos en segundo plano en los tests; la traducción se prueba llamándola directamente
 os.environ.pop("BOOTSTRAP_USERNAME", None)
 os.environ.pop("BOOTSTRAP_PASSWORD", None)
 

@@ -11,6 +11,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from .barcodes import is_restricted_barcode
 from .config import get_settings
 from .db import Base
 
@@ -110,7 +111,8 @@ class Food(Base):
     extra: Mapped[dict] = mapped_column(
         JSONB, default=dict,
         comment="JSON con metadatos extra: allergens (lista en español), ingredients, categories, labels, "
-                "off_enriched (ya se completó desde la API de producto de OFF) y source_url.")
+                "generic_name (denominación general), original_name (nombre antes de limpiar/traducir), name_es_done "
+                "(el nombre ya pasó por la traducción), off_enriched (ya se completó desde la API de producto de OFF) y source_url.")
     nutriscore_grade: Mapped[str | None] = mapped_column(String(1), comment="Nutri-Score de Open Food Facts: 'a' (mejor) a 'e' (peor). NULL si no consta.")
     nova_group: Mapped[int | None] = mapped_column(Integer, comment="Grupo NOVA de procesamiento (1 = sin procesar ... 4 = ultraprocesado). NULL si no consta.")
     ecoscore_grade: Mapped[str | None] = mapped_column(String(1), comment="Eco-Score / Green-Score ambiental de OFF: 'a' a 'e'. NULL si no consta.")
@@ -130,6 +132,20 @@ class Food(Base):
     @property
     def allergens(self) -> list[str]:
         return list((self.extra or {}).get("allergens") or [])
+
+    @property
+    def generic_name(self) -> str | None:
+        """Denominación general en español (p. ej. «Queso fresco granulado»)."""
+        return (self.extra or {}).get("generic_name")
+
+    @property
+    def original_name(self) -> str | None:
+        """Nombre tal como venía en Open Food Facts, si se limpió o tradujo."""
+        return (self.extra or {}).get("original_name")
+
+    @property
+    def barcode_ambiguous(self) -> bool:
+        return is_restricted_barcode(self.barcode)
 
     @property
     def ingredients(self) -> str | None:
@@ -171,12 +187,16 @@ class Workout(Base):
     kind: Mapped[str] = mapped_column(String(100), comment="Tipo de entrenamiento en texto libre (fuerza, running, bici...).")
     duration_min: Mapped[int] = mapped_column(Integer, comment="Duración en minutos.")
     category: Mapped[str | None] = mapped_column(
-        String(20), comment="Tipo de sesión. Valores: 'legs' | 'push' | 'pull' | 'upper' | 'full_body' | 'core' | 'cardio' | 'other'.")
+        String(20), comment="Tipo de sesión. Valores: 'legs' | 'push' | 'pull' | 'upper' | 'full_body' | 'core' | 'walking' | 'running' | 'cardio' | 'other'.")
     kcal_burned: Mapped[float | None] = mapped_column(Float, comment="Energía gastada en la sesión, en kcal (estimada por la IA o introducida a mano).")
     kcal_source: Mapped[str | None] = mapped_column(String(10), comment="Origen de kcal_burned: 'llm' (estimada por la IA) | 'manual'. NULL si no hay estimación.")
     met: Mapped[float | None] = mapped_column(Float, comment="MET medio de la sesión estimado por la IA. kcal = MET x peso(kg) x horas, calculado por código.")
     intensity: Mapped[str | None] = mapped_column(String(10), comment="Intensidad media estimada: 'low' | 'moderate' | 'high'.")
     kcal_note: Mapped[str | None] = mapped_column(Text, comment="Justificación breve de la estimación de calorías.")
+    distance_km: Mapped[float | None] = mapped_column(Float, comment="Distancia recorrida en km (andar/correr). El ritmo y la velocidad se derivan de ella y de la duración.")
+    elevation_gain_m: Mapped[float | None] = mapped_column(Float, comment="Desnivel positivo acumulado en metros (andar/correr).")
+    steps: Mapped[int | None] = mapped_column(Integer, comment="Número de pasos (andar).")
+    avg_hr_bpm: Mapped[int | None] = mapped_column(Integer, comment="Frecuencia cardiaca media en pulsaciones por minuto (opcional).")
     notes: Mapped[str | None] = mapped_column(Text, comment="Notas libres sobre la sesión.")
 
 
@@ -225,11 +245,26 @@ class BodyMetric(Base):
     body_fat_pct: Mapped[float | None] = mapped_column(Float, comment="Porcentaje de grasa corporal (opcional).")
 
 
+class Conversation(Base):
+    __tablename__ = "conversations"
+    __table_args__ = {"comment": "Conversaciones con el asistente. Cada usuario puede tener varias y saltar de una a otra; "
+                                 "cada una conserva su propio historial de mensajes."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador de la conversación.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario dueño de la conversación.")
+    title: Mapped[str] = mapped_column(String(120), default="Nueva conversación", comment="Título (se rellena con el primer mensaje; editable).")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación.")
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now(),
+        comment="Último mensaje o cambio; ordena la lista de conversaciones.")
+
+
 class ChatMessage(Base):
     __tablename__ = "chat_messages"
-    __table_args__ = {"comment": "Historial de la conversación con el asistente. Los últimos mensajes se reenvían al modelo como contexto."}
+    __table_args__ = {"comment": "Mensajes de las conversaciones con el asistente. Los últimos de cada conversación se reenvían al modelo como contexto."}
     id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del mensaje (el orden = orden de la conversación).")
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario dueño de la conversación.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario dueño del mensaje.")
+    conversation_id: Mapped[int | None] = mapped_column(
+        ForeignKey("conversations.id"), index=True, comment="Conversación a la que pertenece el mensaje (FK a conversations.id).")
     role: Mapped[str] = mapped_column(String(20), comment="Autor del mensaje: 'user' | 'assistant'.")
     content: Mapped[str] = mapped_column(Text, comment="Texto del mensaje (las imágenes no se guardan; se marca con 📷).")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha y hora del mensaje.")

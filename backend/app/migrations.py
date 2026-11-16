@@ -33,6 +33,14 @@ _COLUMNS = [
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS intensity VARCHAR(10)",
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kcal_note TEXT",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercises_owner_name ON exercises (coalesce(user_id, 0), lower(name))",
+    # Andar/correr: métricas
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS distance_km DOUBLE PRECISION",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS elevation_gain_m DOUBLE PRECISION",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS steps INTEGER",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS avg_hr_bpm INTEGER",
+    # Varias conversaciones
+    "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id)",
+    "CREATE INDEX IF NOT EXISTS ix_chat_messages_conversation_id ON chat_messages (conversation_id)",
 ]
 
 # Los usuarios que ya existían antes de añadir el onboarding se consideran onboarded (default TRUE
@@ -65,9 +73,21 @@ def _normalize_legacy_values(conn: Connection) -> None:
         conn.execute(text(f"UPDATE user_profiles SET {column} = NULL WHERE {column} IS NOT NULL AND {column} NOT IN ({_quoted(valid)})"))
 
 
+def _legacy_conversations(conn: Connection) -> None:
+    """Los mensajes anteriores a las conversaciones se agrupan en «Conversación anterior» (una por usuario)."""
+    conn.execute(text("""
+        WITH created AS (
+            INSERT INTO conversations (user_id, title)
+            SELECT DISTINCT user_id, 'Conversación anterior' FROM chat_messages WHERE conversation_id IS NULL
+            RETURNING id, user_id)
+        UPDATE chat_messages m SET conversation_id = created.id
+        FROM created WHERE m.user_id = created.user_id AND m.conversation_id IS NULL"""))
+
+
 def run_migrations(conn: Connection) -> None:
     for stmt in _COLUMNS:
         conn.execute(text(stmt))
     conn.execute(text("UPDATE workouts SET kcal_source = 'manual' WHERE kcal_burned IS NOT NULL AND kcal_source IS NULL"))
     conn.execute(text(_ONBOARDING))
     _normalize_legacy_values(conn)
+    _legacy_conversations(conn)

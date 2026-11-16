@@ -12,12 +12,13 @@ from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import Food
+from .names import clean_name, schedule_translation
 
 log = logging.getLogger(__name__)
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
 OFF_FIELDS = ("code,product_name,product_name_es,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
               "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,allergens_tags,"
-              "ingredients_text_es,ingredients_text,categories,labels")
+              "ingredients_text_es,ingredients_text,categories,labels,generic_name_es,generic_name")
 
 ALLERGENS_ES = {
     "gluten": "Gluten", "milk": "Leche", "eggs": "Huevos", "nuts": "Frutos secos", "peanuts": "Cacahuetes",
@@ -91,8 +92,10 @@ def parse_off_meta(product: dict) -> dict:
     cats = product.get("categories")
     cats = [c.strip() for c in cats.split(",")] if isinstance(cats, str) else [str(c).split(":", 1)[-1] for c in (cats or [])]
     ingredients = product.get("ingredients_text_es") or product.get("ingredients_text")
+    generic = product.get("generic_name_es") or product.get("generic_name")
     extra = {k: v for k, v in {
         "allergens": allergens, "ingredients": (ingredients or "")[:1500] or None, "categories": [c for c in cats if c][:6],
+        "generic_name": str(generic).strip()[:200] if generic else None,
     }.items() if v}
     qty = product.get("quantity")
     return dict(
@@ -146,8 +149,9 @@ def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
         return BarcodeResult("error")
 
     p = r.json()["product"]
-    name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
+    raw_name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
     brand = (p.get("brands") or "").split(",")[0].strip() or None
+    name = clean_name(raw_name, brand, p.get("quantity"))
     nutrients = parse_off_product(p)
     if nutrients is None:
         return BarcodeResult("incomplete", None, name, brand)
@@ -155,9 +159,12 @@ def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
     serving = _num(p, "serving_quantity")
     meta = parse_off_meta(p)
     meta["extra"]["off_enriched"] = True  # la consulta por código ya trae todos los campos
+    if name != raw_name:
+        meta["extra"]["original_name"] = raw_name
     food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients, **meta)
     db.add(food)
     db.commit()
+    schedule_translation()
     return BarcodeResult("openfoodfacts", food, name, brand)
 
 
@@ -219,9 +226,13 @@ def parse_search_hit(hit: dict) -> dict | None:
         norm = normalize_barcode(code)
     except ValueError:
         return None
-    return {"code": norm, "name": str(name).strip(), "brand": brand, "serving_g": _num(hit, "serving_quantity"),
-            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}),
-            "meta": parse_off_meta(hit)}
+    raw_name = str(name).strip()
+    clean = clean_name(raw_name, brand, hit.get("quantity"))
+    meta = parse_off_meta(hit)
+    if clean != raw_name:
+        meta["extra"]["original_name"] = raw_name
+    return {"code": norm, "name": clean, "brand": brand, "serving_g": _num(hit, "serving_quantity"),
+            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}), "meta": meta}
 
 
 def _store(db: Session, item: dict) -> bool:

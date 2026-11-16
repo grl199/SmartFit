@@ -2,17 +2,25 @@ import base64
 import json
 import logging
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..llm import get_chat_client
-from ..models import ChatMessage
+from ..models import ChatMessage, Conversation
 from ..services.images import decode_barcodes, prepare_for_llm
 from .prompts import build_system_prompt
 from .tools import FUNCTION_TOOLS, ToolContext, run_tool
 
 log = logging.getLogger(__name__)
+DEFAULT_TITLE = "Nueva conversación"
+
+
+def title_from(text: str) -> str:
+    t = " ".join(text.replace("📷", "").split())
+    if not t:
+        return "Foto"
+    return t if len(t) <= 60 else t[:57].rstrip() + "…"
 MAX_STEPS = 8
 HISTORY_TURNS = 12
 OPENAI_TOOLS = [{"type": "web_search"}, *FUNCTION_TOOLS]
@@ -92,7 +100,9 @@ def _run_chat_completions(client, model: str, system: str, history: list[dict],
     return "He alcanzado el límite de pasos de herramientas. ¿Puedes concretar un poco más?"
 
 
-def run_agent(db: Session, user_id: int, message: str, image: bytes | None = None) -> dict:
+def run_agent(db: Session, user_id: int, message: str, image: bytes | None = None,
+              conversation_id: int | None = None) -> dict:
+    """Una conversación = un historial independiente. `conversation_id` debe pertenecer al usuario (lo valida el router)."""
     s = get_settings()
     client = get_chat_client()
     ctx = ToolContext(db, user_id)
@@ -108,7 +118,7 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
         )
 
     past = db.scalars(
-        select(ChatMessage).where(ChatMessage.user_id == user_id)
+        select(ChatMessage).where(ChatMessage.user_id == user_id, ChatMessage.conversation_id == conversation_id)
         .order_by(ChatMessage.id.desc()).limit(HISTORY_TURNS * 2)
     ).all()
     history = [{"role": item.role, "content": item.content} for item in reversed(past)]
@@ -165,13 +175,18 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
             f"AI_PROVIDER no válido: {provider!r}. Usa 'openrouter' o 'openai'."
         )
 
-    db.add(ChatMessage(
-        user_id=user_id, role="user",
-        content=message.strip() + (" 📷" if image else ""),
-    ))
-    db.add(ChatMessage(user_id=user_id, role="assistant", content=reply))
+    user_text = message.strip() + (" 📷" if image else "")
+    db.add(ChatMessage(user_id=user_id, conversation_id=conversation_id, role="user", content=user_text))
+    db.add(ChatMessage(user_id=user_id, conversation_id=conversation_id, role="assistant", content=reply))
+    conv = db.get(Conversation, conversation_id)
+    if conv.title == DEFAULT_TITLE:  # el primer mensaje da nombre a la conversación
+        conv.title = title_from(user_text)
+    conv.updated_at = func.now()
+    db.add(conv)
     db.commit()
     return {
+        "conversation_id": conv.id,
+        "conversation_title": conv.title,
         "reply": reply,
         "sources": sources,
         "tools_used": list(dict.fromkeys(used)),
