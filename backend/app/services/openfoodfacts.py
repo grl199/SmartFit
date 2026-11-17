@@ -6,32 +6,38 @@ from collections import deque
 from dataclasses import dataclass
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
 from ..models import Food
+from .names import clean_name, schedule_translation
 
 log = logging.getLogger(__name__)
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
-OFF_FIELDS = "code,product_name,product_name_es,brands,nutriments,serving_quantity"
+OFF_FIELDS = ("code,product_name,product_name_es,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
+              "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,allergens_tags,"
+              "ingredients_text_es,ingredients_text,categories,labels,generic_name_es,generic_name")
+
+ALLERGENS_ES = {
+    "gluten": "Gluten", "milk": "Leche", "eggs": "Huevos", "nuts": "Frutos secos", "peanuts": "Cacahuetes",
+    "soybeans": "Soja", "fish": "Pescado", "crustaceans": "Crustáceos", "molluscs": "Moluscos", "celery": "Apio",
+    "mustard": "Mostaza", "sesame-seeds": "Sésamo", "sulphur-dioxide-and-sulphites": "Sulfitos", "lupin": "Altramuces",
+}
 
 
 @dataclass
 class BarcodeResult:
-    status: str  # db | openfoodfacts | incomplete | not_found | nonstandard | error
+    status: str  # db | openfoodfacts | incomplete | not_found | error
     food: Food | None = None
     name: str | None = None
     brand: str | None = None
 
 
-GTIN_LENGTHS = (8, 13, 14)  # EAN-8, EAN-13/UPC-A (normalizado a 13) y GTIN-14: los únicos que existen en Open Food Facts
-
-
 def normalize_barcode(raw: str) -> str:
-    """Solo dígitos, 8-32. UPC-A (12) se normaliza a EAN-13. Se admiten otras longitudes (códigos internos
-    de tienda, peso variable...), que se guardan tal cual pero no se buscan en Open Food Facts."""
+    """Solo dígitos, 8-32. UPC-A (12) se normaliza a EAN-13. Se admiten otras longitudes: OFF también guarda
+    códigos de tienda/peso variable (p. ej. los de 24 dígitos de Mercadona), que se consultan igual."""
     digits = re.sub(r"\D", "", raw or "")
     if len(digits) == 12:
         digits = "0" + digits
@@ -67,14 +73,75 @@ def parse_off_product(product: dict) -> dict | None:
     )
 
 
-def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
-    """BD local -> Open Food Facts -> (el agente completa con web_search si hace falta)."""
-    code = normalize_barcode(raw)
-    if food := db.scalar(select(Food).where(Food.barcode == code)):
-        return BarcodeResult("db", food, food.name, food.brand)
+def _grade(v) -> str | None:
+    v = str(v or "").strip().lower()
+    return v if v in ("a", "b", "c", "d", "e") else None  # OFF también devuelve "unknown" / "not-applicable"
 
-    if len(code) not in GTIN_LENGTHS:
-        return BarcodeResult("nonstandard")  # código interno / peso variable: no está en OFF
+
+def parse_off_meta(product: dict) -> dict:
+    """Metadatos de producto (todo opcional) -> columnas de Food. Tolerante: lo que falte queda en None / vacío."""
+    try:
+        nova = int(product.get("nova_group"))
+        nova = nova if 1 <= nova <= 4 else None
+    except (TypeError, ValueError):
+        nova = None
+    allergens = []
+    for tag in product.get("allergens_tags") or []:
+        code = str(tag).split(":", 1)[-1]
+        allergens.append(ALLERGENS_ES.get(code, code.replace("-", " ").capitalize()))
+    cats = product.get("categories")
+    cats = [c.strip() for c in cats.split(",")] if isinstance(cats, str) else [str(c).split(":", 1)[-1] for c in (cats or [])]
+    ingredients = product.get("ingredients_text_es") or product.get("ingredients_text")
+    generic = product.get("generic_name_es") or product.get("generic_name")
+    extra = {k: v for k, v in {
+        "allergens": allergens, "ingredients": (ingredients or "")[:1500] or None, "categories": [c for c in cats if c][:6],
+        "generic_name": str(generic).strip()[:200] if generic else None,
+    }.items() if v}
+    qty = product.get("quantity")
+    return dict(
+        nutriscore_grade=_grade(product.get("nutriscore_grade")), nova_group=nova,
+        ecoscore_grade=_grade(product.get("ecoscore_grade") or product.get("environmental_score_grade")),
+        image_url=product.get("image_front_small_url") or product.get("image_front_url") or product.get("image_url") or None,
+        quantity=str(qty)[:100] if qty else None, extra=extra,
+    )
+
+
+def enrich_food_from_off(db: Session, food: Food) -> bool:
+    """Completa metadatos (foto, Nutri-Score, NOVA, alérgenos...) de un producto ya guardado. Una consulta a la API
+    de producto (100/min). Marca off_enriched solo si OFF respondió. Nunca lanza."""
+    if food.source != "openfoodfacts" or not food.barcode or (food.extra or {}).get("off_enriched"):
+        return False
+    try:
+        r = httpx.get(OFF_URL.format(code=food.barcode), params={"fields": OFF_FIELDS}, timeout=6,
+                      headers={"User-Agent": get_settings().off_user_agent}, follow_redirects=True)
+        if not r.is_success or r.json().get("status") != 1:
+            return False
+        meta = parse_off_meta(r.json()["product"])
+    except Exception as e:  # noqa: BLE001
+        log.warning("No se pudo completar %s desde OFF: %s", food.barcode, e)
+        return False
+    for col in ("nutriscore_grade", "nova_group", "ecoscore_grade", "image_url", "quantity"):
+        if meta[col] is not None:
+            setattr(food, col, meta[col])
+    food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
+    db.add(food)
+    db.commit()
+    return True
+
+
+def find_by_barcode(db: Session, code: str, user_id: int | None) -> Food | None:
+    """Alimento visible para el usuario con ese código: el suyo primero y, si no, el compartido (OFF/comunidad).
+    Nunca devuelve alimentos privados de otros usuarios."""
+    owners = [Food.user_id.is_(None)] + ([Food.user_id == user_id] if user_id is not None else [])
+    rows = db.scalars(select(Food).where(Food.barcode == code, or_(*owners))).all()
+    return min(rows, key=lambda f: 0 if f.user_id == user_id else 1) if rows else None
+
+
+def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> BarcodeResult:
+    """BD local (tuyo, comunidad, OFF) -> Open Food Facts -> (el agente completa con web_search si hace falta)."""
+    code = normalize_barcode(raw)
+    if food := find_by_barcode(db, code, user_id):
+        return BarcodeResult("db", food, food.name, food.brand)
 
     try:
         r = httpx.get(
@@ -90,16 +157,22 @@ def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
         return BarcodeResult("error")
 
     p = r.json()["product"]
-    name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
+    raw_name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
     brand = (p.get("brands") or "").split(",")[0].strip() or None
+    name = clean_name(raw_name, brand, p.get("quantity"))
     nutrients = parse_off_product(p)
     if nutrients is None:
         return BarcodeResult("incomplete", None, name, brand)
 
     serving = _num(p, "serving_quantity")
-    food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients)
+    meta = parse_off_meta(p)
+    meta["extra"]["off_enriched"] = True  # la consulta por código ya trae todos los campos
+    if name != raw_name:
+        meta["extra"]["original_name"] = raw_name
+    food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients, **meta)
     db.add(food)
     db.commit()
+    schedule_translation()
     return BarcodeResult("openfoodfacts", food, name, brand)
 
 
@@ -153,7 +226,7 @@ def parse_search_hit(hit: dict) -> dict | None:
     name = hit.get("product_name")
     if isinstance(name, dict):  # a veces viene por idioma
         name = name.get("es") or name.get("main") or next(iter(name.values()), None)
-    if not code or len(code) not in GTIN_LENGTHS + (12,) or not name:
+    if not code or not name:
         return None
     brands = hit.get("brands")
     brand = (brands[0] if isinstance(brands, list) and brands else str(brands or "").split(",")[0]).strip() or None
@@ -161,14 +234,19 @@ def parse_search_hit(hit: dict) -> dict | None:
         norm = normalize_barcode(code)
     except ValueError:
         return None
-    return {"code": norm, "name": str(name).strip(), "brand": brand, "serving_g": _num(hit, "serving_quantity"),
-            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))})}
+    raw_name = str(name).strip()
+    clean = clean_name(raw_name, brand, hit.get("quantity"))
+    meta = parse_off_meta(hit)
+    if clean != raw_name:
+        meta["extra"]["original_name"] = raw_name
+    return {"code": norm, "name": clean, "brand": brand, "serving_g": _num(hit, "serving_quantity"),
+            "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}), "meta": meta}
 
 
 def _store(db: Session, item: dict) -> bool:
     stmt = (pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
-                                   source="openfoodfacts", serving_g=item["serving_g"], extra={}, **item["nutrients"])
-            .on_conflict_do_nothing(index_elements=["barcode"]).returning(Food.id))
+                                   source="openfoodfacts", serving_g=item["serving_g"], **item["nutrients"], **item["meta"])
+            .on_conflict_do_nothing(index_elements=[func.coalesce(Food.user_id, 0), Food.barcode]).returning(Food.id))
     return db.execute(stmt).scalar() is not None  # rowcount no es fiable con ON CONFLICT (-1 en psycopg)
 
 

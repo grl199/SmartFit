@@ -1,7 +1,7 @@
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 
 Meal = Literal["breakfast", "lunch", "snack", "dinner"]
 
@@ -23,13 +23,28 @@ class FoodBase(BaseModel):
 
 
 class FoodCreate(FoodBase):
-    pass
+    share: bool = Field(False, description="Ofrecerlo a la comunidad (requiere código de barras no ambiguo y datos coherentes)")
 
 
 class FoodOut(FoodBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     source: str
+    # Metadatos de Open Food Facts (None / vacío si no constan)
+    image_url: str | None = None
+    nutriscore_grade: str | None = None
+    nova_group: int | None = None
+    ecoscore_grade: str | None = None
+    quantity: str | None = None
+    allergens: list[str] = []
+    ingredients: str | None = None
+    categories: list[str] = []
+    generic_name: str | None = None      # «Denominación general» en español
+    original_name: str | None = None     # nombre original de OFF si se limpió o tradujo
+    barcode_ambiguous: bool = False      # código de uso restringido de tienda (puede repetirse entre productos)
+    user_id: int | None = None           # None = catálogo compartido (OFF / comunidad); si no, es tuyo
+    share_status: str = "private"        # private | pending | verified (solo alimentos propios)
+    confirmed_by: int | None = None      # usuarios que confirmaron un producto de la comunidad
 
 
 class BarcodeOut(BaseModel):
@@ -168,18 +183,106 @@ class DeleteAccountIn(BaseModel):
     password: str
 
 
+WorkoutCategory = Literal["strength", "walking", "running", "sport", "full_body", "stretching"]
+MuscleCode = Literal["abs", "forearms", "biceps", "neck", "lats", "lower_back", "upper_back", "shoulders", "chest", "traps",
+                     "triceps", "abductors", "adductors", "quadriceps", "glutes", "hamstrings", "calves"]
+EquipmentCode = Literal["none", "resistance_band", "suspension", "barbell", "dumbbell", "plate", "machine", "kettlebell",
+                        "wheel", "medicine_ball", "bench", "box", "other"]
+ExerciseKind = Literal["strength", "full_body", "stretching"]
+
+
+class ExerciseIn(BaseModel):
+    name: str = Field(min_length=2, max_length=150)
+    kind: ExerciseKind = "strength"
+    primary_muscle: MuscleCode
+    secondary_muscles: list[MuscleCode] = []
+    equipment: list[EquipmentCode] = Field(default_factory=lambda: ["none"], min_length=1, max_length=6)
+
+    @field_validator("equipment", mode="before")
+    @classmethod
+    def _equipment_list(cls, v):
+        """Acepta un texto suelto (compatibilidad) o una lista; sin duplicados."""
+        v = [v] if isinstance(v, str) else v
+        return list(dict.fromkeys(v)) if isinstance(v, list) else v
+
+
+class ExerciseOut(ExerciseIn):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int | None = None
+
+
+class SetIn(BaseModel):
+    exercise_id: int
+    reps: int = Field(ge=1, le=200)
+    weight_kg: float | None = Field(None, ge=0, le=1000)
+    rpe: float | None = Field(None, ge=1, le=10)
+
+
+class SetOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    exercise_id: int
+    set_number: int
+    reps: int
+    weight_kg: float | None = None
+    rpe: float | None = None
+
+
 class WorkoutIn(BaseModel):
     performed_on: date | None = None
-    kind: str = Field(min_length=1, max_length=100)
+    kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
+    category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
-    kcal_burned: float | None = Field(None, ge=0)
-    notes: str | None = None
+    kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
+    distance_km: float | None = Field(None, gt=0, le=500)
+    elevation_gain_m: float | None = Field(None, ge=0, le=10000)
+    steps: int | None = Field(None, ge=0, le=200000)
+    avg_hr_bpm: int | None = Field(None, ge=30, le=230)
+    notes: str | None = Field(None, max_length=1000)
+    sets: list[SetIn] = Field(default=[], max_length=300)
+    estimate_calories: bool = True
 
 
-class WorkoutOut(WorkoutIn):
+class WorkoutOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
     performed_on: date
+    kind: str
+    category: str | None = None
+    duration_min: int
+    kcal_burned: float | None = None
+    kcal_source: str | None = None
+    met: float | None = None
+    intensity: str | None = None
+    kcal_note: str | None = None
+    distance_km: float | None = None
+    elevation_gain_m: float | None = None
+    steps: int | None = None
+    avg_hr_bpm: int | None = None
+    notes: str | None = None
+
+    @computed_field
+    @property
+    def pace_min_km(self) -> float | None:
+        """Ritmo medio en min/km (solo con distancia)."""
+        return round(self.duration_min / self.distance_km, 2) if self.distance_km else None
+
+    @computed_field
+    @property
+    def speed_kmh(self) -> float | None:
+        return round(self.distance_km / (self.duration_min / 60), 2) if self.distance_km else None
+
+
+class WorkoutExerciseOut(BaseModel):
+    exercise_id: int
+    exercise: str
+    primary_muscle: str
+    sets: list[dict]
+
+
+class WorkoutDetail(WorkoutOut):
+    exercises: list[WorkoutExerciseOut] = []
 
 
 class WeightIn(BaseModel):
@@ -195,6 +298,8 @@ class WeightOut(WeightIn):
 
 
 class ChatOut(BaseModel):
+    conversation_id: int
+    conversation_title: str
     reply: str
     sources: list[dict] = []
     tools_used: list[str] = []
@@ -206,3 +311,16 @@ class ChatMessageOut(BaseModel):
     role: str
     content: str
     created_at: datetime
+
+
+class ConversationOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    message_count: int = 0
+
+
+class ConversationRename(BaseModel):
+    title: str = Field(min_length=1, max_length=120)

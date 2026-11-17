@@ -26,8 +26,11 @@ def init_db() -> None:
     from .migrations import run_migrations
 
     with engine.begin() as conn:
-        for ext in ("vector", "unaccent"):
+        for ext in ("vector", "unaccent", "pg_trgm"):
             conn.execute(text(f"CREATE EXTENSION IF NOT EXISTS {ext}"))
+        # unaccent es STABLE; este envoltorio IMMUTABLE permite usarlo en columnas generadas e índices.
+        conn.execute(text("CREATE OR REPLACE FUNCTION f_unaccent(text) RETURNS text LANGUAGE sql IMMUTABLE PARALLEL SAFE STRICT "
+                          "AS $$ SELECT public.unaccent('public.unaccent', $1) $$"))
     Base.metadata.create_all(engine)
     with engine.begin() as conn:
         run_migrations(conn)

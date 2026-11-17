@@ -47,6 +47,8 @@ class Settings(BaseSettings):
     # Búsqueda de texto de Open Food Facts (search-a-licious). OFF limita a 10 búsquedas/min/IP.
     off_search_url: str = "https://search.openfoodfacts.org/search"
     off_search_per_minute: int = 8
+    # Traduce al español (con IA, en segundo plano) los nombres de productos de OFF guardados
+    translate_names: bool = True
 
 
 @lru_cache

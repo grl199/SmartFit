@@ -81,7 +81,7 @@ Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRout
 Todas las tablas y columnas llevan `comment=` en `app/models.py`, que se aplica como `COMMENT ON` en cada arranque
 (`\d+ tabla` en psql, o el panel de DBeaver/pgAdmin). Un test impide añadir columnas sin documentar.
 `app/migrations.py` añade de forma idempotente las columnas nuevas a bases de datos de versiones anteriores y normaliza
-los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando el esquema se estabilice, pasa a Alembic.
+los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando el esquema se estabilice, pasa a Alembic. Al arrancar también se siembra el catálogo de ejercicios.
 
 ## Búsqueda de alimentos
 
@@ -90,10 +90,83 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
   `foods`, de modo que la siguiente búsqueda ya es local.
 - Open Food Facts limita las búsquedas a **10/min/IP**, por eso hay debounce en la interfaz, un límite propio
   (`OFF_SEARCH_PER_MINUTE`) y una caché de consultas recientes. Si OFF falla, la búsqueda local sigue funcionando.
-- **Por código de barras:** cualquier código de 8 a 32 dígitos. Los EAN/UPC/GTIN se consultan en OFF; los demás (códigos internos de
-  tienda, peso variable) solo se resuelven contra tu base de datos: créalos una vez a mano y se reconocerán al escanearlos.
-- `python scripts/check_off_search.py "yogur griego"` comprueba la búsqueda de OFF con la red real y muestra el formato de los datos.
+- **Por código de barras:** cualquier código de 8 a 32 dígitos, incluidos los de tienda de 24 dígitos (p. ej. los de Mercadona),
+  que Open Food Facts también tiene. Primero se busca en tu base de datos y después en OFF; el resultado se guarda.
+- `python scripts/check_off_search.py "yogur griego"` (o un código: `... 232839950000100350003502`) comprueba OFF con la red real y muestra el formato de los datos.
 - El agente usa la misma búsqueda híbrida en su herramienta `search_foods`.
+- **Metadatos de Open Food Facts** (se guardan y se muestran en la ficha del alimento): foto, **Nutri-Score**, grupo **NOVA**
+  (nivel de procesamiento), **Eco-Score**, **alérgenos** (traducidos), ingredientes, categorías y tamaño del envase. El código de barras
+  aparece en cada resultado de búsqueda y en la ficha. Si el buscador no los trae, se completan con una consulta al seleccionar el producto.
+
+- **Nombres en español.** Open Food Facts guarda el nombre comercial del envase («Milbona Cottage Cheese – 200 g»). Al guardar un
+  producto se limpia (se quitan la marca y la cantidad repetidas) y se muestra su «denominación general» en español; además la IA
+  traduce los nombres en segundo plano (`TRANSLATE_NAMES`) y el original se conserva y también se busca. Perfil → «Traducir nombres
+  pendientes» lo fuerza para los productos ya guardados.
+- **Códigos de tienda ambiguos.** Los códigos que empiezan por 2 (y los de 24 dígitos de tienda) son de circulación restringida:
+  distintas tiendas pueden reutilizarlos para productos diferentes. La app lo avisa con ⚠ y la ficha lo explica.
+
+## Fuentes de datos de alimentos (estrategia)
+
+Capas, de más fiable a menos; cada una alimenta a la anterior para que la app «aprenda» con el uso:
+
+1. **Tu base de datos** (instantánea): lo que ya consumiste, lo que creaste, lo que guardó Open Food Facts y los productos confirmados
+   por la comunidad. La búsqueda es **tolerante a erratas y variantes entre idiomas** (índice de trigramas: «pistacho» encuentra
+   «Pistacchio»; «pandorp» encuentra «pandoro»).
+2. **Open Food Facts** (código de barras y texto): todo lo que devuelve se guarda en tu base de datos.
+3. **Catálogo comunitario**: un producto que creas con código de barras puede ofrecerse a los demás (casilla «Compartir con la
+   comunidad»). Se publica **solo cuando otro usuario registra el mismo código con valores concordantes (±10 %)**, con la mediana de los
+   valores, y sin revelar quién los aportó. Los códigos de tienda (prefijo 2) no se comparten.
+4. **Foto de la etiqueta con IA** *(pendiente; requiere un modelo con visión)*: rellena el formulario para que lo confirmes.
+
+Por qué **no** se rastrean webs de supermercados (Carrefour, Mercadona…): no ofrecen una API pública, sus condiciones suelen prohibir la
+extracción automática y es frágil (cambian la web sin avisar). Para alimentos genéricos (no de marca) tendrían sentido tablas abiertas
+de composición (CIQUAL, BEDCA, USDA), pero no resuelven productos de marca. Si un producto no está en ningún sitio, lo más fiable es el
+código de barras (la URL de Carrefour solo trae un identificador propio; el EAN va impreso en el envase).
+
+**Seguridad de datos compartidos:** cada usuario solo ve sus alimentos privados y los compartidos; el código de barras es único *por
+propietario* (antes lo era globalmente: un código creado por un usuario podía devolverse a otro y dos usuarios no podían registrar el
+mismo código).
+
+## Chat
+
+Cada conversación se guarda y tiene su propio historial: la barra lateral las agrupa por fecha (hoy, ayer, últimos 7 días…) y permite
+saltar de una a otra, renombrarlas y eliminarlas. La primera pregunta da título a la conversación. Los mensajes que había antes de esta
+versión quedan en «Conversación anterior».
+
+## Entrenamiento
+
+**Jerarquía de la sesión:** *Tipo* → Fuerza · Cardio (Andar · Correr · Otros deportes) · Cuerpo entero · Estiramientos.
+
+- **Fuerza y estiramientos:** eliges **grupos muscular** por región, con un pictograma por músculo — *Tren superior:* abdominales, antebrazo,
+  bíceps, cuello, dorsales, espalda baja, espalda superior, hombros, pecho, trapecio, tríceps · *Tren inferior:* abductores, aductores,
+  cuádriceps, glúteos, isquiotibiales, pantorrillas.
+- **Equipamiento** (con iconos): ninguno, banda de resistencia, banda de suspensión, barra, mancuerna, disco, máquina, pesa rusa, rueda,
+  balón medicinal, banco(s), cajones, otros. Filtra los ejercicios que usan *alguno* de los elegidos; se combina con los músculos y
+  con la búsqueda de texto. Lo que ya habías elegido no se pierde al cambiar los filtros.
+- **Catálogo de 106 ejercicios** (fuerza, cuerpo entero y estiramientos) con músculo principal, secundarios y equipamiento; puedes crear
+  los tuyos. Los estiramientos no cuentan como volumen de fuerza.
+- **Otros deportes:** fútbol, tenis, pádel, baloncesto, natación, ciclismo… (el título toma el deporte; la IA estima las calorías).
+- **Registro por series:** tabla editable por ejercicio (repeticiones, peso, RPE) precargada con lo que hiciste la última vez.
+- **Calorías con IA:** la IA estima la **intensidad y el MET**; el **código** calcula `kcal = MET × peso(kg) × horas` y valida rangos.
+  Si falla, la sesión se guarda igualmente y se puede recalcular desde el Historial.
+- **Andar y correr** tienen sus métricas: distancia, **ritmo** (min/km) y velocidad (derivados), **desnivel positivo**, **pasos** y FC.
+  Sus músculos se encienden en el mapa como «series equivalentes» según tiempo e intensidad (estimación orientativa). Progresión de
+  ritmo, km por semana y desnivel en Progresión. *Preparado para Strava:* una actividad importada solo rellenaría estos mismos campos.
+- **Mapa muscular** frontal y posterior (modo claro/oscuro) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5),
+  ranking por músculo y lista de los no trabajados. **Progresión** de fuerza: peso máximo, 1RM estimado (Epley) y volumen.
+- El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
+
+## Interfaz
+
+**Modo claro/oscuro:** menú ⋮ (arriba a la derecha) → Settings → Theme. Por defecto sigue el modo de tu sistema, y el mapa muscular y
+los gráficos se adaptan.
+
+**Progreso:** resumen con medias frente a objetivo, calorías por día coloreadas (verde = en objetivo ±10 %, azul = por debajo, rojo =
+por encima) con línea de objetivo, reparto de macros frente al objetivo, peso con media móvil y entrenamiento por semana.
+
+Tema y componentes propios (`frontend/ui.py`, `.streamlit/config.toml`): anillo de calorías restantes y barras de macros, navegación
+por días, comidas en tarjetas, fichas de producto con fotos e insignias, y adaptación a modo claro/oscuro. Los datos de terceros (nombres,
+marcas, ingredientes) se escapan antes de pintarse como HTML. Requiere **Python 3.11 o superior**.
 
 ## Decisiones de diseño
 

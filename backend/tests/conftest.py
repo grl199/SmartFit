@@ -12,6 +12,7 @@ if TEST_DB:
     os.environ["DATABASE_URL"] = TEST_DB  # antes de importar app.*
 os.environ.setdefault("SECRET_KEY", "test-secret-key-test-secret-key-test")
 os.environ["ALLOW_REGISTRATION"] = "true"
+os.environ["TRANSLATE_NAMES"] = "false"  # nada de hilos en segundo plano en los tests; la traducción se prueba llamándola directamente
 os.environ.pop("BOOTSTRAP_USERNAME", None)
 os.environ.pop("BOOTSTRAP_PASSWORD", None)
 
@@ -62,9 +63,8 @@ GOOD_PLAN = {"kcal": 2900, "protein_g": 160, "carbs_g": 380, "fat_g": 80, "fiber
              "rationale": "Superávit moderado sobre el gasto total para ganar músculo con proteína alta."}
 
 
-@pytest.fixture
-def onboarded(client):
-    """Usuario con onboarding completado (LLM simulado)."""
+def onboard_new_user(client):
+    """Registra un usuario y completa su onboarding (LLM simulado)."""
     import json
     from unittest.mock import patch
     u = register(client)
@@ -72,3 +72,8 @@ def onboarded(client):
         r = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
     assert r.status_code == 200, r.text
     return u
+
+
+@pytest.fixture
+def onboarded(client):
+    return onboard_new_user(client)

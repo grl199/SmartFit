@@ -12,7 +12,7 @@ from ..services.food_search import search_hybrid
 from ..services.nutrition import (
     create_log, daily_series, day_overview, get_targets, today_local, workouts_between,
 )
-from ..services.openfoodfacts import normalize_barcode, resolve_barcode
+from ..services.openfoodfacts import find_by_barcode, normalize_barcode, resolve_barcode
 
 
 @dataclass
@@ -52,6 +52,10 @@ FUNCTION_TOOLS = [
         {"food_id": {"type": "integer"}, "grams": _NUM,
          "meal": {"type": "string", "enum": ["breakfast", "lunch", "snack", "dinner"]},
          "date": {**_DATE, "description": "Si se omite, hoy"}}, ("food_id", "grams")),
+    _fn("get_workout_log",
+        "Sesiones de entrenamiento en un rango de fechas con ejercicios, series (reps x peso), calorías estimadas y "
+        "volumen por grupo muscular.",
+        {"start_date": _DATE, "end_date": _DATE}, ("start_date", "end_date")),
     _fn("search_history",
         "Búsqueda semántica en la memoria del usuario (resúmenes diarios antiguos y notas guardadas).",
         {"query": {"type": "string"}, "k": {"type": "integer", "description": "1-10, por defecto 5"}}, ("query",)),
@@ -62,7 +66,10 @@ FUNCTION_TOOLS = [
 
 def _food_dict(f: Food) -> dict:
     return {"id": f.id, "name": f.name, "brand": f.brand, "barcode": f.barcode, "source": f.source,
-            "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS}}
+            "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS},
+            "nutriscore": f.nutriscore_grade, "nova_group": f.nova_group, "quantity": f.quantity,
+            "allergens": f.allergens or None, "generic_name": f.generic_name, "community_confirmed_by": f.confirmed_by,
+            "barcode_ambiguous": f.barcode_ambiguous or None}
 
 
 def _d(s: str | None) -> date:
@@ -98,13 +105,11 @@ def t_search_foods(ctx: ToolContext, query: str) -> dict:
 
 
 def lookup_barcode(ctx: ToolContext, barcode: str) -> dict:
-    res = resolve_barcode(ctx.db, barcode)
+    res = resolve_barcode(ctx.db, barcode, ctx.user_id)
     if res.food:
         return {"status": res.status, "food": _food_dict(res.food)}
     hint = {"incomplete": "El producto existe en Open Food Facts pero sin datos nutricionales; busca en la web.",
-            "not_found": "No está en Open Food Facts; busca en la web.",
-            "nonstandard": "Código no estándar (interno de tienda o peso variable): no está en Open Food Facts. "
-                           "Pide al usuario los valores por 100 g para guardarlos con create_food (incluye el barcode).",
+            "not_found": "No está en Open Food Facts; busca en la web o pide al usuario los valores por 100 g para guardarlos con create_food (incluye el barcode).",
             "error": "Open Food Facts no responde; reintenta o busca en la web."}[res.status]
     return {"status": res.status, "name": res.name, "brand": res.brand, "hint": hint}
 
@@ -113,7 +118,7 @@ def create_food(ctx: ToolContext, name: str, kcal: float, protein_g: float, carb
                 brand: str | None = None, barcode: str | None = None, source_url: str | None = None,
                 sugars_g: float = 0, sat_fat_g: float = 0, fiber_g: float = 0, sodium_mg: float = 0) -> dict:
     code = normalize_barcode(barcode) if barcode else None
-    if code and (existing := ctx.db.scalar(select(Food).where(Food.barcode == code))):
+    if code and (existing := find_by_barcode(ctx.db, code, ctx.user_id)):
         return {"status": "already_exists", "food": _food_dict(existing)}
     f = Food(user_id=ctx.user_id, name=name, brand=brand, barcode=code, source="web",
              kcal=kcal, protein_g=protein_g, carbs_g=carbs_g, fat_g=fat_g, sugars_g=sugars_g,
@@ -138,6 +143,24 @@ def log_food(ctx: ToolContext, food_id: int, grams: float, meal: str | None = No
             "day_totals": day_overview(ctx.db, ctx.user_id, log.log_date)["totals"]}
 
 
+def get_workout_log(ctx: ToolContext, start_date: str, end_date: str) -> dict:
+    from ..models import Workout, WorkoutSet
+    from ..services.training import muscle_summary, workout_sets_summary
+    start, end = _d(start_date), _d(end_date)
+    if (end - start).days > 366:
+        raise ValueError("Rango máximo: 366 días")
+    ws = ctx.db.scalars(select(Workout).where(Workout.user_id == ctx.user_id, Workout.performed_on.between(start, end))
+                        .order_by(Workout.performed_on)).all()
+    sessions = []
+    for w in ws:
+        sets = list(ctx.db.scalars(select(WorkoutSet).where(WorkoutSet.workout_id == w.id).order_by(WorkoutSet.id)))
+        sessions.append({"date": w.performed_on.isoformat(), "title": w.kind, "category": w.category,
+                         "duration_min": w.duration_min, "kcal_burned": w.kcal_burned, "kcal_source": w.kcal_source,
+                         "intensity": w.intensity, "exercises": workout_sets_summary(sets)})
+    m = muscle_summary(ctx.db, ctx.user_id, start, end)["muscles"]
+    return {"sessions": sessions, "weighted_sets_per_muscle": {k: v["sets"] for k, v in m.items() if v["sets"]}}
+
+
 def search_history(ctx: ToolContext, query: str, k: int = 5) -> dict:
     return {"results": rag.search_memory(ctx.db, ctx.user_id, query, max(1, min(k, 10)))}
 
@@ -148,7 +171,7 @@ def remember(ctx: ToolContext, note: str) -> dict:
 
 
 HANDLERS = {
-    "get_day_summary": get_day_summary, "get_period_summary": get_period_summary,
+    "get_day_summary": get_day_summary, "get_period_summary": get_period_summary, "get_workout_log": get_workout_log,
     "search_foods": t_search_foods, "lookup_barcode": lookup_barcode, "create_food": create_food,
     "log_food": log_food, "search_history": search_history, "remember": remember,
 }

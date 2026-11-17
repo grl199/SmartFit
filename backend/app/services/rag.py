@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from ..db import SessionLocal
 from ..llm import embed_texts
 from ..models import FoodLog, MemoryChunk
+from .cardio import format_pace
 from .nutrition import day_overview
 
 log = logging.getLogger(__name__)
@@ -36,7 +37,16 @@ def build_daily_summary(db: Session, user_id: int, day: date) -> str | None:
         )
     lines += [f"{meal}: {', '.join(items)}." for meal, items in by_meal.items()]
     for workout in ov["workouts"]:
-        lines.append(f"Entrenamiento: {workout['kind']}, {workout['duration_min']} min.")
+        exercises = f" ({', '.join(workout['exercises'])})" if workout.get("exercises") else ""
+        kcal = f", ~{workout['kcal_burned']:.0f} kcal" if workout.get("kcal_burned") else ""
+        dist = ""
+        if workout.get("distance_km"):
+            dist = f", {workout['distance_km']:g} km a {format_pace(workout['duration_min'] / workout['distance_km'])} min/km"
+            if workout.get("elevation_gain_m"):
+                dist += f", +{workout['elevation_gain_m']:g} m de desnivel"
+        if workout.get("steps"):
+            dist += f", {workout['steps']} pasos"
+        lines.append(f"Entrenamiento: {workout['kind']}, {workout['duration_min']} min{dist}{kcal}{exercises}.")
     return "\n".join(lines)
 
 

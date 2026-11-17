@@ -14,6 +14,10 @@ def test_literals_match_enums():
     assert set(get_args(schemas.ActivityCode)) == set(enums.ACTIVITY_LEVEL) == set(enums.ACTIVITY_FACTOR)
     assert set(get_args(schemas.GoalCode)) == set(enums.GOAL)
     assert set(get_args(schemas.ExperienceCode)) == set(enums.EXPERIENCE_LEVEL)
+    assert set(get_args(schemas.MuscleCode)) == set(enums.MUSCLE_GROUP)
+    assert set(get_args(schemas.EquipmentCode)) == set(enums.EQUIPMENT)
+    assert set(get_args(schemas.WorkoutCategory)) == set(enums.WORKOUT_CATEGORY)
+    assert set(get_args(schemas.ExerciseKind)) == set(enums.EXERCISE_KIND)
 
 
 def test_every_table_and_column_is_documented():
@@ -166,20 +170,60 @@ def test_delete_account_and_isolation(client, onboarded):
     assert client.get("/auth/me", headers=b["headers"]).status_code == 200                # B intacto
 
 
-# ───────────── códigos de barras largos ─────────────
+# ───────────── códigos de barras largos (p. ej. Mercadona, 24 dígitos) ─────────────
 LONG = "232839950000100350003502"
+# Datos reales de https://es.openfoodfacts.org/producto/232839950000100350003502 (por 100 g)
+BIZCOCHO = {"product_name": "Bizcocho de yogur", "brands": "Hacendado", "nutriments": {
+    "energy_100g": 1643, "energy-kcal_100g": 394, "fat_100g": 19, "saturated-fat_100g": 2.9, "carbohydrates_100g": 49,
+    "sugars_100g": 25, "fiber_100g": 1.1, "proteins_100g": 6.3, "salt_100g": 1.4, "sodium_100g": 0.56}}
 
 
-def test_long_barcode_is_accepted_and_persisted(client, onboarded):
-    h = onboarded["headers"]
-    first = client.get(f"/foods/barcode/{LONG}", headers=h)
-    assert first.status_code == 200 and first.json()["status"] in ("nonstandard", "db")   # no se consulta OFF
-    code = LONG[:-6] + rnd(6, digits=True)  # evita colisión con ejecuciones previas
-    assert client.get(f"/foods/barcode/{code}", headers=h).json()["status"] == "nonstandard"
-    created = client.post("/foods", headers=h, json={"name": "Pechuga de pollo (tienda)", "barcode": code, "kcal": 110, "protein_g": 23}).json()
-    again = client.get(f"/foods/barcode/{code}", headers=h).json()
-    assert again["status"] == "db" and again["food"]["id"] == created["id"]
-    assert client.get("/foods/barcode/123", headers=h).status_code == 422
+def _product_fake(code, calls):
+    def fake_get(url, **kw):
+        calls.append(url)
+        req = httpx.Request("GET", url)
+        if f"/{code}.json" in url:
+            return httpx.Response(200, json={"status": 1, "product": BIZCOCHO}, request=req)
+        return httpx.Response(404, json={"status": 0}, request=req)
+    return fake_get
+
+
+def test_long_barcode_is_looked_up_in_off_and_persisted(client, onboarded):
+    h, calls = onboarded["headers"], []
+    code = LONG[:-6] + rnd(6, digits=True)  # único por ejecución (barcode es UNIQUE)
+    with patch("app.services.openfoodfacts.httpx.get", _product_fake(code, calls)):
+        first = client.get(f"/foods/barcode/{code}", headers=h).json()
+        assert first["status"] == "openfoodfacts" and len(calls) == 1                # SÍ se consulta OFF con 24 dígitos
+        f = first["food"]
+        assert (f["name"], f["brand"], f["barcode"]) == ("Bizcocho de yogur", "Hacendado", code)
+        assert (f["kcal"], f["protein_g"], f["carbs_g"], f["fat_g"], f["sugars_g"], f["fiber_g"]) == (394, 6.3, 49, 19, 25, 1.1)
+        assert f["sodium_mg"] == 560 and f["sat_fat_g"] == 2.9
+        again = client.get(f"/foods/barcode/{code}", headers=h).json()                # segunda vez: de Postgres
+        assert again["status"] == "db" and again["food"]["id"] == f["id"] and len(calls) == 1
+        # un código largo que OFF no conoce -> not_found (y no se inventa nada)
+        unknown = LONG[:-6] + rnd(6, digits=True)
+        assert client.get(f"/foods/barcode/{unknown}", headers=h).json()["status"] == "not_found"
+    assert client.get("/foods/barcode/123", headers=h).status_code == 422             # demasiado corto
+
+
+def test_long_barcode_can_be_created_manually(client, onboarded):
+    h, code = onboarded["headers"], LONG[:-6] + rnd(6, digits=True)
+    made = client.post("/foods", headers=h, json={"name": "Pechuga (tienda)", "barcode": code, "kcal": 110, "protein_g": 23}).json()
+    with patch("app.services.openfoodfacts.httpx.get", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe llamar a OFF"))):
+        got = client.get(f"/foods/barcode/{code}", headers=h).json()
+    assert got["status"] == "db" and got["food"]["id"] == made["id"]
+
+
+def test_text_search_finds_long_code_products(client, onboarded):
+    h, tag = onboarded["headers"], rnd(10)
+    code = LONG[:-6] + rnd(6, digits=True)
+    def fake(url, **kw):
+        req = httpx.Request("GET", url)
+        hit = {"code": code, "product_name": f"Bizcocho {tag} yogur", "brands": "Hacendado", "nutriments": BIZCOCHO["nutriments"]}
+        return httpx.Response(200, json={"hits": [hit]}, request=req)
+    with patch("app.services.openfoodfacts.httpx.get", fake):
+        r = client.get("/foods/search", params={"q": tag}, headers=h).json()
+    assert len(r) == 1 and r[0]["barcode"] == code and r[0]["kcal"] == 394 and r[0]["brand"] == "Hacendado"
 
 
 # ───────────── búsqueda híbrida con OFF simulado ─────────────

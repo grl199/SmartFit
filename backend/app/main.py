@@ -11,6 +11,7 @@ from .deps import require_onboarded
 from .models import User
 from .routers import auth, chat, dashboard, foods, logs, profile, training
 from .security import hash_password
+from .services.exercise_catalog import seed_catalog
 from .services.nutrition import today_local
 
 logging.basicConfig(level=logging.INFO)
@@ -39,6 +40,8 @@ def _bootstrap_existing_user() -> None:
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     init_db()
+    with SessionLocal() as db:
+        seed_catalog(db)
     _bootstrap_existing_user()
     yield
 

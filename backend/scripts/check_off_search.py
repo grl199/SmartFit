@@ -13,6 +13,15 @@ from app.services.openfoodfacts import SEARCH_FIELDS, parse_search_hit  # noqa: 
 
 q = " ".join(sys.argv[1:]) or "yogur griego"
 s = get_settings()
+if q.replace(" ", "").isdigit():  # modo código de barras: consulta de producto
+    from app.services.openfoodfacts import OFF_FIELDS, OFF_URL, parse_off_meta, parse_off_product
+    code = q.replace(" ", "")
+    r = httpx.get(OFF_URL.format(code=code), params={"fields": OFF_FIELDS}, headers={"User-Agent": s.off_user_agent}, timeout=15)
+    d = r.json() if r.is_success else {}
+    print("HTTP", r.status_code, "| status:", d.get("status"), "| nombre:", (d.get("product") or {}).get("product_name"))
+    print("nutrientes:", parse_off_product(d.get("product") or {}))
+    print("metadatos :", parse_off_meta(d.get("product") or {}))   # Nutri-Score, NOVA, Eco-Score, foto, alérgenos...
+    sys.exit()
 r = httpx.get(s.off_search_url, params={"q": q, "page_size": 5, "langs": "es,en", "fields": SEARCH_FIELDS},
               headers={"User-Agent": s.off_user_agent}, timeout=15, follow_redirects=True)
 print("HTTP", r.status_code, "| claves de primer nivel:", list(r.json()) if r.is_success else r.text[:200])

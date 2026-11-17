@@ -4,8 +4,10 @@ import streamlit as st
 
 import api
 import auth
+import ui
 
 st.set_page_config(page_title="Perfil", page_icon="👤", layout="wide")
+ui.inject_css()
 me = auth.require_login()
 st.title("👤 Perfil y objetivos")
 
@@ -76,6 +78,12 @@ with st.form("profile"):
                 "dietary_restrictions": restr or None, "context_notes": notes or None}
         if api.put("/profile", body):
             st.success("Guardado. Pulsa «Recalcular objetivos con IA» si quieres actualizar tus objetivos.")
+
+if st.button("🌐 Traducir al español los nombres de productos pendientes"):
+    with st.spinner("Traduciendo…"):
+        r = api.post("/foods/translate-names", timeout=api.LONG_TIMEOUT)
+    if r:
+        st.success(f"{r['translated']} nombres traducidos" + (f"; quedan {r['pending']} (vuelve a pulsar)." if r["pending"] else "."))
 
 if st.button("🔄 Reindexar histórico para el RAG"):
     r = api.post("/rag/reindex")
