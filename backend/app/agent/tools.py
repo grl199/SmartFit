@@ -12,7 +12,7 @@ from ..services.food_search import search_hybrid
 from ..services.nutrition import (
     create_log, daily_series, day_overview, get_targets, today_local, workouts_between,
 )
-from ..services.openfoodfacts import normalize_barcode, resolve_barcode
+from ..services.openfoodfacts import find_by_barcode, normalize_barcode, resolve_barcode
 
 
 @dataclass
@@ -68,7 +68,7 @@ def _food_dict(f: Food) -> dict:
     return {"id": f.id, "name": f.name, "brand": f.brand, "barcode": f.barcode, "source": f.source,
             "serving_g": f.serving_g, "per_100g": {n: getattr(f, n) for n in NUTRIENTS},
             "nutriscore": f.nutriscore_grade, "nova_group": f.nova_group, "quantity": f.quantity,
-            "allergens": f.allergens or None, "generic_name": f.generic_name,
+            "allergens": f.allergens or None, "generic_name": f.generic_name, "community_confirmed_by": f.confirmed_by,
             "barcode_ambiguous": f.barcode_ambiguous or None}
 
 
@@ -105,7 +105,7 @@ def t_search_foods(ctx: ToolContext, query: str) -> dict:
 
 
 def lookup_barcode(ctx: ToolContext, barcode: str) -> dict:
-    res = resolve_barcode(ctx.db, barcode)
+    res = resolve_barcode(ctx.db, barcode, ctx.user_id)
     if res.food:
         return {"status": res.status, "food": _food_dict(res.food)}
     hint = {"incomplete": "El producto existe en Open Food Facts pero sin datos nutricionales; busca en la web.",
@@ -118,7 +118,7 @@ def create_food(ctx: ToolContext, name: str, kcal: float, protein_g: float, carb
                 brand: str | None = None, barcode: str | None = None, source_url: str | None = None,
                 sugars_g: float = 0, sat_fat_g: float = 0, fiber_g: float = 0, sodium_mg: float = 0) -> dict:
     code = normalize_barcode(barcode) if barcode else None
-    if code and (existing := ctx.db.scalar(select(Food).where(Food.barcode == code))):
+    if code and (existing := find_by_barcode(ctx.db, code, ctx.user_id)):
         return {"status": "already_exists", "food": _food_dict(existing)}
     f = Food(user_id=ctx.user_id, name=name, brand=brand, barcode=code, source="web",
              kcal=kcal, protein_g=protein_g, carbs_g=carbs_g, fat_g=fat_g, sugars_g=sugars_g,

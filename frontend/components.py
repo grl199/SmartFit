@@ -33,6 +33,27 @@ def full_food(food: dict) -> dict:
     return cache[food["id"]]
 
 
+def _share_controls(food: dict, key: str) -> None:
+    """Solo en alimentos propios con código de barras: ofrecerlos a la comunidad o retirar la oferta."""
+    me = st.session_state.get("me") or {}
+    if food.get("user_id") is None or food.get("user_id") != me.get("id") or not food.get("barcode") or food.get("barcode_ambiguous"):
+        return
+    status = food.get("share_status", "private")
+    if status == "private":
+        if st.button("👥 Compartir con la comunidad", key=f"share_{key}", help="Se publican solo el código, el nombre, la marca y los valores "
+                     "nutricionales (nunca quién los aportó) y solo cuando otro usuario registra los mismos datos."):
+            res = api.post(f"/foods/{food['id']}/share")
+            if res:
+                st.session_state.get("_food_full", {}).pop(food["id"], None)
+                st.toast("Publicado en la comunidad" if res.get("published") else "Ofrecido: se publicará cuando otro usuario confirme los datos", icon="👥")
+                st.rerun()
+    elif status == "pending":
+        if st.button("Retirar de la comunidad", key=f"unshare_{key}"):
+            if api.delete(f"/foods/{food['id']}/share"):
+                st.session_state.get("_food_full", {}).pop(food["id"], None)
+                st.rerun()
+
+
 def food_log_form(food: dict, key: str, log_date: str | None = None, meal: str | None = None) -> None:
     """Ficha del alimento -> gramos -> vista previa de nutrientes consumidos -> registrar."""
     food = full_food(food)
@@ -44,6 +65,7 @@ def food_log_form(food: dict, key: str, log_date: str | None = None, meal: str |
                     ui.html(ui.chips(food["categories"], "blue"))
                 if food.get("ingredients"):
                     st.caption(food["ingredients"])
+        _share_controls(food, key)
         st.caption("Valores por 100 g: " + " · ".join(
             f"{lbl} {food[k]:.1f}" for k, lbl in NUTRIENT_LABELS.items() if k in ("kcal", "protein_g", "carbs_g", "fat_g")))
         default = float(food.get("serving_g") or 100)

@@ -19,7 +19,7 @@ def ex_id(client, h, name):
 
 def legs_payload(client, h, **over):
     sq, ext = ex_id(client, h, "Sentadilla con barra"), ex_id(client, h, "Extensión de piernas")
-    return {"kind": "Pierna", "category": "legs", "duration_min": 60,
+    return {"kind": "Pierna", "category": "strength", "duration_min": 60,
             "sets": [{"exercise_id": sq, "reps": 8, "weight_kg": 80}, {"exercise_id": sq, "reps": 8, "weight_kg": 80},
                      {"exercise_id": sq, "reps": 6, "weight_kg": 85},
                      {"exercise_id": ext, "reps": 12, "weight_kg": 50}], **over}
@@ -30,13 +30,11 @@ def test_catalog_seeded_and_filtered(client, onboarded):
     h = onboarded["headers"]
     names = {e["name"] for e in client.get("/exercises", headers=h).json()}
     for n in ("Extensión de piernas (cuádriceps)", "Máquina de aductores", "Máquina de abductores", "Sentadilla con barra",
-              "Peso muerto convencional", "Press banca con barra", "Jalón al pecho", "Plancha"):
+              "Peso muerto convencional", "Press banca con barra", "Jalón al pecho", "Plancha", "Swing con pesa rusa"):
         assert n in names, n
-    from app import enums
-    legs = client.get("/exercises", params={"category": "legs"}, headers=h).json()
-    assert legs and all(e["primary_muscle"] in enums.CATEGORY_MUSCLES["legs"] for e in legs)
-    assert client.get("/exercises", params={"category": "cardio"}, headers=h).json() == []
-    assert [e["name"] for e in client.get("/exercises", params={"q": "aductores"}, headers=h).json()] == ["Máquina de aductores"]  # sin acentos
+    quads = client.get("/exercises", params={"muscles": "quadriceps"}, headers=h).json()
+    assert quads and all(e["primary_muscle"] == "quadriceps" for e in quads)
+    assert [e["name"] for e in client.get("/exercises", params={"q": "aductores", "kind": "strength"}, headers=h).json()] == ["Máquina de aductores"]  # sin acentos
 
 
 def test_seed_is_idempotent(client):
@@ -51,6 +49,7 @@ def test_custom_exercises(client, onboarded):
     made = client.post("/exercises", headers=h, json={"name": f"Remo Pendlay {tag}", "primary_muscle": "upper_back",
                                                       "secondary_muscles": ["lats", "upper_back", "biceps"], "equipment": "barbell"})
     assert made.status_code == 201 and made.json()["secondary_muscles"] == ["lats", "biceps"]  # quita duplicados y el principal
+    assert made.json()["equipment"] == ["barbell"] and made.json()["kind"] == "strength"       # un texto suelto se admite como lista
     assert client.post("/exercises", headers=h, json={"name": f"REMO pendlay {tag}", "primary_muscle": "lats"}).status_code == 409
     assert client.post("/exercises", headers=h, json={"name": "sentadilla CON barra", "primary_muscle": "quadriceps"}).status_code == 409
     assert client.post("/exercises", headers=h, json={"name": "Raro", "primary_muscle": "alas"}).status_code == 422
@@ -69,14 +68,14 @@ def test_workout_with_sets_and_llm_calories(client, onboarded):
     assert [(e["exercise"], [s["set_number"] for s in e["sets"]]) for e in w["exercises"]] == [
         ("Sentadilla con barra", [1, 2, 3]), ("Extensión de piernas (cuádriceps)", [1])]
     prompt = calls[0][1]["content"]
-    assert "Sentadilla con barra" in prompt and "8x80kg" in prompt and "Peso corporal: 80.0 kg" in prompt and "Pierna" in prompt
+    assert "Sentadilla con barra" in prompt and "8x80kg" in prompt and "Peso corporal: 80.0 kg" in prompt and "Fuerza" in prompt and "Pierna" in prompt
 
 
 def test_calories_scale_with_weight_and_duration_in_code(client, onboarded):
     """La IA solo decide el MET; kcal = MET x kg x horas lo calcula el código."""
     h = onboarded["headers"]
     with patch("app.services.calories.chat_text", llm(4.0)):
-        r = client.post("/workouts", headers=h, json={"kind": "Fuerza", "category": "upper", "duration_min": 90}).json()
+        r = client.post("/workouts", headers=h, json={"kind": "Fuerza", "category": "strength", "duration_min": 90}).json()
     assert r["kcal_burned"] == round(4.0 * 80 * 1.5)
 
 
@@ -84,7 +83,7 @@ def test_manual_kcal_and_opt_out_skip_the_llm(client, onboarded):
     h = onboarded["headers"]
     boom = lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe llamar al LLM"))
     with patch("app.services.calories.chat_text", boom):
-        manual = client.post("/workouts", headers=h, json={"kind": "Bici", "category": "cardio", "duration_min": 45, "kcal_burned": 350}).json()
+        manual = client.post("/workouts", headers=h, json={"kind": "Bici", "category": "sport", "duration_min": 45, "kcal_burned": 350}).json()
         skipped = client.post("/workouts", headers=h, json={"kind": "Yoga", "duration_min": 30, "estimate_calories": False}).json()
     assert manual["kcal_burned"] == 350 and manual["kcal_source"] == "manual"
     assert skipped["kcal_burned"] is None and skipped["kcal_source"] is None
@@ -93,7 +92,7 @@ def test_manual_kcal_and_opt_out_skip_the_llm(client, onboarded):
 def test_workout_saved_even_if_llm_fails(client, onboarded):
     h = onboarded["headers"]
     with patch("app.services.calories.chat_text", llm(met=40.0)):          # MET imposible, dos intentos
-        r = client.post("/workouts", headers=h, json={"kind": "Carrera", "category": "cardio", "duration_min": 30})
+        r = client.post("/workouts", headers=h, json={"kind": "Carrera", "category": "running", "duration_min": 30})
     assert r.status_code == 201 and r.json()["kcal_burned"] is None and "reintentarlo" in r.json()["kcal_note"]
     with patch("app.services.calories.chat_text", lambda *a, **k: (_ for _ in ()).throw(ConnectionError("sin red"))):
         assert client.post("/workouts", headers=h, json={"kind": "Carrera", "duration_min": 30}).status_code == 201
@@ -154,7 +153,7 @@ def test_history_progress_and_1rm(client, onboarded):
     h = onboarded["headers"]
     pb = ex_id(client, h, "Press banca con barra")
     def session(day, w, reps):
-        client.post("/workouts", headers=h, json={"kind": "Empuje", "category": "push", "duration_min": 50, "performed_on": day.isoformat(),
+        client.post("/workouts", headers=h, json={"kind": "Empuje", "category": "strength", "duration_min": 50, "performed_on": day.isoformat(),
                                                   "estimate_calories": False, "sets": [{"exercise_id": pb, "reps": reps, "weight_kg": w}] * 3})
     today = date.today()
     session(today - timedelta(days=6), 70, 8)
@@ -187,7 +186,7 @@ def test_day_overview_agent_tool_and_account_deletion(client, onboarded):
     with patch("app.services.calories.chat_text", llm()):
         client.post("/workouts", headers=h, json={**legs_payload(client, h), "sets": legs_payload(client, h)["sets"] + [{"exercise_id": mine["id"], "reps": 15}]})
     day = client.get("/dashboard/day", headers=h).json()["workouts"][0]
-    assert day["category"] == "legs" and day["kcal_burned"] == 400 and "Sentadilla con barra" in day["exercises"]
+    assert day["category"] == "strength" and day["kcal_burned"] == 400 and "Sentadilla con barra" in day["exercises"]
     with SessionLocal() as db:
         out = json.loads(run_tool(ToolContext(db, onboarded["id"]), "get_workout_log",
                                   json.dumps({"start_date": date.today().isoformat(), "end_date": date.today().isoformat()})))

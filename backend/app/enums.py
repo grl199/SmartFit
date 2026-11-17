@@ -46,62 +46,58 @@ OPTIONS = {
 
 
 # ───────────── Entrenamiento ─────────────
+# Jerarquía: TIPO de sesión (Fuerza / Cardio / Cuerpo entero / Estiramientos) -> categoría. Cardio se divide en
+# Andar, Correr y Otros deportes. En Fuerza y Estiramientos se eligen grupos musculares y equipamiento.
 WORKOUT_CATEGORY = {
-    "legs": "Pierna",
-    "push": "Empuje (pecho, hombro, tríceps)",
-    "pull": "Tirón (espalda, bíceps)",
-    "upper": "Tren superior",
-    "full_body": "Cuerpo completo",
-    "core": "Core / abdomen",
+    "strength": "Fuerza",
     "walking": "Andar",
     "running": "Correr",
-    "cardio": "Otro cardio (bici, nadar, elíptica…)",
-    "other": "Otro",
+    "sport": "Otros deportes",
+    "full_body": "Cuerpo entero",
+    "stretching": "Estiramientos",
 }
+WORKOUT_CATEGORY_ICONS = {"strength": "🏋️", "walking": "🚶", "running": "🏃", "sport": "⚽", "full_body": "🤸", "stretching": "🧘"}
+WORKOUT_TYPES = {  # nivel 1 de la jerarquía, en el orden en que se muestra
+    "strength": {"label": "Fuerza", "icon": "🏋️", "categories": ["strength"]},
+    "cardio": {"label": "Cardio", "icon": "🏃", "categories": ["walking", "running", "sport"]},
+    "full_body": {"label": "Cuerpo entero", "icon": "🤸", "categories": ["full_body"]},
+    "stretching": {"label": "Estiramientos", "icon": "🧘", "categories": ["stretching"]},
+}
+SPORTS = {  # para «Otros deportes» (el título de la sesión toma el nombre)
+    "football": "Fútbol", "tennis": "Tenis", "padel": "Pádel", "basketball": "Baloncesto", "swimming": "Natación",
+    "cycling": "Ciclismo", "rowing": "Remo", "climbing": "Escalada", "boxing": "Boxeo", "other": "Otro",
+}
+SPORT_ICONS = {"football": "⚽", "tennis": "🎾", "padel": "🏓", "basketball": "🏀", "swimming": "🏊", "cycling": "🚴",
+               "rowing": "🚣", "climbing": "🧗", "boxing": "🥊", "other": "➕"}
 
+# Grupos musculares, agrupados por región (el orden es el de la interfaz).
+MUSCLE_REGIONS = {
+    "upper": {"label": "Tren superior", "icon": "💪",
+              "muscles": ["abs", "forearms", "biceps", "neck", "lats", "lower_back", "upper_back", "shoulders", "chest", "traps", "triceps"]},
+    "lower": {"label": "Tren inferior", "icon": "🦵",
+              "muscles": ["abductors", "adductors", "quadriceps", "glutes", "hamstrings", "calves"]},
+}
 MUSCLE_GROUP = {
-    "chest": "Pecho",
-    "lats": "Dorsales",
-    "upper_back": "Espalda alta / trapecio",
-    "lower_back": "Lumbares",
-    "shoulders": "Hombros",
-    "biceps": "Bíceps",
-    "triceps": "Tríceps",
-    "forearms": "Antebrazos",
-    "abs": "Abdominales",
-    "obliques": "Oblicuos",
-    "glutes": "Glúteos",
-    "quadriceps": "Cuádriceps",
-    "hamstrings": "Isquiotibiales",
-    "adductors": "Aductores",
-    "abductors": "Abductores",
-    "calves": "Gemelos",
+    "abs": "Abdominales", "forearms": "Antebrazo", "biceps": "Bíceps", "neck": "Cuello", "lats": "Dorsales",
+    "lower_back": "Espalda baja", "upper_back": "Espalda superior", "shoulders": "Hombros", "chest": "Pecho",
+    "traps": "Trapecio", "triceps": "Tríceps",
+    "abductors": "Abductores", "adductors": "Aductores", "quadriceps": "Cuádriceps", "glutes": "Glúteos",
+    "hamstrings": "Isquiotibiales", "calves": "Pantorrillas",
 }
 
 EQUIPMENT = {
-    "barbell": "Barra",
-    "dumbbell": "Mancuernas",
-    "machine": "Máquina",
-    "cable": "Polea",
-    "bodyweight": "Peso corporal",
-    "other": "Otro",
+    "none": "Ninguno (peso corporal)", "resistance_band": "Banda de resistencia", "suspension": "Banda de suspensión (TRX)",
+    "barbell": "Barra", "dumbbell": "Mancuerna", "plate": "Disco", "machine": "Máquina", "kettlebell": "Pesa rusa",
+    "wheel": "Rueda", "medicine_ball": "Balón medicinal", "bench": "Banco(s)", "box": "Cajones", "other": "Otros",
+}
+EQUIPMENT_ICONS = {
+    "none": "🧍", "resistance_band": "🪢", "suspension": "⛓️", "barbell": "🏋️", "dumbbell": "💪", "plate": "⚪",
+    "machine": "⚙️", "kettlebell": "🔔", "wheel": "🛞", "medicine_ball": "🏐", "bench": "🛋️", "box": "📦", "other": "➕",
 }
 
-# Músculos que se muestran al elegir cada tipo de sesión (filtra el catálogo de ejercicios).
-CATEGORY_MUSCLES = {
-    "legs": ["quadriceps", "hamstrings", "glutes", "adductors", "abductors", "calves"],
-    "push": ["chest", "shoulders", "triceps"],
-    "pull": ["lats", "upper_back", "biceps", "forearms", "lower_back"],
-    "upper": ["chest", "shoulders", "triceps", "lats", "upper_back", "biceps", "forearms"],
-    "core": ["abs", "obliques", "lower_back"],
-    "full_body": list(MUSCLE_GROUP),
-    "walking": [],
-    "running": [],
-    "cardio": [],
-    "other": list(MUSCLE_GROUP),
-}
+EXERCISE_KIND = {"strength": "Fuerza", "full_body": "Cuerpo entero", "stretching": "Estiramientos"}
 
-# Músculos implicados en andar/correr (no hay series que contar). La carga se convierte en "series equivalentes":
+# Andar/correr no tienen series: su carga muscular se estima con tiempo e intensidad (series equivalentes).
 #   series_eq = minutos / min_per_set x factor_de_intensidad ; principales cuentan 1, secundarios SECONDARY_WEIGHT.
 # Es una estimación orientativa para el mapa muscular, no una medida fisiológica.
 CARDIO_PROFILES = {
@@ -111,12 +107,18 @@ CARDIO_PROFILES = {
                 "secondary": ["abductors", "adductors", "lower_back"], "min_per_set": 10},
 }
 INTENSITY_FACTOR = {"low": 0.7, "moderate": 1.0, "high": 1.4}
-
 SECONDARY_WEIGHT = 0.5  # una serie cuenta 1 para el músculo principal y 0,5 para cada secundario
 
 OPTIONS.update({
     "workout_category": WORKOUT_CATEGORY,
+    "workout_category_icons": WORKOUT_CATEGORY_ICONS,
+    "workout_types": WORKOUT_TYPES,
+    "sports": SPORTS,
+    "sport_icons": SPORT_ICONS,
     "muscle_group": MUSCLE_GROUP,
+    "muscle_regions": MUSCLE_REGIONS,
     "equipment": EQUIPMENT,
+    "equipment_icons": EQUIPMENT_ICONS,
+    "exercise_kind": EXERCISE_KIND,
     "cardio_muscles": {k: {"primary": v["primary"], "secondary": v["secondary"]} for k, v in CARDIO_PROFILES.items()},
 })

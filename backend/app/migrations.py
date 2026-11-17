@@ -8,6 +8,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import Connection
 
 from . import enums
+from .models import FOOD_SEARCH_SQL
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,44 @@ _COLUMNS = [
     # Varias conversaciones
     "ALTER TABLE chat_messages ADD COLUMN IF NOT EXISTS conversation_id INTEGER REFERENCES conversations(id)",
     "CREATE INDEX IF NOT EXISTS ix_chat_messages_conversation_id ON chat_messages (conversation_id)",
+    # Ejercicios: tipo
+    "ALTER TABLE exercises ADD COLUMN IF NOT EXISTS kind VARCHAR(12) NOT NULL DEFAULT 'strength'",
+    # Alimentos: código único por propietario, compartir con la comunidad, búsqueda tolerante
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_foods_owner_barcode ON foods (coalesce(user_id, 0), barcode)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS share_status VARCHAR(10) NOT NULL DEFAULT 'private'",
+    f"ALTER TABLE foods ADD COLUMN IF NOT EXISTS search_text TEXT GENERATED ALWAYS AS ({FOOD_SEARCH_SQL}) STORED",
+    "CREATE INDEX IF NOT EXISTS ix_foods_search_trgm ON foods USING gin (search_text gin_trgm_ops)",
+    # Taxonomía nueva: sin «oblicuos» (se funden con abdominales) y sesiones reagrupadas
+    "UPDATE exercises SET primary_muscle = 'abs' WHERE primary_muscle = 'obliques'",
+    """UPDATE exercises SET secondary_muscles = (
+           SELECT COALESCE(jsonb_agg(DISTINCT CASE WHEN v = 'obliques' THEN 'abs' ELSE v END), '[]'::jsonb)
+           FROM jsonb_array_elements_text(secondary_muscles) AS v) WHERE secondary_muscles ? 'obliques'""",
+    "UPDATE workouts SET category = 'strength' WHERE category IN ('legs', 'push', 'pull', 'upper', 'core', 'other')",
+    "UPDATE workouts SET category = 'sport' WHERE category = 'cardio'",
 ]
+
+# El equipamiento pasa de un texto a una lista JSON y se adapta a la nueva lista (cable -> máquina, peso corporal -> ninguno).
+_EQUIPMENT_LIST = """
+DO $$ BEGIN
+  IF (SELECT data_type FROM information_schema.columns WHERE table_name = 'exercises' AND column_name = 'equipment') = 'character varying' THEN
+    ALTER TABLE exercises ALTER COLUMN equipment DROP DEFAULT;
+    ALTER TABLE exercises ALTER COLUMN equipment TYPE JSONB USING (
+      CASE equipment WHEN 'bodyweight' THEN '["none"]'::jsonb WHEN 'cable' THEN '["machine"]'::jsonb
+                     ELSE jsonb_build_array(COALESCE(equipment, 'other')) END);
+  END IF;
+END $$;
+"""
+
+# El código de barras era único a nivel global: dos usuarios no podían tener el mismo código (y el de uno podía "verse"
+# en consultas de otro). Ahora es único por propietario.
+_BARCODE_INDEX = """
+DO $$ BEGIN
+  IF EXISTS (SELECT 1 FROM pg_indexes WHERE indexname = 'ix_foods_barcode' AND indexdef LIKE 'CREATE UNIQUE%') THEN
+    DROP INDEX ix_foods_barcode;
+    CREATE INDEX ix_foods_barcode ON foods (barcode);
+  END IF;
+END $$;
+"""
 
 # Los usuarios que ya existían antes de añadir el onboarding se consideran onboarded (default TRUE
 # solo en el momento de crear la columna); los nuevos nacen con FALSE.
@@ -85,6 +123,8 @@ def _legacy_conversations(conn: Connection) -> None:
 
 
 def run_migrations(conn: Connection) -> None:
+    conn.execute(text(_EQUIPMENT_LIST))
+    conn.execute(text(_BARCODE_INDEX))
     for stmt in _COLUMNS:
         conn.execute(text(stmt))
     conn.execute(text("UPDATE workouts SET kcal_source = 'manual' WHERE kcal_burned IS NOT NULL AND kcal_source IS NULL"))

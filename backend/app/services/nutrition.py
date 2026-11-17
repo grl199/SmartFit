@@ -1,8 +1,9 @@
 import re
+import unicodedata
 from datetime import date, datetime, time, timedelta
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
@@ -46,25 +47,42 @@ def create_log(db: Session, user_id: int, food: Food, grams: float,
     return log
 
 
-def search_foods(db: Session, user_id: int, query: str, limit: int = 10) -> list[Food]:
-    """Todos los tokens deben aparecer en nombre o marca (sin acentos ni mayúsculas).
-    Los alimentos que el usuario ya ha consumido salen primero."""
-    tokens = [t for t in re.split(r"\s+", query.strip()) if t]
+def _norm(text_: str) -> str:
+    """Minúsculas y sin acentos (equivale a f_unaccent(lower(...)) de Postgres)."""
+    return "".join(c for c in unicodedata.normalize("NFKD", text_.lower()) if not unicodedata.combining(c))
+
+
+def _like(token: str) -> str:
+    return "%" + token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+
+
+FUZZY_THRESHOLD = 0.45  # word_similarity mínima para la búsqueda tolerante
+
+
+def search_foods(db: Session, user_id: int, query: str, limit: int = 10, fuzzy: bool = True) -> list[Food]:
+    """1) Todos los términos deben aparecer en nombre/marca/nombre original/denominación (sin acentos ni mayúsculas).
+    2) Si quedan huecos, búsqueda TOLERANTE por trigramas: casa variantes ortográficas y entre idiomas
+       («pistacho» ~ «pistacchio», «avellana» ~ «nocciola» no, pero sí las erratas y las raíces comunes).
+    Los alimentos que el usuario ya ha consumido salen primero; ve los compartidos y los suyos (nunca los de otros)."""
+    q_norm = _norm(query).strip()
+    tokens = q_norm.split()
     if not tokens:
         return []
-    def hit(token: str):
-        pat = func.unaccent(f"%{token}%")
-        extra_text = lambda key: func.unaccent(func.coalesce(Food.extra[key].astext, ""))
-        return or_(func.unaccent(Food.name).ilike(pat), func.unaccent(func.coalesce(Food.brand, "")).ilike(pat),
-                   extra_text("original_name").ilike(pat), extra_text("generic_name").ilike(pat))
-
-    conds = [hit(t) for t in tokens]
+    visible = or_(Food.user_id.is_(None), Food.user_id == user_id)
     used = (select(FoodLog.food_id, func.count().label("n")).where(FoodLog.user_id == user_id)
             .group_by(FoodLog.food_id).subquery())
-    q = (select(Food).outerjoin(used, used.c.food_id == Food.id)
-         .where(or_(Food.user_id.is_(None), Food.user_id == user_id), *conds)
-         .order_by(func.coalesce(used.c.n, 0).desc(), func.length(Food.name)).limit(limit))
-    return list(db.scalars(q))
+    exact = list(db.scalars(
+        select(Food).outerjoin(used, used.c.food_id == Food.id)
+        .where(visible, *[Food.search_text.ilike(_like(t), escape="\\") for t in tokens])
+        .order_by(func.coalesce(used.c.n, 0).desc(), func.length(Food.name)).limit(limit)))
+    if not fuzzy or len(exact) >= limit or len(q_norm) < 4:
+        return exact
+    db.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {FUZZY_THRESHOLD}"))
+    seen = [f.id for f in exact]
+    similar = db.scalars(
+        select(Food).where(visible, Food.search_text.op("%>")(q_norm), Food.id.not_in(seen or [0]))
+        .order_by(func.word_similarity(q_norm, Food.search_text).desc(), func.length(Food.name)).limit(limit - len(exact)))
+    return exact + list(similar)
 
 
 def frequent_foods(db: Session, user_id: int, days: int = 60, limit: int = 12) -> list[dict]:

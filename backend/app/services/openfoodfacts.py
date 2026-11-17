@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 
 import httpx
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -129,10 +129,18 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
     return True
 
 
-def resolve_barcode(db: Session, raw: str) -> BarcodeResult:
-    """BD local -> Open Food Facts -> (el agente completa con web_search si hace falta)."""
+def find_by_barcode(db: Session, code: str, user_id: int | None) -> Food | None:
+    """Alimento visible para el usuario con ese código: el suyo primero y, si no, el compartido (OFF/comunidad).
+    Nunca devuelve alimentos privados de otros usuarios."""
+    owners = [Food.user_id.is_(None)] + ([Food.user_id == user_id] if user_id is not None else [])
+    rows = db.scalars(select(Food).where(Food.barcode == code, or_(*owners))).all()
+    return min(rows, key=lambda f: 0 if f.user_id == user_id else 1) if rows else None
+
+
+def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> BarcodeResult:
+    """BD local (tuyo, comunidad, OFF) -> Open Food Facts -> (el agente completa con web_search si hace falta)."""
     code = normalize_barcode(raw)
-    if food := db.scalar(select(Food).where(Food.barcode == code)):
+    if food := find_by_barcode(db, code, user_id):
         return BarcodeResult("db", food, food.name, food.brand)
 
     try:
@@ -238,7 +246,7 @@ def parse_search_hit(hit: dict) -> dict | None:
 def _store(db: Session, item: dict) -> bool:
     stmt = (pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
                                    source="openfoodfacts", serving_g=item["serving_g"], **item["nutrients"], **item["meta"])
-            .on_conflict_do_nothing(index_elements=["barcode"]).returning(Food.id))
+            .on_conflict_do_nothing(index_elements=[func.coalesce(Food.user_id, 0), Food.barcode]).returning(Food.id))
     return db.execute(stmt).scalar() is not None  # rowcount no es fiable con ON CONFLICT (-1 en psycopg)
 
 

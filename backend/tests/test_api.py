@@ -14,6 +14,10 @@ def test_literals_match_enums():
     assert set(get_args(schemas.ActivityCode)) == set(enums.ACTIVITY_LEVEL) == set(enums.ACTIVITY_FACTOR)
     assert set(get_args(schemas.GoalCode)) == set(enums.GOAL)
     assert set(get_args(schemas.ExperienceCode)) == set(enums.EXPERIENCE_LEVEL)
+    assert set(get_args(schemas.MuscleCode)) == set(enums.MUSCLE_GROUP)
+    assert set(get_args(schemas.EquipmentCode)) == set(enums.EQUIPMENT)
+    assert set(get_args(schemas.WorkoutCategory)) == set(enums.WORKOUT_CATEGORY)
+    assert set(get_args(schemas.ExerciseKind)) == set(enums.EXERCISE_KIND)
 
 
 def test_every_table_and_column_is_documented():

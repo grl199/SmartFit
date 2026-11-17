@@ -82,8 +82,10 @@ if has_food:
     c1, c2, c3 = box.columns([1, 1, 2])
     mine = (df["protein_g"].mean() * 4, df["carbs_g"].mean() * 4, df["fat_g"].mean() * 9)
     goal = (t["protein_g"] * 4, t["carbs_g"] * 4, t["fat_g"] * 9)
-    c1.altair_chart(charts.macro_donut(*mine, "Tu media"), width="stretch")
-    c2.altair_chart(charts.macro_donut(*goal, "Tu objetivo"), width="stretch")
+    with c1:
+        ui.html(ui.macro_donut(*mine, "Tu media diaria", goal=goal, grams=(df["protein_g"].mean(), df["carbs_g"].mean(), df["fat_g"].mean())))
+    with c2:
+        ui.html(ui.macro_donut(*goal, "Tu objetivo", grams=(t["protein_g"], t["carbs_g"], t["fat_g"])))
     c3.markdown("**Proteína por día (g)**")
     c3.altair_chart(charts.line_with_goal(df, "protein_g", t["protein_g"], "g", ui.BLUE), width="stretch")
     if "fiber_g" in df and t.get("fiber_g"):

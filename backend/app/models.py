@@ -6,7 +6,7 @@ from datetime import date, datetime
 
 from pgvector.sqlalchemy import Vector
 from sqlalchemy import (
-    Boolean, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text,
+    Boolean, Computed, Date, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint, func, text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -18,6 +18,12 @@ from .db import Base
 # Nutrientes que se rastrean. `foods` los guarda POR 100 g; `food_logs` los guarda ABSOLUTOS
 # (snapshot de lo consumido, de modo que editar un alimento no reescribe el histórico).
 NUTRIENTS = ("kcal", "protein_g", "carbs_g", "sugars_g", "fat_g", "sat_fat_g", "fiber_g", "sodium_mg")
+
+
+# Texto normalizado (minúsculas, sin acentos) para buscar por nombre, marca, nombre original y denominación general.
+# `f_unaccent` es un envoltorio IMMUTABLE de unaccent (creado en db.init_db) para poder usarlo en columnas generadas.
+FOOD_SEARCH_SQL = ("f_unaccent(lower(coalesce(name, '') || ' ' || coalesce(brand, '') || ' ' || "
+                   "coalesce(extra ->> 'original_name', '') || ' ' || coalesce(extra ->> 'generic_name', '')))")
 
 
 def _nutr(label: str, unit: str, per_100g: bool):
@@ -94,8 +100,13 @@ class UserTarget(Base):
 
 class Food(Base):
     __tablename__ = "foods"
-    __table_args__ = {"comment": "Catálogo de alimentos con sus valores nutricionales POR 100 g. Incluye productos cacheados de "
-                                 "Open Food Facts (compartidos) y alimentos creados por usuarios."}
+    __table_args__ = (
+        # Un mismo código puede existir una vez por propietario: el catálogo compartido (user_id NULL) y cada usuario.
+        Index("uq_foods_owner_barcode", text("coalesce(user_id, 0)"), text("barcode"), unique=True),
+        Index("ix_foods_search_trgm", "search_text", postgresql_using="gin", postgresql_ops={"search_text": "gin_trgm_ops"}),
+        {"comment": "Catálogo de alimentos con sus valores nutricionales POR 100 g. Incluye productos cacheados de Open Food Facts "
+                    "(compartidos), productos confirmados por la comunidad y alimentos creados por usuarios."},
+    )
     id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del alimento.")
     user_id: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"), index=True,
@@ -103,16 +114,25 @@ class Food(Base):
     name: Mapped[str] = mapped_column(String(300), comment="Nombre del producto o alimento.")
     brand: Mapped[str | None] = mapped_column(String(200), comment="Marca (primera marca si hay varias).")
     barcode: Mapped[str | None] = mapped_column(
-        String(32), unique=True, index=True,
-        comment="Código de barras numérico (EAN-8/13, UPC-A, GTIN-14 o código interno de tienda). Único; NULL si no tiene.")
+        String(32), index=True,
+        comment="Código de barras numérico (EAN-8/13, UPC-A, GTIN-14 o código interno de tienda). Único por propietario; NULL si no tiene.")
     source: Mapped[str] = mapped_column(
-        String(30), default="manual", comment="Origen de los datos: 'manual' | 'openfoodfacts' | 'web' (encontrado por el asistente).")
+        String(30), default="manual",
+        comment="Origen de los datos: 'manual' | 'openfoodfacts' | 'web' (encontrado por el asistente) | 'community' (confirmado por varios usuarios).")
+    share_status: Mapped[str] = mapped_column(
+        String(10), default="private", server_default=text("'private'"),
+        comment="Solo en alimentos de usuario: 'private' (solo él) | 'pending' (ofrecido a la comunidad, a la espera de que otro usuario "
+                "confirme los mismos datos) | 'verified' (ya forma parte del catálogo compartido).")
+    search_text: Mapped[str | None] = mapped_column(
+        Text, Computed(FOOD_SEARCH_SQL, persisted=True),
+        comment="Columna generada: nombre + marca + nombre original + denominación general, en minúsculas y sin acentos. "
+                "Alimenta la búsqueda (índice de trigramas, tolerante a erratas y a variantes entre idiomas).")
     serving_g: Mapped[float | None] = mapped_column(Float, comment="Tamaño de ración habitual en gramos (si se conoce).")
     extra: Mapped[dict] = mapped_column(
         JSONB, default=dict,
         comment="JSON con metadatos extra: allergens (lista en español), ingredients, categories, labels, "
                 "generic_name (denominación general), original_name (nombre antes de limpiar/traducir), name_es_done "
-                "(el nombre ya pasó por la traducción), off_enriched (ya se completó desde la API de producto de OFF) y source_url.")
+                "(el nombre ya pasó por la traducción), confirmed_by (usuarios que confirmaron un alimento de la comunidad), off_enriched (ya se completó desde la API de producto de OFF) y source_url.")
     nutriscore_grade: Mapped[str | None] = mapped_column(String(1), comment="Nutri-Score de Open Food Facts: 'a' (mejor) a 'e' (peor). NULL si no consta.")
     nova_group: Mapped[int | None] = mapped_column(Integer, comment="Grupo NOVA de procesamiento (1 = sin procesar ... 4 = ultraprocesado). NULL si no consta.")
     ecoscore_grade: Mapped[str | None] = mapped_column(String(1), comment="Eco-Score / Green-Score ambiental de OFF: 'a' a 'e'. NULL si no consta.")
@@ -142,6 +162,10 @@ class Food(Base):
     def original_name(self) -> str | None:
         """Nombre tal como venía en Open Food Facts, si se limpió o tradujo."""
         return (self.extra or {}).get("original_name")
+
+    @property
+    def confirmed_by(self) -> int | None:
+        return (self.extra or {}).get("confirmed_by")
 
     @property
     def barcode_ambiguous(self) -> bool:
@@ -187,7 +211,7 @@ class Workout(Base):
     kind: Mapped[str] = mapped_column(String(100), comment="Tipo de entrenamiento en texto libre (fuerza, running, bici...).")
     duration_min: Mapped[int] = mapped_column(Integer, comment="Duración en minutos.")
     category: Mapped[str | None] = mapped_column(
-        String(20), comment="Tipo de sesión. Valores: 'legs' | 'push' | 'pull' | 'upper' | 'full_body' | 'core' | 'walking' | 'running' | 'cardio' | 'other'.")
+        String(20), comment="Categoría de la sesión (Cardio = walking/running/sport). Valores: 'strength' | 'walking' | 'running' | 'sport' | 'full_body' | 'stretching'.")
     kcal_burned: Mapped[float | None] = mapped_column(Float, comment="Energía gastada en la sesión, en kcal (estimada por la IA o introducida a mano).")
     kcal_source: Mapped[str | None] = mapped_column(String(10), comment="Origen de kcal_burned: 'llm' (estimada por la IA) | 'manual'. NULL si no hay estimación.")
     met: Mapped[float | None] = mapped_column(Float, comment="MET medio de la sesión estimado por la IA. kcal = MET x peso(kg) x horas, calculado por código.")
@@ -215,8 +239,13 @@ class Exercise(Base):
         String(20), comment="Músculo principal (cuenta 1 por serie). Valores en app/enums.py MUSCLE_GROUP.")
     secondary_muscles: Mapped[list] = mapped_column(
         JSONB, default=list, comment="Lista JSON de músculos secundarios (cuentan 0,5 por serie).")
-    equipment: Mapped[str] = mapped_column(
-        String(20), default="other", comment="Material: 'barbell' | 'dumbbell' | 'machine' | 'cable' | 'bodyweight' | 'other'.")
+    kind: Mapped[str] = mapped_column(
+        String(12), default="strength", server_default=text("'strength'"),
+        comment="Tipo: 'strength' (fuerza) | 'full_body' (cuerpo entero) | 'stretching' (estiramiento).")
+    equipment: Mapped[list] = mapped_column(
+        JSONB, default=list,
+        comment="Lista JSON del equipamiento que usa (claves de enums.EQUIPMENT: none, resistance_band, suspension, barbell, dumbbell, "
+                "plate, machine, kettlebell, wheel, medicine_ball, bench, box, other).")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de alta del ejercicio.")
 
 

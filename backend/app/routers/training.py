@@ -56,11 +56,18 @@ def _try_estimate(db: Session, w: Workout) -> None:
 
 
 # ───────────── ejercicios ─────────────
+def _csv(value: str | None) -> list[str]:
+    return [x.strip() for x in (value or "").split(",") if x.strip()]
+
+
 @router.get("/exercises", response_model=list[ExerciseOut])
-def list_exercises(category: str | None = None, q: str | None = None, used: bool = False,
+def list_exercises(kind: str | None = None, muscles: str | None = Query(None, description="Grupos musculares, separados por comas"),
+                   equipment: str | None = Query(None, description="Equipamiento, separado por comas (al menos uno)"),
+                   include_secondary: bool = False, q: str | None = None, used: bool = False,
                    db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    """Catálogo compartido + propios. `category` filtra por los músculos de ese tipo de sesión; `used` solo los ya entrenados."""
-    return tsvc.visible_exercises(db, uid, category, q, used)
+    """Catálogo compartido + propios. Filtros: tipo (fuerza / cuerpo entero / estiramientos), grupos musculares (músculo
+    principal; con `include_secondary` también secundarios), equipamiento (usa al menos uno), texto y `used` (ya entrenados)."""
+    return tsvc.visible_exercises(db, uid, kind, _csv(muscles), _csv(equipment), q, used, include_secondary)
 
 
 @router.post("/exercises", response_model=ExerciseOut, status_code=201)
@@ -69,7 +76,7 @@ def create_exercise(body: ExerciseIn, db: Session = Depends(get_db), uid: int = 
                                                 or_(Exercise.user_id.is_(None), Exercise.user_id == uid)))
     if clash:
         raise HTTPException(409, "Ya existe un ejercicio con ese nombre")
-    ex = Exercise(user_id=uid, name=body.name.strip(), primary_muscle=body.primary_muscle,
+    ex = Exercise(user_id=uid, name=body.name.strip(), kind=body.kind, primary_muscle=body.primary_muscle,
                   secondary_muscles=[m for m in dict.fromkeys(body.secondary_muscles) if m != body.primary_muscle],
                   equipment=body.equipment)
     db.add(ex)

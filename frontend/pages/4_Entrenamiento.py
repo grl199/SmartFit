@@ -8,7 +8,7 @@ import api
 import auth
 import charts
 import ui
-from muscles import body_svg
+from muscles import body_svg, muscle_icon
 
 st.set_page_config(page_title="Entrenamiento", page_icon="🏋️", layout="wide")
 ui.inject_css()
@@ -18,7 +18,10 @@ st.title("🏋️ Entrenamiento")
 opts = api.options()
 CATS, MUSCLES, EQUIP = opts.get("workout_category", {}), opts.get("muscle_group", {}), opts.get("equipment", {})
 CARDIO_MUSCLES = opts.get("cardio_muscles", {})
-if not CATS:
+CAT_ICON, TYPES = opts.get("workout_category_icons", {}), opts.get("workout_types", {})
+REGIONS, EQUIP_ICON = opts.get("muscle_regions", {}), opts.get("equipment_icons", {})
+SPORTS, SPORT_ICON = opts.get("sports", {}), opts.get("sport_icons", {})
+if not (CATS and TYPES and REGIONS):
     st.error("No se pudieron cargar las opciones. Reinicia el frontend y comprueba que el backend está actualizado.")
     st.stop()
 INTENSITY = {"low": "Intensidad baja", "moderate": "Intensidad moderada", "high": "Intensidad alta"}
@@ -26,7 +29,7 @@ today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isof
 
 # Tras guardar una sesión se limpia el formulario (hay que hacerlo ANTES de crear los widgets)
 if st.session_state.pop("reset_form", False):
-    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_"))]:
+    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_", "mg_", "eq_", "q_", "w_sport"))]:
         del st.session_state[k]
 
 tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan = st.tabs(
@@ -36,7 +39,7 @@ tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan = st.tabs(
 def muscle_chips(ex: dict) -> str:
     return (ui.chip(MUSCLES.get(ex["primary_muscle"], ex["primary_muscle"]), "orange")
             + ui.chips([MUSCLES.get(m, m) for m in ex.get("secondary_muscles", [])])
-            + ui.chip(EQUIP.get(ex.get("equipment"), ""), "blue"))
+            + "".join(ui.chip(f"{EQUIP_ICON.get(e, '')} {EQUIP.get(e, e)}", "blue") for e in ex.get("equipment", [])))
 
 
 def fmt_sets(sets: list[dict]) -> str:
@@ -93,6 +96,43 @@ def cardio_inputs(cat: str, dur: int) -> dict:
             "avg_hr_bpm": int(hr) if hr >= 30 else None}
 
 
+@st.cache_data(show_spinner=False)
+def _icon(muscle: str, dark: bool) -> str:
+    return muscle_icon(muscle, dark)
+
+
+def muscle_picker(cat: str) -> list[str]:
+    """Selector de grupos musculares por región (tren superior / inferior), con un pictograma por músculo."""
+    selected: list[str] = []
+    dark = ui.is_dark()
+
+    def clear() -> None:
+        for k in [k for k in st.session_state if k.startswith(f"mg_{cat}_")]:
+            st.session_state[k] = False
+
+    with st.expander("🎯 Grupos musculares", expanded=True):
+        for region in REGIONS.values():
+            st.markdown(f"**{region['icon']} {region['label']}**")
+            muscles = region["muscles"]
+            for i in range(0, len(muscles), 6):
+                for col, m in zip(st.columns(6), muscles[i:i + 6]):
+                    with col:
+                        st.image(_icon(m, dark), width=64)
+                        if st.checkbox(MUSCLES[m], key=f"mg_{cat}_{m}"):
+                            selected.append(m)
+        st.button("Quitar selección", key=f"mg_clear_{cat}", on_click=clear, disabled=not selected)
+    return selected
+
+
+def equipment_picker(cat: str) -> list[str]:
+    return st.pills("🧰 Equipamiento (ejercicios que usan alguno de estos)", list(EQUIP), selection_mode="multi", key=f"eq_{cat}",
+                    format_func=lambda e: f"{EQUIP_ICON.get(e, '')} {EQUIP[e]}") or []
+
+
+def equipment_icons(ex: dict) -> str:
+    return " ".join(EQUIP_ICON.get(e, "") for e in ex.get("equipment", []))
+
+
 def sets_from(ex_id: int, df: pd.DataFrame) -> list[dict]:
     out = []
     for _, r in df.iterrows():
@@ -122,27 +162,61 @@ with tab_reg:
             body += f"<div style='margin-top:6px'>Músculos trabajados: {ui.chips(worked, 'green')}</div>"
         ui.card(body)
 
-    c1, c2, c3 = st.columns(3)
-    d = c1.date_input("Fecha", value=today, max_value=today, key="w_date")
-    cat = c2.selectbox("Tipo de sesión", list(CATS), format_func=lambda c: CATS[c], key="w_cat")
-    dur = c3.number_input("Duración total (min)", 5, 600, 60, step=5, key="w_dur")
-    title = st.text_input("Título", value=CATS[cat].split(" (")[0], key=f"title_{cat}")
+    # ── Nivel 1: tipo de sesión ──
+    type_key = st.segmented_control("Tipo de sesión", list(TYPES), default="strength", key="w_type",
+                                    format_func=lambda t: f"{TYPES[t]['icon']} {TYPES[t]['label']}") or "strength"
+    subs = TYPES[type_key]["categories"]
+    cat = subs[0]
+    if len(subs) > 1:       # Cardio -> Andar / Correr / Otros deportes
+        cat = st.segmented_control("Cardio", subs, default=subs[0], key=f"w_sub_{type_key}",
+                                   format_func=lambda c: f"{CAT_ICON.get(c, '')} {CATS[c]}") or subs[0]
 
+    c1, c2 = st.columns(2)
+    d = c1.date_input("Fecha", value=today, max_value=today, key="w_date")
+    dur = c2.number_input("Duración total (min)", 5, 600, 60, step=5, key="w_dur")
+
+    # ── Nivel 2: depende del tipo ──
     selected: list[int] = []
     edited: dict[int, pd.DataFrame] = {}
     metrics: dict = {}
+    default_title = CATS[cat]
     if cat in ("walking", "running"):
         metrics = cardio_inputs(cat, int(dur))
-    elif cat == "cardio":
-        st.info("Para otro cardio (bici, nadar, elíptica…) basta con el título y la duración; la IA estimará las calorías.")
-    else:
-        exercises = api.get("/exercises", category=cat) or []
-        by_id = {e["id"]: e for e in exercises}
+    elif cat == "sport":
+        sport = st.selectbox("Deporte", list(SPORTS), format_func=lambda k: f"{SPORT_ICON.get(k, '')} {SPORTS[k]}", key="w_sport")
+        default_title = (st.text_input("¿Qué deporte?", key="w_sport_other") or "Deporte").strip() if sport == "other" else SPORTS[sport]
+        hr = st.number_input("FC media (ppm, opcional)", 0, 230, 0, key="hr_sport")
+        metrics = {"avg_hr_bpm": int(hr) if hr >= 30 else None}
+        st.caption("La IA estima las calorías con el deporte y la duración. (No se enciende el mapa muscular: no hay un perfil muscular fiable para cada deporte.)")
+    else:   # fuerza / cuerpo entero / estiramientos
+        chosen_muscles = muscle_picker(cat) if cat in ("strength", "stretching") else []
+        chosen_equip = equipment_picker(cat) if cat in ("strength", "full_body") else []
+        text = st.text_input("🔎 Buscar ejercicio", key=f"q_{cat}", placeholder="p. ej. sentadilla, curl, estiramiento…")
+        params = {"kind": cat}
+        if chosen_muscles:
+            params["muscles"] = ",".join(chosen_muscles)
+        if chosen_equip:
+            params["equipment"] = ",".join(chosen_equip)
+        if text.strip():
+            params["q"] = text.strip()
+        cache = st.session_state.setdefault("_ex_cache", {})
+        found = api.get("/exercises", **params) or []
+        cache.update({e["id"]: e for e in found})
+        keep = [i for i in st.session_state.get(f"sel_{cat}", []) if i in cache]     # lo ya elegido no se pierde al cambiar filtros
+        options = list(dict.fromkeys([e["id"] for e in found] + keep))
+        st.caption(f"{len(found)} ejercicios" + (" con estos filtros" if chosen_muscles or chosen_equip or text.strip() else " disponibles"))
         selected = st.multiselect(
-            "Ejercicios de la sesión", list(by_id), key=f"sel_{cat}", placeholder="Elige uno o varios ejercicios",
-            format_func=lambda i: f"{by_id[i]['name']} · {MUSCLES.get(by_id[i]['primary_muscle'], '')}")
-        for ex_id in selected:
-            edited[ex_id] = exercise_block(by_id[ex_id])
+            "Ejercicios de la sesión", options, key=f"sel_{cat}", placeholder="Elige uno o varios ejercicios",
+            format_func=lambda i: f"{cache[i]['name']} · {MUSCLES.get(cache[i]['primary_muscle'], '')} {equipment_icons(cache[i])}")
+        if cat == "stretching":
+            if selected:
+                ui.html("".join(ui.chip(cache[i]["name"].replace("Estiramiento de ", ""), "green") for i in selected))
+        else:
+            for ex_id in selected:
+                edited[ex_id] = exercise_block(cache[ex_id])
+        if selected:   # título sugerido a partir de los músculos trabajados
+            worked = list(dict.fromkeys(MUSCLES.get(cache[i]["primary_muscle"], "") for i in selected))[:3]
+            default_title = f"{CATS[cat]}: {', '.join(worked)}"
 
         with st.expander("➕ Crear un ejercicio que no está en la lista"):
             with st.form("new_exercise", clear_on_submit=True):
@@ -150,12 +224,15 @@ with tab_reg:
                 name = n1.text_input("Nombre")
                 primary = n2.selectbox("Músculo principal", list(MUSCLES), format_func=lambda m: MUSCLES[m])
                 secondary = st.multiselect("Músculos secundarios", list(MUSCLES), format_func=lambda m: MUSCLES[m])
-                equip = st.selectbox("Material", list(EQUIP), index=len(EQUIP) - 1, format_func=lambda e: EQUIP[e])
+                n3, n4 = st.columns(2)
+                kind_new = n3.selectbox("Tipo", list(opts.get("exercise_kind", {"strength": "Fuerza"})), index=0, format_func=lambda k: opts.get("exercise_kind", {}).get(k, k))
+                equip = n4.multiselect("Equipamiento", list(EQUIP), default=["none"], format_func=lambda e: f"{EQUIP_ICON.get(e, '')} {EQUIP[e]}")
                 if st.form_submit_button("Crear ejercicio") and name.strip():
-                    if api.post("/exercises", json={"name": name, "primary_muscle": primary,
-                                                    "secondary_muscles": secondary, "equipment": equip}):
-                        st.success("Creado. Aparecerá en la lista si su músculo principal corresponde a este tipo de sesión.")
+                    if api.post("/exercises", json={"name": name, "kind": kind_new, "primary_muscle": primary,
+                                                    "secondary_muscles": secondary, "equipment": equip or ["none"]}):
+                        st.success("Creado. Ya aparece en la lista con los filtros que coincidan.")
 
+    title = st.text_input("Título de la sesión", value=default_title, key=f"title_{cat}_{abs(hash(default_title)) % 10**6}")
     notes = st.text_area("Notas (opcional)", key=f"notes_{cat}", height=70)
     mode = st.radio("Calorías quemadas", ["ia", "manual", "none"], horizontal=True,
                     format_func={"ia": "🤖 Estimar con IA", "manual": "✍️ Introducir a mano", "none": "No registrar"}.get,
@@ -164,7 +241,10 @@ with tab_reg:
     manual_kcal = st.number_input("Calorías (kcal)", 0, 10000, 300, step=10) if mode == "manual" else None
 
     if st.button("💾 Guardar sesión", type="primary"):
-        sets = [s for ex_id in selected for s in sets_from(ex_id, edited[ex_id])]
+        if cat == "stretching":
+            sets = [{"exercise_id": i, "reps": 1} for i in selected]          # un estiramiento realizado = 1 serie
+        else:
+            sets = [s_ for ex_id in selected for s_ in sets_from(ex_id, edited[ex_id])]
         payload = {"performed_on": d.isoformat(), "kind": title.strip() or CATS[cat], "category": cat,
                    "duration_min": int(dur), "notes": notes.strip() or None, "sets": sets, "estimate_calories": mode == "ia"}
         payload.update(metrics)
@@ -184,12 +264,12 @@ with tab_hist:
         st.info("Aún no hay sesiones registradas en los últimos 90 días.")
     else:
         present = [c for c in CATS if any(w["category"] == c for w in workouts)]
-        flt = st.pills("Filtrar por tipo", present, format_func=lambda c: CATS[c], selection_mode="multi", key="hist_filter")
+        flt = st.pills("Filtrar por tipo", present, format_func=lambda c: f"{CAT_ICON.get(c, '')} {CATS[c]}", selection_mode="multi", key="hist_filter")
         workouts = [w for w in workouts if not flt or w["category"] in flt]
     for w in workouts:
         kcal = f" · 🔥 {w['kcal_burned']:.0f} kcal" if w["kcal_burned"] else ""
         with st.expander(f"{w['performed_on']} · {w['kind']} · {w['duration_min']} min{kcal}"):
-            tags = ui.chip(CATS.get(w["category"], "Sesión"), "blue")
+            tags = ui.chip(f"{CAT_ICON.get(w['category'], '')} {CATS.get(w['category'], 'Sesión')}", "blue")
             if w["intensity"]:
                 tags += ui.chip(INTENSITY.get(w["intensity"], w["intensity"]), "orange")
             if w["kcal_source"]:

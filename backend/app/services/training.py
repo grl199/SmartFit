@@ -27,11 +27,15 @@ def muscle_summary(db: Session, user_id: int, start: date, end: date) -> dict:
     out = {m: {"strength": 0.0, "cardio": 0.0, "volume_kg": 0.0, "exercises": set()} for m in enums.MUSCLE_GROUP}
     sessions: set[int] = set()
     for s, _day in rows:
-        sessions.add(s.workout_id)
         ex = s.exercise
+        if ex.kind == "stretching":  # los estiramientos no cuentan como volumen de fuerza
+            continue
+        sessions.add(s.workout_id)
         vol = (s.weight_kg or 0) * s.reps
-        targets = [(ex.primary_muscle, 1.0)] + [(m, enums.SECONDARY_WEIGHT) for m in (ex.secondary_muscles or [])]
-        for muscle, w in targets:
+        weights = {ex.primary_muscle: 1.0}
+        for m in ex.secondary_muscles or []:
+            weights.setdefault(m, enums.SECONDARY_WEIGHT)  # un músculo no cuenta dos veces por la misma serie
+        for muscle, w in weights.items():
             if muscle in out:
                 out[muscle]["strength"] += w
                 out[muscle]["volume_kg"] += vol * w
@@ -94,18 +98,26 @@ def workout_sets_summary(sets: list[WorkoutSet]) -> list[dict]:
     return list(groups.values())
 
 
-def visible_exercises(db: Session, user_id: int, category: str | None = None, q: str | None = None,
-                      used_only: bool = False) -> list[Exercise]:
+def visible_exercises(db: Session, user_id: int, kind: str | None = None, muscles: list[str] | None = None,
+                      equipment: list[str] | None = None, q: str | None = None, used_only: bool = False,
+                      include_secondary: bool = False) -> list[Exercise]:
+    """Catálogo compartido + propios, filtrado por tipo, grupos musculares (principal; opcionalmente también secundarios),
+    equipamiento (el ejercicio usa AL MENOS UNO de los elegidos) y texto."""
     from sqlalchemy import func, or_
     stmt = select(Exercise).where(or_(Exercise.user_id.is_(None), Exercise.user_id == user_id))
-    if category and category in enums.CATEGORY_MUSCLES:
-        muscles = enums.CATEGORY_MUSCLES[category]
-        if not muscles:
-            return []
-        stmt = stmt.where(Exercise.primary_muscle.in_(muscles))
+    if kind in enums.EXERCISE_KIND:
+        stmt = stmt.where(Exercise.kind == kind)
+    muscles = [m for m in (muscles or []) if m in enums.MUSCLE_GROUP]
+    if muscles:
+        cond = Exercise.primary_muscle.in_(muscles)
+        if include_secondary:
+            cond = or_(cond, *[Exercise.secondary_muscles.contains([m]) for m in muscles])
+        stmt = stmt.where(cond)
     if q:
         stmt = stmt.where(func.unaccent(Exercise.name).ilike(func.unaccent(f"%{q.strip()}%")))
     if used_only:
         used = select(WorkoutSet.exercise_id).where(WorkoutSet.user_id == user_id).distinct()
         stmt = stmt.where(Exercise.id.in_(used))
-    return list(db.scalars(stmt.order_by(Exercise.primary_muscle, Exercise.name)))
+    rows = list(db.scalars(stmt.order_by(Exercise.primary_muscle, Exercise.name)))
+    wanted = {e for e in (equipment or []) if e in enums.EQUIPMENT}
+    return [e for e in rows if set(e.equipment or []) & wanted] if wanted else rows

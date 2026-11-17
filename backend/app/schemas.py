@@ -23,7 +23,7 @@ class FoodBase(BaseModel):
 
 
 class FoodCreate(FoodBase):
-    pass
+    share: bool = Field(False, description="Ofrecerlo a la comunidad (requiere código de barras no ambiguo y datos coherentes)")
 
 
 class FoodOut(FoodBase):
@@ -42,6 +42,9 @@ class FoodOut(FoodBase):
     generic_name: str | None = None      # «Denominación general» en español
     original_name: str | None = None     # nombre original de OFF si se limpió o tradujo
     barcode_ambiguous: bool = False      # código de uso restringido de tienda (puede repetirse entre productos)
+    user_id: int | None = None           # None = catálogo compartido (OFF / comunidad); si no, es tuyo
+    share_status: str = "private"        # private | pending | verified (solo alimentos propios)
+    confirmed_by: int | None = None      # usuarios que confirmaron un producto de la comunidad
 
 
 class BarcodeOut(BaseModel):
@@ -180,17 +183,27 @@ class DeleteAccountIn(BaseModel):
     password: str
 
 
-WorkoutCategory = Literal["legs", "push", "pull", "upper", "full_body", "core", "walking", "running", "cardio", "other"]
-MuscleCode = Literal["chest", "lats", "upper_back", "lower_back", "shoulders", "biceps", "triceps", "forearms", "abs",
-                     "obliques", "glutes", "quadriceps", "hamstrings", "adductors", "abductors", "calves"]
-EquipmentCode = Literal["barbell", "dumbbell", "machine", "cable", "bodyweight", "other"]
+WorkoutCategory = Literal["strength", "walking", "running", "sport", "full_body", "stretching"]
+MuscleCode = Literal["abs", "forearms", "biceps", "neck", "lats", "lower_back", "upper_back", "shoulders", "chest", "traps",
+                     "triceps", "abductors", "adductors", "quadriceps", "glutes", "hamstrings", "calves"]
+EquipmentCode = Literal["none", "resistance_band", "suspension", "barbell", "dumbbell", "plate", "machine", "kettlebell",
+                        "wheel", "medicine_ball", "bench", "box", "other"]
+ExerciseKind = Literal["strength", "full_body", "stretching"]
 
 
 class ExerciseIn(BaseModel):
     name: str = Field(min_length=2, max_length=150)
+    kind: ExerciseKind = "strength"
     primary_muscle: MuscleCode
     secondary_muscles: list[MuscleCode] = []
-    equipment: EquipmentCode = "other"
+    equipment: list[EquipmentCode] = Field(default_factory=lambda: ["none"], min_length=1, max_length=6)
+
+    @field_validator("equipment", mode="before")
+    @classmethod
+    def _equipment_list(cls, v):
+        """Acepta un texto suelto (compatibilidad) o una lista; sin duplicados."""
+        v = [v] if isinstance(v, str) else v
+        return list(dict.fromkeys(v)) if isinstance(v, list) else v
 
 
 class ExerciseOut(ExerciseIn):

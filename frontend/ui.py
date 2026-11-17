@@ -118,6 +118,37 @@ def bar(label: str, value: float, goal: float, unit: str = "g", color: str = GRE
             f'<div class="sf-bar"><span style="width:{pct:.0f}%; background:{RED if over else color}"></span></div>')
 
 
+def macro_donut(protein_kcal: float, carbs_kcal: float, fat_kcal: float, title: str, goal: tuple[float, float, float] | None = None,
+                grams: tuple[float, float, float] | None = None, size: int = 150) -> str:
+    """Anillo con el reparto de calorías por macro. SVG autocontenido (no depende de Vega) + leyenda HTML debajo, de modo
+    que NUNCA se solapan. `goal` (kcal) añade el % objetivo junto al real; `grams` muestra los gramos."""
+    vals = [max(protein_kcal, 0), max(carbs_kcal, 0), max(fat_kcal, 0)]
+    total = sum(vals) or 1
+    gtotal = sum(goal) or 1 if goal else None
+    names, colors = ("Proteína", "Hidratos", "Grasa"), (BLUE, ORANGE, PURPLE)
+    r, circ, gap = 52, 2 * math.pi * 52, 3
+    arcs, offset = [], 0.0
+    for v, c in zip(vals, colors):
+        seg = v / total * circ
+        if seg > 0:
+            arcs.append(f'<circle cx="65" cy="65" r="{r}" fill="none" stroke="{c}" stroke-width="16" '
+                        f'stroke-dasharray="{max(seg - gap, 0.5):.1f} {circ:.1f}" stroke-dashoffset="{-offset:.1f}" transform="rotate(-90 65 65)"/>')
+        offset += seg
+    legend = ""
+    for i, (n, c) in enumerate(zip(names, colors)):
+        pct = vals[i] / total * 100
+        goal_txt = f' <span class="sf-muted">(obj. {goal[i] / gtotal * 100:.0f} %)</span>' if goal else ""
+        g_txt = f' · {grams[i]:.0f} g' if grams else ""
+        legend += (f'<div class="sf-row" style="justify-content:flex-start; gap:8px"><span style="display:inline-block;width:10px;height:10px;'
+                   f'border-radius:50%;background:{c};margin-top:5px"></span><span>{n} <b>{pct:.0f} %</b>{g_txt}{goal_txt}</span></div>')
+    return (f'<div style="text-align:center"><div class="sf-muted" style="margin-bottom:2px">{escape(title)}</div>'
+            f'<svg viewBox="0 0 130 130" width="{size}" height="{size}" role="img" aria-label="{escape(title)}">'
+            f'<circle cx="65" cy="65" r="{r}" fill="none" stroke="rgba(128,128,128,.22)" stroke-width="16"/>{"".join(arcs)}'
+            f'<text x="65" y="63" text-anchor="middle" font-size="19" font-weight="700" fill="currentColor">{total:.0f}</text>'
+            f'<text x="65" y="79" text-anchor="middle" font-size="10" fill="currentColor" opacity=".65">kcal</text></svg>'
+            f'<div style="display:inline-block; text-align:left; margin-top:4px">{legend}</div></div>')
+
+
 def nutriscore(grade: str | None) -> str:
     if grade not in NUTRISCORE_COLORS:
         return ""
@@ -154,6 +185,10 @@ def food_header(food: dict) -> str:
     sub = " · ".join(escape(x) for x in (food.get("brand"), food.get("quantity")) if x)
     code = f'<span class="sf-chip">🏷 {escape(food["barcode"])}</span>' if food.get("barcode") else ""
     code += ambiguous_chip() if food.get("barcode_ambiguous") else ""
+    if food.get("source") == "community":
+        code += chip(f"👥 Comunidad · confirmado por {food.get('confirmed_by') or 2} usuarios", "green")
+    elif food.get("share_status") == "pending":
+        code += chip("⏳ Ofrecido a la comunidad (falta otra confirmación)", "orange")
     generic = f'<div class="sf-muted">{escape(food["generic_name"])}</div>' if food.get("generic_name") else ""
     original = (f'<div class="sf-muted">Nombre original: {escape(food["original_name"])}</div>'
                 if food.get("original_name") and food["original_name"] != food["name"] else "")

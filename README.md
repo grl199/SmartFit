@@ -105,6 +105,28 @@ los valores de texto libre antiguos (conservándolos en `context_notes`). Cuando
 - **Códigos de tienda ambiguos.** Los códigos que empiezan por 2 (y los de 24 dígitos de tienda) son de circulación restringida:
   distintas tiendas pueden reutilizarlos para productos diferentes. La app lo avisa con ⚠ y la ficha lo explica.
 
+## Fuentes de datos de alimentos (estrategia)
+
+Capas, de más fiable a menos; cada una alimenta a la anterior para que la app «aprenda» con el uso:
+
+1. **Tu base de datos** (instantánea): lo que ya consumiste, lo que creaste, lo que guardó Open Food Facts y los productos confirmados
+   por la comunidad. La búsqueda es **tolerante a erratas y variantes entre idiomas** (índice de trigramas: «pistacho» encuentra
+   «Pistacchio»; «pandorp» encuentra «pandoro»).
+2. **Open Food Facts** (código de barras y texto): todo lo que devuelve se guarda en tu base de datos.
+3. **Catálogo comunitario**: un producto que creas con código de barras puede ofrecerse a los demás (casilla «Compartir con la
+   comunidad»). Se publica **solo cuando otro usuario registra el mismo código con valores concordantes (±10 %)**, con la mediana de los
+   valores, y sin revelar quién los aportó. Los códigos de tienda (prefijo 2) no se comparten.
+4. **Foto de la etiqueta con IA** *(pendiente; requiere un modelo con visión)*: rellena el formulario para que lo confirmes.
+
+Por qué **no** se rastrean webs de supermercados (Carrefour, Mercadona…): no ofrecen una API pública, sus condiciones suelen prohibir la
+extracción automática y es frágil (cambian la web sin avisar). Para alimentos genéricos (no de marca) tendrían sentido tablas abiertas
+de composición (CIQUAL, BEDCA, USDA), pero no resuelven productos de marca. Si un producto no está en ningún sitio, lo más fiable es el
+código de barras (la URL de Carrefour solo trae un identificador propio; el EAN va impreso en el envase).
+
+**Seguridad de datos compartidos:** cada usuario solo ve sus alimentos privados y los compartidos; el código de barras es único *por
+propietario* (antes lo era globalmente: un código creado por un usuario podía devolverse a otro y dos usuarios no podían registrar el
+mismo código).
+
 ## Chat
 
 Cada conversación se guarda y tiene su propio historial: la barra lateral las agrupa por fecha (hoy, ayer, últimos 7 días…) y permite
@@ -113,20 +135,25 @@ versión quedan en «Conversación anterior».
 
 ## Entrenamiento
 
-- **Sesiones por tipo** (pierna, empuje, tirón, tren superior, cuerpo completo, core, cardio, otro). Al elegir el tipo, el catálogo se
-  filtra por los músculos que le corresponden. Hay ~45 ejercicios base (extensión de piernas, aductores, abductores, sentadilla, peso
-  muerto, press banca, jalón, remos, curls...) con su músculo principal y secundarios; puedes crear los tuyos.
-- **Registro a nivel de serie:** una tabla editable por ejercicio (repeticiones, peso, RPE) precargada con **lo que hiciste la última vez**.
-- **Calorías con IA:** la IA estima la **intensidad y el MET** a partir del tipo, la duración y las series; el **código** calcula
-  `kcal = MET × peso(kg) × horas` con tu peso a esa fecha y valida rangos. Si falla, la sesión se guarda igualmente y se puede
-  recalcular desde el Historial. También puedes introducir las kcal a mano o no registrarlas.
-- **Mapa muscular** (frontal y posterior) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5), con
-  ranking por músculo y lista de los que no has trabajado. **Progresión** por ejercicio (peso máximo, 1RM estimado de Epley, volumen).
-- **Andar y correr** tienen sus propias métricas: distancia, **ritmo** (min/km) y velocidad (derivados), **desnivel positivo**,
-  **pasos** (andar) y frecuencia cardiaca. Sus músculos (piernas, glúteos, gemelos y core) se encienden en el mapa como «series
-  equivalentes» según el tiempo y la intensidad (por ritmo o velocidad; el desnivel alto sube un nivel). Es una estimación orientativa.
-  Progresión de ritmo/velocidad, kilómetros por semana y desnivel en Entrenamiento → Progresión.
-  *Preparado para Strava:* una actividad importada solo tendría que rellenar estos mismos campos (distancia, tiempo, desnivel, FC).
+**Jerarquía de la sesión:** *Tipo* → Fuerza · Cardio (Andar · Correr · Otros deportes) · Cuerpo entero · Estiramientos.
+
+- **Fuerza y estiramientos:** eliges **grupos muscular** por región, con un pictograma por músculo — *Tren superior:* abdominales, antebrazo,
+  bíceps, cuello, dorsales, espalda baja, espalda superior, hombros, pecho, trapecio, tríceps · *Tren inferior:* abductores, aductores,
+  cuádriceps, glúteos, isquiotibiales, pantorrillas.
+- **Equipamiento** (con iconos): ninguno, banda de resistencia, banda de suspensión, barra, mancuerna, disco, máquina, pesa rusa, rueda,
+  balón medicinal, banco(s), cajones, otros. Filtra los ejercicios que usan *alguno* de los elegidos; se combina con los músculos y
+  con la búsqueda de texto. Lo que ya habías elegido no se pierde al cambiar los filtros.
+- **Catálogo de 106 ejercicios** (fuerza, cuerpo entero y estiramientos) con músculo principal, secundarios y equipamiento; puedes crear
+  los tuyos. Los estiramientos no cuentan como volumen de fuerza.
+- **Otros deportes:** fútbol, tenis, pádel, baloncesto, natación, ciclismo… (el título toma el deporte; la IA estima las calorías).
+- **Registro por series:** tabla editable por ejercicio (repeticiones, peso, RPE) precargada con lo que hiciste la última vez.
+- **Calorías con IA:** la IA estima la **intensidad y el MET**; el **código** calcula `kcal = MET × peso(kg) × horas` y valida rangos.
+  Si falla, la sesión se guarda igualmente y se puede recalcular desde el Historial.
+- **Andar y correr** tienen sus métricas: distancia, **ritmo** (min/km) y velocidad (derivados), **desnivel positivo**, **pasos** y FC.
+  Sus músculos se encienden en el mapa como «series equivalentes» según tiempo e intensidad (estimación orientativa). Progresión de
+  ritmo, km por semana y desnivel en Progresión. *Preparado para Strava:* una actividad importada solo rellenaría estos mismos campos.
+- **Mapa muscular** frontal y posterior (modo claro/oscuro) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5),
+  ranking por músculo y lista de los no trabajados. **Progresión** de fuerza: peso máximo, 1RM estimado (Epley) y volumen.
 - El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
 
 ## Interfaz

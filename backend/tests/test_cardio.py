@@ -31,7 +31,7 @@ def test_muscle_load_profiles():
     assert run["abs"] == run["lower_back"] == pytest.approx(3.75) and "chest" not in run
     walk = muscle_load("walking", 60, 4.2)                                     # moderada: 60/10 = 6
     assert walk["calves"] == pytest.approx(6.0) and walk["abductors"] == pytest.approx(3.0)
-    assert muscle_load("cardio", 60) == {} and muscle_load("legs", 60) == {} and muscle_load("running", 0) == {}
+    assert muscle_load("sport", 60) == {} and muscle_load("strength", 60) == {} and muscle_load("running", 0) == {}
 
 
 # ───────────── API ─────────────
@@ -42,7 +42,8 @@ def run_payload(**over):
 
 def test_categories_exposed(client):
     cats = client.get("/meta/options").json()["workout_category"]
-    assert cats["walking"] == "Andar" and cats["running"] == "Correr" and "cardio" in cats
+    assert cats["walking"] == "Andar" and cats["running"] == "Correr" and cats["sport"] == "Otros deportes"
+    assert set(cats) == {"strength", "walking", "running", "sport", "full_body", "stretching"}
 
 
 def test_running_session_metrics_calories_and_muscles(client, onboarded):
@@ -75,7 +76,7 @@ def test_strength_and_cardio_add_up(client, onboarded):
     h = onboarded["headers"]
     sq = next(e["id"] for e in client.get("/exercises", params={"q": "Extensión de piernas"}, headers=h).json())
     with patch("app.services.calories.chat_text", llm()):
-        client.post("/workouts", headers=h, json={"kind": "Pierna", "category": "legs", "duration_min": 40,
+        client.post("/workouts", headers=h, json={"kind": "Pierna", "category": "strength", "duration_min": 40,
                                                   "sets": [{"exercise_id": sq, "reps": 12, "weight_kg": 50}] * 4})
         client.post("/workouts", headers=h, json=run_payload())
     q = client.get("/training/muscles", headers=h).json()["muscles"]["quadriceps"]
@@ -85,7 +86,7 @@ def test_strength_and_cardio_add_up(client, onboarded):
 def test_generic_cardio_does_not_light_muscles(client, onboarded):
     h = onboarded["headers"]
     with patch("app.services.calories.chat_text", llm()):
-        client.post("/workouts", headers=h, json={"kind": "Bici", "category": "cardio", "duration_min": 60})
+        client.post("/workouts", headers=h, json={"kind": "Bici", "category": "sport", "duration_min": 60})
     m = client.get("/training/muscles", headers=h).json()
     assert m["sessions"] == 0 and all(v["sets"] == 0 for v in m["muscles"].values())
 
