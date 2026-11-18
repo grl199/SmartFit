@@ -37,6 +37,33 @@ h1 {font-weight: 750; letter-spacing: -.02em;}
 .sf-big {font-size: 1.35rem; font-weight: 700;}
 div[data-testid="stMetricValue"] {font-size: 1.5rem;}
 button[kind="secondary"] {border-radius: 999px;}
+
+/* Navegación móvil: complementa el menú lateral sin eliminar sus funciones (p. ej. historial del chat). */
+@media (max-width: 768px) {
+  .st-key-sf_mobile_nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 999;
+    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
+    background: var(--background-color);
+    border-top: 1px solid rgba(128,128,128,.28);
+    box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+  }
+  .st-key-sf_mobile_nav [data-testid="stHorizontalBlock"] { gap: 2px; }
+  .st-key-sf_mobile_nav a {
+    justify-content: center;
+    padding: 5px 1px;
+    font-size: .72rem;
+    white-space: nowrap;
+  }
+  .st-key-sf_mobile_nav a p { font-size: .72rem; }
+  .block-container { padding-bottom: 6.5rem; }
+}
+@media (min-width: 769px) {
+  .st-key-sf_mobile_nav { display: none; }
+}
 </style>
 """
 
@@ -51,6 +78,24 @@ def is_dark() -> bool:
 
 def inject_css() -> None:
     st.markdown(CSS, unsafe_allow_html=True)
+
+
+
+def mobile_nav() -> None:
+    """Barra inferior de navegación para móvil. El menú lateral original sigue disponible."""
+    with st.container(key="sf_mobile_nav"):
+        cols = st.columns(6, gap="small")
+        links = [
+            ("Home.py", "Hoy", "🏠"),
+            ("pages/1_Registrar.py", "Añadir", "➕"),
+            ("pages/2_Chat.py", "Chat", "💬"),
+            ("pages/3_Progreso.py", "Progr.", "📈"),
+            ("pages/4_Entrenamiento.py", "Entreno", "🏋️"),
+            ("pages/5_Perfil.py", "Perfil", "👤"),
+        ]
+        for col, (page, label, icon) in zip(cols, links):
+            with col:
+                st.page_link(page, label=label, icon=icon, width="stretch")
 
 
 def fmt_pace(pace_min_km: float | None) -> str:
