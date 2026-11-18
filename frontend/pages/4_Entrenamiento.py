@@ -13,6 +13,7 @@ from muscles import body_svg, muscle_icon
 st.set_page_config(page_title="Entrenamiento", page_icon="🏋️", layout="wide")
 ui.inject_css()
 auth.require_login()
+ui.mobile_nav()
 st.title("🏋️ Entrenamiento")
 
 opts = api.options()
