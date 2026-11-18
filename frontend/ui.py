@@ -38,43 +38,58 @@ h1 {font-weight: 750; letter-spacing: -.02em;}
 div[data-testid="stMetricValue"] {font-size: 1.5rem;}
 button[kind="secondary"] {border-radius: 999px;}
 
-/* Navegación móvil: barra horizontal al inicio del contenido, nunca flotante ni superpuesta. */
+/* Navegación móvil: menú superior en cuadrícula, siempre visible y sin desplazamiento lateral. */
 @media (max-width: 768px) {
   .st-key-sf_mobile_nav {
     position: relative;
     width: 100%;
-    z-index: 1;
     margin: 0 0 1rem 0;
-    padding: 5px 2px;
-    background-color: var(--background-color, #fff);
+    padding: 8px 0 10px;
     border-bottom: 1px solid rgba(128,128,128,.28);
+    overflow: visible;
   }
   .st-key-sf_mobile_nav [data-testid="stHorizontalBlock"] {
-    gap: 2px;
+    display: flex;
     flex-wrap: nowrap;
+    gap: 8px;
+    width: 100%;
   }
   .st-key-sf_mobile_nav [data-testid="column"] {
-    min-width: 0;
-    padding: 0;
+    min-width: 0 !important;
+    width: 33.333% !important;
+    flex: 1 1 33.333% !important;
+    padding: 0 !important;
   }
   .st-key-sf_mobile_nav a {
+    box-sizing: border-box;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
-    min-height: 42px;
-    padding: 3px 0;
-    font-size: .65rem;
-    line-height: 1.1;
-    white-space: nowrap;
+    gap: 5px;
+    width: 100%;
+    min-height: 64px;
+    padding: 8px 2px;
+    border: 1px solid rgba(128,128,128,.22);
+    border-radius: 10px;
+    text-align: center;
+    white-space: normal;
+    line-height: 1.15;
+  }
+  .st-key-sf_mobile_nav a [data-testid="stIconMaterial"],
+  .st-key-sf_mobile_nav a svg {
+    flex: 0 0 auto;
+    width: 21px !important;
+    height: 21px !important;
+    font-size: 21px !important;
   }
   .st-key-sf_mobile_nav a p {
     margin: 0;
-    font-size: .65rem;
-    line-height: 1.1;
+    font-size: .76rem;
+    line-height: 1.15;
+    text-align: center;
   }
-  .block-container { padding-bottom: 3rem; }
+  .block-container { padding-bottom: 2rem; }
 }
 @media (min-width: 769px) {
   .st-key-sf_mobile_nav { display: none; }
@@ -97,20 +112,21 @@ def inject_css() -> None:
 
 
 def mobile_nav() -> None:
-    """Barra inferior de navegación para móvil. El menú lateral original sigue disponible."""
+    """Menú superior para móvil: seis categorías visibles en dos filas de tres."""
+    links = [
+        ("Home.py", "Hoy", "🏠"),
+        ("pages/1_Registrar.py", "Añadir", "➕"),
+        ("pages/2_Chat.py", "Chat", "💬"),
+        ("pages/3_Progreso.py", "Progreso", "📈"),
+        ("pages/4_Entrenamiento.py", "Entreno", "🏋️"),
+        ("pages/5_Perfil.py", "Perfil", "👤"),
+    ]
     with st.container(key="sf_mobile_nav"):
-        cols = st.columns(6, gap="small")
-        links = [
-            ("Home.py", "Hoy", "🏠"),
-            ("pages/1_Registrar.py", "Añadir", "➕"),
-            ("pages/2_Chat.py", "Chat", "💬"),
-            ("pages/3_Progreso.py", "Progr.", "📈"),
-            ("pages/4_Entrenamiento.py", "Entreno", "🏋️"),
-            ("pages/5_Perfil.py", "Perfil", "👤"),
-        ]
-        for col, (page, label, icon) in zip(cols, links):
-            with col:
-                st.page_link(page, label=label, icon=icon, width="stretch")
+        for row_start in (0, 3):
+            cols = st.columns(3, gap="small")
+            for col, (page, label, icon) in zip(cols, links[row_start:row_start + 3]):
+                with col:
+                    st.page_link(page, label=label, icon=icon, width="stretch")
 
 
 def fmt_pace(pace_min_km: float | None) -> str:
