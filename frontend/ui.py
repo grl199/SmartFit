@@ -38,58 +38,77 @@ h1 {font-weight: 750; letter-spacing: -.02em;}
 div[data-testid="stMetricValue"] {font-size: 1.5rem;}
 button[kind="secondary"] {border-radius: 999px;}
 
-/* Navegación móvil: menú superior en cuadrícula, siempre visible y sin desplazamiento lateral. */
+/* Navegación móvil: cuadrícula estricta de tres columnas, sin carrusel ni scroll lateral. */
 @media (max-width: 768px) {
   .st-key-sf_mobile_nav {
-    position: relative;
+    display: block;
+    box-sizing: border-box;
     width: 100%;
+    max-width: 100%;
     margin: 0 0 1rem 0;
-    padding: 8px 0 10px;
+    padding: 6px 0 10px;
+    overflow-x: clip;
     border-bottom: 1px solid rgba(128,128,128,.28);
-    overflow: visible;
   }
   .st-key-sf_mobile_nav [data-testid="stHorizontalBlock"] {
-    display: flex;
-    flex-wrap: nowrap;
-    gap: 8px;
-    width: 100%;
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 7px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 0 7px 0 !important;
   }
   .st-key-sf_mobile_nav [data-testid="column"] {
+    display: block !important;
+    box-sizing: border-box !important;
+    width: auto !important;
     min-width: 0 !important;
-    width: 33.333% !important;
-    flex: 1 1 33.333% !important;
+    max-width: 100% !important;
+    flex: none !important;
     padding: 0 !important;
   }
+  .st-key-sf_mobile_nav [data-testid="column"] > div {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
   .st-key-sf_mobile_nav a {
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    width: 100%;
-    min-height: 64px;
-    padding: 8px 2px;
-    border: 1px solid rgba(128,128,128,.22);
-    border-radius: 10px;
-    text-align: center;
-    white-space: normal;
-    line-height: 1.15;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    justify-content: center !important;
+    gap: 4px !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100% !important;
+    min-height: 58px !important;
+    padding: 6px 2px !important;
+    overflow: hidden !important;
+    border: 1px solid rgba(128,128,128,.24);
+    border-radius: 9px;
+    text-align: center !important;
+    white-space: normal !important;
   }
   .st-key-sf_mobile_nav a [data-testid="stIconMaterial"],
   .st-key-sf_mobile_nav a svg {
-    flex: 0 0 auto;
-    width: 21px !important;
-    height: 21px !important;
-    font-size: 21px !important;
+    display: block !important;
+    flex: 0 0 19px !important;
+    width: 19px !important;
+    min-width: 19px !important;
+    height: 19px !important;
+    margin: 0 !important;
   }
   .st-key-sf_mobile_nav a p {
-    margin: 0;
-    font-size: .76rem;
-    line-height: 1.15;
-    text-align: center;
+    display: block !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    margin: 0 !important;
+    font-size: .72rem !important;
+    line-height: 1.1 !important;
+    text-align: center !important;
+    overflow-wrap: anywhere;
   }
-  .block-container { padding-bottom: 2rem; }
+  .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
 }
 @media (min-width: 769px) {
   .st-key-sf_mobile_nav { display: none; }
