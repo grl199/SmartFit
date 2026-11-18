@@ -10,6 +10,7 @@ from components import MEALS, quick_add_bar
 st.set_page_config(page_title="SmartFit · Hoy", page_icon="🥗", layout="wide")
 ui.inject_css()
 me = auth.require_login()
+ui.mobile_nav()
 
 today_resp = api.get("/meta/today")
 if not today_resp:

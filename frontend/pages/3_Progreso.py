@@ -9,6 +9,7 @@ import ui
 st.set_page_config(page_title="Progreso", page_icon="📈", layout="wide")
 ui.inject_css()
 auth.require_login()
+ui.mobile_nav()
 st.title("📈 Progreso")
 
 days = st.segmented_control("Periodo", [7, 14, 30, 90], default=14, format_func=lambda d: f"{d} días", label_visibility="collapsed") or 14

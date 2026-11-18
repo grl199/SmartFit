@@ -9,6 +9,7 @@ import ui
 st.set_page_config(page_title="Asistente", page_icon="💬", layout="wide")
 ui.inject_css()
 auth.require_login()
+ui.mobile_nav()
 
 st.session_state.setdefault("used_photos", set())
 convs = api.get("/conversations", limit=60) or []

@@ -11,6 +11,7 @@ from components import MEALS, food_log_form, quick_add_bar
 st.set_page_config(page_title="Registrar", page_icon="➕", layout="wide")
 ui.inject_css()
 auth.require_login()
+ui.mobile_nav()
 st.title("➕ Registrar comida")
 
 today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isoformat()})["date"])
