@@ -3,9 +3,10 @@ steps:
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
       - '-t'
       - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'
-      - '.'
-
+      - 'backend'
 images:
   - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'
