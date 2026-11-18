@@ -38,7 +38,7 @@ h1 {font-weight: 750; letter-spacing: -.02em;}
 div[data-testid="stMetricValue"] {font-size: 1.5rem;}
 button[kind="secondary"] {border-radius: 999px;}
 
-/* Navegación móvil: complementa el menú lateral sin eliminar sus funciones (p. ej. historial del chat). */
+/* Navegación móvil: barra compacta, opaca y con espacio reservado al final del contenido. */
 @media (max-width: 768px) {
   .st-key-sf_mobile_nav {
     position: fixed;
@@ -46,20 +46,34 @@ button[kind="secondary"] {border-radius: 999px;}
     right: 0;
     bottom: 0;
     z-index: 999;
-    padding: 8px 6px calc(8px + env(safe-area-inset-bottom));
-    background: var(--background-color);
-    border-top: 1px solid rgba(128,128,128,.28);
-    box-shadow: 0 -4px 16px rgba(0,0,0,.08);
+    padding: 4px 5px calc(4px + env(safe-area-inset-bottom));
+    background-color: var(--background-color, #fff);
+    border-top: 1px solid rgba(128,128,128,.3);
+    box-shadow: 0 -3px 12px rgba(0,0,0,.12);
+    isolation: isolate;
   }
-  .st-key-sf_mobile_nav [data-testid="stHorizontalBlock"] { gap: 2px; }
+  .st-key-sf_mobile_nav [data-testid="stHorizontalBlock"] { gap: 1px; }
+  .st-key-sf_mobile_nav [data-testid="column"] { padding: 0 1px; }
   .st-key-sf_mobile_nav a {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
     justify-content: center;
-    padding: 5px 1px;
-    font-size: .72rem;
+    gap: 1px;
+    min-height: 42px;
+    padding: 3px 0;
+    font-size: .68rem;
+    line-height: 1.1;
     white-space: nowrap;
   }
-  .st-key-sf_mobile_nav a p { font-size: .72rem; }
-  .block-container { padding-bottom: 6.5rem; }
+  .st-key-sf_mobile_nav a p {
+    margin: 0;
+    font-size: .68rem;
+    line-height: 1.1;
+  }
+  .block-container {
+    padding-bottom: calc(8rem + env(safe-area-inset-bottom)) !important;
+  }
 }
 @media (min-width: 769px) {
   .st-key-sf_mobile_nav { display: none; }
