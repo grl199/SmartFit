@@ -25,6 +25,21 @@ def pick(label, key, current, **kw):
                         format_func=lambda c: "— sin indicar —" if c is None else opts[key][c], **kw)
 
 
+# ───────── Energía (calculada por código, sin IA) ─────────
+en = api.get("/profile/energy") or {}
+st.subheader("Tu gasto energético")
+if en.get("missing"):
+    st.info("Completa en el perfil (más abajo) para calcularlo: " + ", ".join(en["missing"]) + ".")
+else:
+    m = st.columns(4)
+    m[0].metric("Edad", f"{en['age']} años")
+    m[1].metric("Metabolismo basal", f"{en['bmr']:.0f} kcal/día")
+    m[2].metric("Gasto total (TDEE)", f"{en['tdee']:.0f} kcal/día")
+    m[3].metric("Peso usado", f"{en['weight_kg']:g} kg")
+    st.caption("Se calcula automáticamente con Mifflin-St Jeor a partir de tu perfil y tu último peso, y se actualiza al cambiar "
+               "peso, altura, fecha de nacimiento o actividad. Es una estimación. Tus objetivos nutricionales solo cambian si "
+               "pulsas «Recalcular objetivos con IA».")
+
 # ───────── Objetivos ─────────
 st.subheader("Objetivos diarios")
 src = {"llm": "🤖 Generados por la IA", "manual": "✍️ Editados a mano"}.get(t.get("source"), "")
@@ -52,7 +67,10 @@ with st.form("targets"):
         "fat_g": cols[3].number_input("Grasa (g)", 0.0, 500.0, float(t.get("fat_g", 65)), step=5.0),
         "fiber_g": cols[4].number_input("Fibra (g)", 0.0, 200.0, float(t.get("fiber_g", 30)), step=1.0),
     }
-    new_t["workouts_per_week"] = st.number_input("Entrenos por semana", 0, 14, int(t.get("workouts_per_week", 3)))
+    g3 = st.columns(3)
+    new_t["workouts_per_week"] = g3[0].number_input("Entrenos por semana", 0, 14, int(t.get("workouts_per_week", 3)))
+    new_t["water_ml"] = g3[1].number_input("Agua al día (ml)", 500, 10000, int(t.get("water_ml", 2000)), step=250)
+    new_t["steps_goal"] = g3[2].number_input("Pasos al día", 1000, 50000, int(t.get("steps_goal", 8000)), step=500)
     if st.form_submit_button("Guardar objetivos manualmente") and api.put("/targets", new_t):
         st.success("Guardado")
 

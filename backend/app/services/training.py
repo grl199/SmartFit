@@ -72,7 +72,8 @@ def _sets_by_workout(db: Session, user_id: int, exercise_id: int):
 
 def exercise_history(db: Session, user_id: int, exercise_id: int, limit: int = 10) -> list[dict]:
     return [{"workout_id": g["workout_id"], "date": g["date"].isoformat(),
-             "sets": [{"set_number": s.set_number, "reps": s.reps, "weight_kg": s.weight_kg, "rpe": s.rpe} for s in g["sets"]]}
+             "sets": [{"set_number": s.set_number, "reps": s.reps, "weight_kg": s.weight_kg,
+                      "reached_failure": s.reached_failure, "rpe": s.rpe} for s in g["sets"]]}
             for g in _sets_by_workout(db, user_id, exercise_id)[:limit]]
 
 
@@ -94,7 +95,8 @@ def workout_sets_summary(sets: list[WorkoutSet]) -> list[dict]:
     for s in sorted(sets, key=lambda x: (x.id)):
         g = groups.setdefault(s.exercise_id, {"exercise_id": s.exercise_id, "exercise": s.exercise.name,
                                               "primary_muscle": s.exercise.primary_muscle, "sets": []})
-        g["sets"].append({"set_number": s.set_number, "reps": s.reps, "weight_kg": s.weight_kg, "rpe": s.rpe})
+        g["sets"].append({"set_number": s.set_number, "reps": s.reps, "weight_kg": s.weight_kg,
+                                  "reached_failure": s.reached_failure, "rpe": s.rpe})
     return list(groups.values())
 
 

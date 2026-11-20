@@ -6,9 +6,10 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user
 from ..models import BodyMetric, User, UserProfile, UserTarget
-from ..schemas import OnboardingIn, OnboardingOut, ProfileIO, TargetIO, TargetOut
-from ..services.nutrition import today_local
-from ..services.plan import PlanGenerationError, PlanRejected, generate_targets
+from ..clock import age_on
+from ..schemas import EnergyOut, OnboardingIn, OnboardingOut, ProfileIO, TargetIO, TargetOut
+from ..services.nutrition import latest_weight, today_local
+from ..services.plan import PlanGenerationError, PlanRejected, energy, generate_targets
 
 log = logging.getLogger(__name__)
 # Este router solo exige estar autenticado (no onboarded): contiene el propio onboarding.
@@ -62,6 +63,19 @@ def put_profile(body: ProfileIO, user: User = Depends(current_user), db: Session
     return p
 
 
+@router.get("/profile/energy", response_model=EnergyOut)
+def get_energy(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    """Edad, metabolismo basal (Mifflin-St Jeor) y gasto total, calculados SIEMPRE por código con el perfil y el último
+    peso: se actualizan solos al cambiar peso, altura, fecha de nacimiento o actividad. No llama a la IA."""
+    p, w = db.get(UserProfile, user.id), latest_weight(db, user.id)
+    out = EnergyOut(age=age_on(p.birth_date) if p and p.birth_date else None, weight_kg=w.weight_kg if w else None)
+    out.missing = [n for n, v in (("sexo", p and p.sex), ("fecha de nacimiento", p and p.birth_date), ("altura", p and p.height_cm),
+                                  ("nivel de actividad", p and p.activity_level), ("peso", w)) if not v]
+    if not out.missing:
+        out.bmr, out.tdee = energy(p.sex, w.weight_kg, p.height_cm, out.age, p.activity_level)
+    return out
+
+
 @router.get("/targets", response_model=TargetOut)
 def get_targets_(user: User = Depends(current_user), db: Session = Depends(get_db)):
     return db.get(UserTarget, user.id)
@@ -72,7 +86,8 @@ def put_targets(body: TargetIO, user: User = Depends(current_user), db: Session 
     """Edición manual: marca los objetivos como 'manual' pero conserva el plan de entrenamiento previo."""
     t = db.get(UserTarget, user.id) or UserTarget(user_id=user.id)
     for k, v in body.model_dump().items():
-        setattr(t, k, v)
+        if v is not None or k not in ("water_ml", "steps_goal"):   # agua y pasos opcionales: omitidos = sin cambios
+            setattr(t, k, v)
     t.source = "manual"
     db.add(t)
     db.commit()

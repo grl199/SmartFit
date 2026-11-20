@@ -6,18 +6,11 @@ from zoneinfo import ZoneInfo
 from sqlalchemy import func, or_, select, text
 from sqlalchemy.orm import Session
 
+from ..clock import now_local, today_local  # noqa: F401  (reexportados: otros módulos los importan de aquí)
 from ..config import get_settings
 from ..models import NUTRIENTS, BodyMetric, Exercise, Food, FoodLog, UserTarget, Workout, WorkoutSet
 
 TARGET_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g", "fiber_g")
-
-
-def now_local() -> datetime:
-    return datetime.now(ZoneInfo(get_settings().timezone))
-
-
-def today_local() -> date:
-    return now_local().date()
 
 
 def scale(food, grams: float) -> dict[str, float]:
@@ -31,7 +24,8 @@ def guess_meal(hour: int) -> str:
 
 
 def create_log(db: Session, user_id: int, food: Food, grams: float,
-               meal: str | None = None, log_date: date | None = None) -> FoodLog:
+               meal: str | None = None, log_date: date | None = None, nutrients: dict[str, float] | None = None) -> FoodLog:
+    """`nutrients` permite guardar una instantánea ya calculada (recetas con ingredientes modificados); si no, se escala por 100 g."""
     now = now_local()
     if log_date and log_date != now.date():
         logged_at = datetime.combine(log_date, time(12, 0), tzinfo=now.tzinfo)
@@ -39,7 +33,7 @@ def create_log(db: Session, user_id: int, food: Food, grams: float,
         logged_at, log_date = now, now.date()
     log = FoodLog(
         user_id=user_id, food_id=food.id, logged_at=logged_at, log_date=log_date, grams=grams,
-        meal=meal or guess_meal(logged_at.hour), **scale(food, grams),
+        meal=meal or guess_meal(logged_at.hour), **(nutrients or scale(food, grams)),
     )
     db.add(log)
     db.commit()
@@ -74,7 +68,7 @@ def search_foods(db: Session, user_id: int, query: str, limit: int = 10, fuzzy: 
     exact = list(db.scalars(
         select(Food).outerjoin(used, used.c.food_id == Food.id)
         .where(visible, *[Food.search_text.ilike(_like(t), escape="\\") for t in tokens])
-        .order_by(func.coalesce(used.c.n, 0).desc(), func.length(Food.name)).limit(limit)))
+        .order_by(func.coalesce(used.c.n, 0).desc(), (func.coalesce(Food.user_id, 0) == user_id).desc(), func.length(Food.name)).limit(limit)))   # primero lo que ya usas, luego lo tuyo
     if not fuzzy or len(exact) >= limit or len(q_norm) < 4:
         return exact
     db.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {FUZZY_THRESHOLD}"))
@@ -126,6 +120,8 @@ def get_targets(db: Session, user_id: int) -> dict:
     t = db.get(UserTarget, user_id)
     d = {f: getattr(t, f) for f in TARGET_FIELDS} if t else {}
     d["workouts_per_week"] = t.workouts_per_week if t else 3
+    d["water_ml"] = t.water_ml if t else 2000
+    d["steps_goal"] = t.steps_goal if t else 8000
     return d
 
 
@@ -137,7 +133,7 @@ def workouts_between(db: Session, user_id: int, start: date, end: date) -> list[
 
 def latest_weight(db: Session, user_id: int) -> BodyMetric | None:
     return db.scalar(select(BodyMetric).where(BodyMetric.user_id == user_id)
-                     .order_by(BodyMetric.measured_on.desc()).limit(1))
+                     .order_by(BodyMetric.measured_on.desc(), BodyMetric.id.desc()).limit(1))  # mismo día: gana el último registrado
 
 
 def _workouts_with_exercises(db: Session, user_id: int, day: date) -> list[dict]:
@@ -153,6 +149,12 @@ def _workouts_with_exercises(db: Session, user_id: int, day: date) -> list[dict]
              "distance_km": w.distance_km, "steps": w.steps, "elevation_gain_m": w.elevation_gain_m} for w in ws]
 
 
+def water_ml_on(db: Session, user_id: int, day: date) -> int:
+    from ..models import HydrationLog
+    return int(db.scalar(select(func.coalesce(func.sum(HydrationLog.quantity_ml), 0)).where(
+        HydrationLog.user_id == user_id, HydrationLog.log_date == day)) or 0)
+
+
 def day_overview(db: Session, user_id: int, day: date) -> dict:
     logs = db.scalars(select(FoodLog).where(FoodLog.user_id == user_id, FoodLog.log_date == day)
                       .order_by(FoodLog.logged_at)).all()
@@ -166,4 +168,5 @@ def day_overview(db: Session, user_id: int, day: date) -> dict:
             "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "fat_g": l.fat_g,
         } for l in logs],
         "workouts": _workouts_with_exercises(db, user_id, day),
+        "water_ml": water_ml_on(db, user_id, day),
     }

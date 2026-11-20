@@ -189,3 +189,14 @@ TEST_DATABASE_URL=postgresql+psycopg://health:health@localhost:5432/health_test 
 ## Pendiente antes de producción
 
 Cambio de contraseña y recuperación de cuenta, sesión persistente tras recargar (cookie HttpOnly), Vault con AppRole, Alembic, streaming SSE en el chat, rate-limit en `/chat`, backups, HTTPS, zona horaria por usuario y límite de coste por usuario.
+
+## Novedades (rama `feat/first_draft`)
+
+**Entrenamiento** — plan estructurado (días → ejercicios reales del catálogo con series/reps/descanso, editable), «Ejercicios recomendados para hoy» al registrar,
+fichas «Cómo se hace», fallo / no fallo en lugar de RPE, tarjeta «Última sesión» y recomendaciones deterministas tras entrenar (récord, progresión prudente, mantener).
+**Nutrición** — recetas y alimentos compuestos (recálculo en vivo, instantánea al registrar), unidades por alimento (cucharada, rebanada…), catálogo SmartFit y
+carga batch de USDA FoodData Central y otras bases en CSV (`python -m app.ingest`, sin APIs con cupo), alimentos propios por usuario, con procedencia/licencia ([docs/FUENTES_NUTRICIONALES.md](docs/FUENTES_NUTRICIONALES.md)).
+**Hábitos** — agua, check-in emocional privado, pasos (manual + `/activity/sync` con consentimiento) y «Analiza mi progreso» (indicadores por código; la IA solo redacta).
+**Cálculo energético** — edad, metabolismo basal y gasto total por código (`GET /profile/energy`).
+
+Pendiente: app Android para Health Connect / Samsung Health, OAuth de Google Health API, BEDCA, vídeos/imágenes de ejercicios con licencia, Alembic.

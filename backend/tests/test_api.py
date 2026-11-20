@@ -77,7 +77,7 @@ def test_onboarding_ok_unlocks_app(client):
     body = r.json()
     assert body["targets"]["source"] == "llm" and body["targets"]["kcal"] == 2900
     from datetime import date
-    from app.services.plan import _age
+    from app.clock import age_on as _age
     bmr = 10 * 80 + 6.25 * 180 - 5 * _age(date(1990, 5, 10)) + 5   # Mifflin-St Jeor (hombre), calculado por código
     assert body["bmr"] == round(bmr) and body["tdee"] == round(bmr * 1.55)
     assert "TDEE" in calls[0][1]["content"] or "Gasto total" in calls[0][1]["content"]
@@ -281,4 +281,5 @@ def test_search_rate_limit(client, onboarded):
 def test_unaccented_local_search(client, onboarded):
     h, tag = onboarded["headers"], rnd(6)
     client.post("/foods", headers=h, json={"name": f"Plátano {tag}", "kcal": 89})
-    assert len(client.get("/foods/search", params={"q": f"platano {tag}", "online": False}, headers=h).json()) == 1
+    res = client.get("/foods/search", params={"q": f"platano {tag}", "online": False}, headers=h).json()
+    assert res[0]["name"] == f"Plátano {tag}"   # el propio, primero (la búsqueda tolerante puede añadir el «Plátano» genérico del catálogo)

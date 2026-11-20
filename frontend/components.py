@@ -54,8 +54,15 @@ def _share_controls(food: dict, key: str) -> None:
                 st.rerun()
 
 
+def _servings(food_id: int) -> list[dict]:
+    cache = st.session_state.setdefault("_servings", {})
+    if food_id not in cache:
+        cache[food_id] = api.get(f"/foods/{food_id}/servings") or []
+    return cache[food_id]
+
+
 def food_log_form(food: dict, key: str, log_date: str | None = None, meal: str | None = None) -> None:
-    """Ficha del alimento -> gramos -> vista previa de nutrientes consumidos -> registrar."""
+    """Ficha del alimento -> cantidad (gramos o unidades habituales) -> vista previa de nutrientes -> registrar."""
     food = full_food(food)
     with st.container(border=True):
         ui.html(ui.food_header(food))
@@ -66,16 +73,43 @@ def food_log_form(food: dict, key: str, log_date: str | None = None, meal: str |
                 if food.get("ingredients"):
                     st.caption(food["ingredients"])
         _share_controls(food, key)
+        if food.get("user_id") is None and food.get("source") != "recipe":
+            if st.button("✏️ Crear mi versión", key=f"cp_{key}", help="Copia este alimento a «Mis alimentos» para ajustar sus valores o unidades"):
+                mine = api.post(f"/foods/{food['id']}/copy")
+                if mine:
+                    st.session_state["_mf_focus"] = mine["id"]
+                    st.toast("Copia creada: ajústala en «Mis alimentos».", icon="👤")
+                    st.rerun()
+        if food.get("license") or food.get("confidence"):
+            conf = {"high": "fiabilidad alta", "medium": "fiabilidad media", "low": "estimado"}.get(food.get("confidence") or "", "")
+            with st.expander("Origen de los datos"):
+                st.caption(" · ".join(x for x in (f"Fuente: {food['source']}", conf, f"Licencia {food['license']}" if food.get("license") else "",
+                                                    food.get("attribution") or "") if x))
         st.caption("Valores por 100 g: " + " · ".join(
             f"{lbl} {food[k]:.1f}" for k, lbl in NUTRIENT_LABELS.items() if k in ("kcal", "protein_g", "carbs_g", "fat_g")))
-        default = float(food.get("serving_g") or 100)
-        grams = st.number_input("Cantidad (g)", min_value=1.0, max_value=5000.0, value=default, step=5.0, key=f"g_{key}")
+        servings = _servings(food["id"])
+        units = {None: "Gramos (g)", **{s["id"]: ("Mililitros (ml)" if s["unit_name"] == "ml"
+                                                    else f"{s['unit_name_plural'] or s['unit_name']} (≈ {s['grams_per_unit']:g} g)") for s in servings}}
+        by_id = {s["id"]: s for s in servings}
+        c1, c2 = st.columns([2, 3])
+        unit = c1.selectbox("Unidad", list(units), format_func=units.get, key=f"u_{key}") if servings else None
+        if unit is None:
+            default = float(food.get("serving_g") or 100)
+            amount = c2.number_input("Cantidad (g)", min_value=1.0, max_value=5000.0, value=default, step=5.0, key=f"g_{key}")
+            grams, payload_qty = amount, {"grams": amount}
+        else:
+            sv = by_id[unit]
+            is_ml = sv["unit_name"] == "ml"
+            amount = c2.number_input("Cantidad (ml)" if is_ml else f"Cantidad ({sv['unit_name_plural'] or sv['unit_name']})", min_value=0.5,
+                                     max_value=5000.0 if is_ml else 200.0, value=200.0 if is_ml else 1.0, step=10.0 if is_ml else 0.5, key=f"q_{key}_{unit}")
+            grams, payload_qty = amount * sv["grams_per_unit"], {"serving_id": unit, "quantity": amount}
+            st.caption(f"Equivale a unos **{grams:.0f} g** (equivalencia orientativa).")
         cols = st.columns(len(NUTRIENT_LABELS) + 1)
         for col, (k, lbl) in zip(cols, NUTRIENT_LABELS.items()):
             col.metric(lbl, f"{food[k] * grams / 100:.1f}")
         cols[-1].metric("Sal (g)", f"{food['sodium_mg'] * 2.5 * grams / 100000:.2f}")
         if st.button("➕ Añadir al diario", key=f"add_{key}", type="primary"):
-            payload = {"food_id": food["id"], "grams": grams, "meal": meal, "log_date": log_date}
+            payload = {"food_id": food["id"], "meal": meal, "log_date": log_date, **payload_qty}
             if api.post("/logs", json=payload):
                 st.toast("Registrado", icon="✅")
                 st.session_state.pop("scanned_food", None)

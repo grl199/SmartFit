@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 from .. import enums
 from ..models import BodyMetric, User, UserProfile, UserTarget
 from ..services.nutrition import day_overview, latest_weight, today_local
-from ..services.plan import _age as plan_age, energy
+from ..clock import age_on as plan_age
+from ..services.plan import energy
 
 WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
 

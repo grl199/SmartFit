@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user_id
-from ..models import Food, FoodLog
+from ..models import Food, FoodLog, FoodServing
 from ..schemas import FrequentFood, LogCreate, LogOut
 from ..services.nutrition import create_log, frequent_foods, today_local
 from ..services.rag import index_day_task
@@ -20,7 +20,15 @@ def add_log(body: LogCreate, bg: BackgroundTasks, db: Session = Depends(get_db),
     food = db.get(Food, body.food_id)
     if not food or food.user_id not in (None, uid):
         raise HTTPException(404, "Alimento no encontrado")
-    log = create_log(db, uid, food, body.grams, body.meal, body.log_date)
+    grams = body.grams
+    if body.serving_id is not None:   # unidades habituales -> gramos (la equivalencia es propia de cada alimento)
+        sv = db.get(FoodServing, body.serving_id)
+        if not sv or sv.food_id != food.id:
+            raise HTTPException(404, "Unidad no encontrada para este alimento")
+        grams = round(body.quantity * sv.grams_per_unit, 2)
+        if grams > 5000:
+            raise HTTPException(422, "La cantidad supera los 5000 g")
+    log = create_log(db, uid, food, grams, body.meal, body.log_date)
     bg.add_task(index_day_task, uid, log.log_date)  # actualiza el resumen diario para el RAG
     return log
 

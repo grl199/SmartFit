@@ -7,11 +7,13 @@ import api
 import auth
 import ui
 from components import MEALS, food_log_form, quick_add_bar
+from my_foods_ui import create_from_search, food_fields, my_foods_tab
+from recipes_ui import recipes_tab
 
 st.set_page_config(page_title="Registrar", page_icon="➕", layout="wide")
 ui.inject_css()
 auth.require_login()
-st.title("➕ Registrar comida")
+ui.hero("➕ Registrar comida", "Busca un alimento, escanea un código, usa una receta o crea uno nuevo.")
 
 today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isoformat()})["date"])
 c1, c2 = st.columns(2)
@@ -22,13 +24,19 @@ kw = {"log_date": log_date.isoformat(), "meal": meal}
 with st.expander("⭐ Habituales", expanded=True):
     quick_add_bar()
 
-tab_search, tab_scan, tab_manual = st.tabs(["🔎 Buscar", "📷 Código de barras", "✍️ Crear manual"])
+tab_search, tab_recipe, tab_mine, tab_scan, tab_manual = st.tabs(["🔎 Buscar", "🍳 Recetas", "👤 Mis alimentos", "📷 Código", "✍️ Crear manual"])
+
+with tab_mine:
+    my_foods_tab(kw)
+
+with tab_recipe:
+    recipes_tab(log_date.isoformat(), meal)
 
 # ───────── Búsqueda dinámica ─────────
 with tab_search:
-    online = st.toggle("Incluir Open Food Facts", value=True,
-                       help="Si hay pocos resultados locales, busca también en Open Food Facts y guarda lo encontrado "
-                            "(la primera búsqueda de un término puede tardar un segundo).")
+    online = st.toggle("Buscar también en Open Food Facts", value=True,
+                       help="Tu catálogo local se busca siempre, al instante. Si hay pocos resultados, se consulta además Open Food Facts (productos con "
+                            "código de barras) y se guarda lo encontrado (la primera vez puede tardar un segundo).")
 
     def _label(f: dict) -> str:
         """Una línea por resultado: nombre · marca · kcal · Nutri-Score · 🏷 código de barras."""
@@ -37,7 +45,8 @@ with tab_search:
             parts.append(f"Nutri-Score {f['nutriscore_grade'].upper()}")
         if f.get("barcode"):
             parts.append(f"🏷 {f['barcode']}" + (" ⚠" if f.get("barcode_ambiguous") else ""))
-        return " · ".join(parts) + {"openfoodfacts": " 🌐", "community": " 👥"}.get(f["source"], "")
+        badge = " 👤" if f.get("user_id") else {"openfoodfacts": " 🌐", "usda": " 🌾", "catalog": " ⭐", "recipe": " 🍳", "community": " 👥"}.get(f["source"], "")
+        return " · ".join(parts) + badge
 
     def _search(term: str):
         if not term or len(term.strip()) < 2:
@@ -50,7 +59,9 @@ with tab_search:
                             key="food_search", debounce=500, clear_on_submit=False)
     if selected is not None and (food := st.session_state.get("_foods", {}).get(selected)):
         food_log_form(food, f"s{food['id']}", **kw)
-    st.caption("🌐 = Open Food Facts (se guarda para próximas búsquedas) · 👥 = confirmado por la comunidad · 🏷 = código de barras (⚠ = código de tienda, puede repetirse entre productos). La búsqueda tolera erratas y variantes entre idiomas («pistacho» ≈ «pistacchio»).")
+    state = st.session_state.get("food_search")
+    create_from_search(state.get("search", "") if isinstance(state, dict) else "", kw)
+    st.caption("👤 = tuyo · ⭐ = catálogo SmartFit · 🌾 = USDA (genérico) · 🍳 = receta · 🌐 = Open Food Facts (se guarda para próximas búsquedas) · 👥 = confirmado por la comunidad · 🏷 = código de barras (⚠ = código de tienda, puede repetirse entre productos). La búsqueda tolera erratas y variantes entre idiomas («pistacho» ≈ «pistacchio»).")
 
 # ───────── Código de barras ─────────
 STATUS_HELP = {
@@ -88,20 +99,20 @@ with tab_manual:
     if prefill:
         st.info(f"Creando producto para el código {prefill}")
     with st.form("new_food", clear_on_submit=True):
-        name = st.text_input("Nombre *")
-        brand = st.text_input("Marca")
-        st.caption("Valores por 100 g")
-        cols = st.columns(4)
-        vals = {k: cols[i % 4].number_input(lbl, min_value=0.0, step=0.1) for i, (k, lbl) in enumerate(
-            [("kcal", "kcal"), ("protein_g", "Proteína"), ("carbs_g", "Hidratos"), ("fat_g", "Grasa"),
-             ("sugars_g", "Azúcares"), ("sat_fat_g", "Saturadas"), ("fiber_g", "Fibra"), ("sodium_mg", "Sodio (mg)")])}
+        data = food_fields("nf")
+        c = st.columns(2)
+        unit = c[0].text_input("Unidad habitual (opcional)", placeholder="loncha, cucharada, bote…", key="nf_u")
+        ugrams = c[1].number_input("Gramos por unidad", min_value=0.0, max_value=5000.0, step=1.0, key="nf_ug")
         barcode = st.text_input("Código de barras (opcional, hasta 32 dígitos)", value=prefill, max_chars=32)
         share = st.checkbox("👥 Compartir con la comunidad", help="Ayuda a que otros usuarios encuentren este producto. Se publican solo el código, "
                             "el nombre, la marca y los valores (nunca quién los aportó) y solo cuando otro usuario registra los mismos datos. "
                             "Requiere código de barras y no vale para códigos de tienda (que empiezan por 2).")
-        if st.form_submit_button("Crear alimento") and name:
-            created = api.post("/foods", json={"name": name, "brand": brand or None, "barcode": barcode or None, "share": share, **vals})
+        if st.form_submit_button("Crear alimento", type="primary") and data["name"]:
+            created = api.post("/foods", json={**data, "barcode": barcode or None, "share": share})
             if created:
+                if unit.strip() and ugrams > 0:
+                    api.post(f"/foods/{created['id']}/servings", json={"unit_name": unit.strip(), "grams_per_unit": ugrams})
+                    st.session_state.pop("_servings", None)
                 st.session_state.pop("prefill_barcode", None)
                 st.session_state["just_created"] = created
     if created := st.session_state.get("just_created"):

@@ -13,7 +13,7 @@ from muscles import body_svg, muscle_icon
 st.set_page_config(page_title="Entrenamiento", page_icon="🏋️", layout="wide")
 ui.inject_css()
 auth.require_login()
-st.title("🏋️ Entrenamiento")
+ui.hero("🏋️ Entrenamiento", "Tu plan, tus series y qué mejorar en la próxima sesión.")
 
 opts = api.options()
 CATS, MUSCLES, EQUIP = opts.get("workout_category", {}), opts.get("muscle_group", {}), opts.get("equipment", {})
@@ -29,7 +29,7 @@ today = date.fromisoformat((api.get("/meta/today") or {"date": date.today().isof
 
 # Tras guardar una sesión se limpia el formulario (hay que hacerlo ANTES de crear los widgets)
 if st.session_state.pop("reset_form", False):
-    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_", "mg_", "eq_", "q_", "w_sport"))]:
+    for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_", "mg_", "eq_", "q_", "w_sport", "plan_day_sel"))]:
         del st.session_state[k]
 
 tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan = st.tabs(
@@ -46,6 +46,120 @@ def fmt_sets(sets: list[dict]) -> str:
     return ", ".join(f"{s['reps']}×{s['weight_kg']:g} kg" if s.get("weight_kg") else f"{s['reps']} reps" for s in sets)
 
 
+FB_ICON = {"personal_record": "🏆", "progress": "📈", "maintain": "➡️", "regression": "🔻", "first_time": "🆕", "insufficient_data": "ℹ️"}
+
+
+def show_feedback(feedback: list[dict]) -> None:
+    """Recomendaciones deterministas por ejercicio (calculadas en el backend, sin IA)."""
+    if not feedback:
+        return
+    st.markdown("**💡 Cómo ha ido y qué hacer la próxima vez**")
+    for f in feedback:
+        extra = f" · Próxima sesión: **{f['suggested_weight_kg']:g} kg**" if f.get("suggested_weight_kg") else ""
+        st.markdown(f"{FB_ICON.get(f['status'], '•')} **{f['exercise']}** — {f['message']}{extra}")
+
+
+# ═════════════════════════ Guías y plan ═════════════════════════
+def guide(ex_id: int, key: str) -> None:
+    """Ficha «Cómo se hace»: qué trabaja, pasos, errores frecuentes y recurso visual si existe."""
+    cache = st.session_state.setdefault("_guide", {})
+    with st.expander("ℹ️ Cómo se hace"):
+        if ex_id not in cache:
+            cache[ex_id] = api.get(f"/exercises/{ex_id}/content") or {}
+        c = cache[ex_id]
+        if not c:
+            return
+        if c.get("video_url") and c.get("media_type") == "video":
+            st.video(c["video_url"])
+        elif c.get("image_url"):
+            st.image(c["image_url"], width=320, caption=c.get("media_credit"))
+        if c.get("description"):
+            st.markdown(c["description"])
+        if c.get("start_position"):
+            st.markdown(f"**Posición inicial:** {c['start_position']}")
+        if c.get("instructions"):
+            ui.html(ui.steps_list(c["instructions"]))
+        if c.get("common_mistakes"):
+            st.markdown("**Errores frecuentes**" if c.get("has_detailed_guide") else "**Consejos generales**")
+            st.markdown("\n".join(f"- {m}" for m in c["common_mistakes"]))
+        if not c.get("has_detailed_guide"):
+            st.caption("Aún no hay una guía detallada de este ejercicio; si tienes dudas de técnica, pide ayuda a un entrenador.")
+
+
+def plan_state(refresh: bool = False) -> dict:
+    if refresh or "_plan" not in st.session_state:
+        st.session_state["_plan"] = api.get("/plan") or {"has_plan": False}
+    return st.session_state["_plan"]
+
+
+def add_planned(items: list[dict]) -> None:
+    """Callback: añade ejercicios del plan a la sesión (se conservan aunque cambies los filtros)."""
+    cache = st.session_state.setdefault("_ex_cache", {})
+    for it in items:
+        cache.setdefault(it["exercise_id"], {"id": it["exercise_id"], "name": it["exercise"], "primary_muscle": it["primary_muscle"],
+                                             "secondary_muscles": [], "equipment": it.get("equipment", []), "kind": "strength"})
+    cur = st.session_state.get("sel_strength", [])
+    st.session_state["sel_strength"] = list(dict.fromkeys(cur + [it["exercise_id"] for it in items]))
+    targets = st.session_state.setdefault("_plan_targets", {})
+    for it in items:
+        targets[it["exercise_id"]] = (it["sets"], it["reps_min"], it["reps_max"])
+
+
+def replace_planned(old_id: int, new: dict, item: dict) -> None:
+    """Callback: sustituye un ejercicio recomendado por otro solo para esta sesión."""
+    cache = st.session_state.setdefault("_ex_cache", {})
+    cache[new["id"]] = new
+    cur = [i for i in st.session_state.get("sel_strength", []) if i != old_id]
+    st.session_state["sel_strength"] = list(dict.fromkeys(cur + [new["id"]]))
+    st.session_state.setdefault("_plan_targets", {})[new["id"]] = (item["sets"], item["reps_min"], item["reps_max"])
+
+
+def alternatives(item: dict) -> list[dict]:
+    cache = st.session_state.setdefault("_alts", {})
+    m = item["primary_muscle"]
+    if m not in cache:
+        cache[m] = api.get("/exercises", kind="strength", muscles=m) or []
+    return [e for e in cache[m] if e["id"] != item["exercise_id"]]
+
+
+def recommended_section() -> None:
+    """«Ejercicios recomendados para hoy»: día del plan, añadir todos o uno a uno, sustituir y ver cómo se hace."""
+    plan = plan_state()
+    if not plan.get("has_plan"):
+        with st.container(border=True):
+            st.markdown("**📋 Aún no tienes un plan estructurado**")
+            st.caption("Lo crearemos con ejercicios reales de la lista, según tus días disponibles, tu objetivo y tu experiencia.")
+            if st.button("✨ Crear mi plan", type="primary", key="plan_create_reg"):
+                with st.spinner("Preparando tu plan…"):
+                    if api.post("/plan/generate", timeout=api.LONG_TIMEOUT):
+                        plan_state(refresh=True)
+                        st.rerun()
+        return
+    days_ = plan["plan"]["days"]
+    ids = [d["id"] for d in days_]
+    with st.container(border=True):
+        top = st.columns([3, 2])
+        top[0].markdown("**⭐ Ejercicios recomendados para hoy**")
+        day_id = top[1].selectbox("Día del plan", ids, index=ids.index(plan["suggested_day_id"]) if plan.get("suggested_day_id") in ids else 0,
+                                  format_func=lambda i: next(d["label"] for d in days_ if d["id"] == i), label_visibility="collapsed", key="plan_day_sel")
+        day_ = next(d for d in days_ if d["id"] == day_id)
+        st.button("➕ Añadir todos", key="plan_add_all", on_click=add_planned, args=(day_["exercises"],), type="primary")
+        sel = set(st.session_state.get("sel_strength", []))
+        for it in day_["exercises"]:
+            added = it["exercise_id"] in sel
+            c = st.columns([5, 1.2, 1])
+            c[0].markdown(f"{'✅ ' if added else ''}**{it['exercise']}**  \n<span class='sf-muted'>{it['sets']} series × {it['reps_min']}-{it['reps_max']} reps"
+                          + (f" · descanso {it['rest_s']} s" if it.get("rest_s") else "") + "</span>", unsafe_allow_html=True)
+            c[1].button("Añadir" if not added else "Añadido", key=f"plan_add_{it['id']}", on_click=add_planned, args=([it],), disabled=added, width="stretch")
+            with c[2].popover("🔁", help="Sustituir por otro ejercicio del mismo músculo"):
+                alts = alternatives(it)
+                pick = st.selectbox("Sustituir por", [a["id"] for a in alts], format_func=lambda i, alts=alts: next(a["name"] for a in alts if a["id"] == i), key=f"alt_{it['id']}")
+                st.button("Usar este", key=f"alt_ok_{it['id']}", on_click=replace_planned, args=(it["exercise_id"], next(a for a in alts if a["id"] == pick), it))
+            if it.get("notes"):
+                st.caption(it["notes"])
+        st.caption("Puedes añadir más ejercicios de la lista o registrar una sesión distinta: el plan es una guía, no una obligación.")
+
+
 # ═════════════════════════ Registrar sesión ═════════════════════════
 def last_sets(ex_id: int) -> list[dict]:
     cache = st.session_state.setdefault("_hist", {})
@@ -54,26 +168,67 @@ def last_sets(ex_id: int) -> list[dict]:
     return cache[ex_id]
 
 
+def last_card(ex_id: int) -> dict:
+    cache = st.session_state.setdefault("_last", {})
+    if ex_id not in cache:
+        cache[ex_id] = api.get(f"/exercises/{ex_id}/last-session") or {"has_history": False}
+    return cache[ex_id]
+
+
+def yes_no(v) -> str:
+    return "—" if v is None else ("Sí" if v else "No")
+
+
+def last_session_card(card: dict) -> None:
+    """Tarjeta «Última sesión»: fecha, series, peso máximo, fallo y mejor peso histórico."""
+    body = f"<b>Última sesión</b> · {card['date']}"
+    chips = []
+    if card.get("max_weight_kg"):
+        chips.append(ui.chip(f"Peso máx. {card['max_weight_kg']:g} kg", "orange"))
+    chips.append(ui.chip(f"{card['total_reps']} reps en total"))
+    if card.get("any_failure") is not None:
+        chips.append(ui.chip("Llegaste al fallo" if card["any_failure"] else "Sin llegar al fallo", "green"))
+    if card.get("best_weight_kg"):
+        chips.append(ui.chip(f"Mejor peso: {card['best_weight_kg']:g} kg ({card['best_weight_date']})", "blue"))
+    ui.html(body + "<br>" + "".join(chips))
+    df = pd.DataFrame([{"Serie": s["set_number"], "Reps": s["reps"],
+                        "Peso": f"{s['weight_kg']:g} kg" if s.get("weight_kg") else "Peso corporal",
+                        "Fallo": yes_no(s.get("reached_failure"))} for s in card["sets"]])
+    st.dataframe(df, hide_index=True, width="stretch")
+
+
 def exercise_block(ex: dict) -> pd.DataFrame:
-    """Tabla editable de series de un ejercicio, precargada con la última vez que lo hiciste."""
+    """Tabla editable de series de un ejercicio, precargada con la última vez que lo hiciste (el fallo NO se precarga)."""
     hist = last_sets(ex["id"])
+    card = last_card(ex["id"])
     with st.container(border=True):
         ui.html(f"<b>{escape(ex['name'])}</b><br>{muscle_chips(ex)}")
-        if hist:
-            st.caption(f"Última vez ({hist[0]['date']}): {fmt_sets(hist[0]['sets'])}")
+        target = st.session_state.get("_plan_targets", {}).get(ex["id"])
+        if target:
+            st.caption(f"🎯 Objetivo del plan: {target[0]} series × {target[1]}-{target[2]} repeticiones")
+        guide(ex["id"], "blk")
+        if card.get("has_history"):
+            last_session_card(card)
         key0 = f"df0_{ex['id']}"
         if key0 not in st.session_state:
-            rows = ([{"Reps": s["reps"], "Peso (kg)": s["weight_kg"], "RPE": s["rpe"]} for s in hist[0]["sets"]]
-                    if hist else [{"Reps": 10, "Peso (kg)": None, "RPE": None} for _ in range(3)])
+            rows = ([{"Reps": s["reps"], "Peso (kg)": s["weight_kg"], "Fallo": False} for s in hist[0]["sets"]]
+                    if hist else [{"Reps": target[2] if target else 10, "Peso (kg)": None, "Fallo": False} for _ in range(target[0] if target else 3)])
             st.session_state[key0] = pd.DataFrame(rows)
-        return st.data_editor(
+        df = st.data_editor(
             st.session_state[key0], num_rows="dynamic", hide_index=True, key=f"ed_{ex['id']}", width="stretch",
             column_config={
                 "Reps": st.column_config.NumberColumn("Reps", min_value=1, max_value=200, step=1, format="%d"),
                 "Peso (kg)": st.column_config.NumberColumn("Peso (kg)", min_value=0.0, max_value=1000.0, step=0.5,
                                                            help="Vacío = peso corporal"),
-                "RPE": st.column_config.NumberColumn("RPE", min_value=1.0, max_value=10.0, step=0.5,
-                                                     help="Esfuerzo percibido 1-10 (opcional)")})
+                "Fallo": st.column_config.CheckboxColumn("¿Fallo?", default=False,
+                                                         help="Marca si has llegado al fallo muscular en esta serie")})
+        # Comparación con la última serie de la última sesión (solo informativa: tú decides qué registrar)
+        done = df[df["Reps"].notna()] if len(df) else df
+        if card.get("has_history") and len(done) and card["sets"][-1].get("weight_kg") and pd.notna(done.iloc[-1]["Peso (kg)"]):
+            before, now = card["sets"][-1]["weight_kg"], float(done.iloc[-1]["Peso (kg)"])
+            if now != before:
+                st.caption(f"La última vez usaste {before:g} kg en tu última serie. Hoy estás registrando {now:g} kg.")
+        return df
 
 
 def cardio_inputs(cat: str, dur: int) -> dict:
@@ -139,7 +294,7 @@ def sets_from(ex_id: int, df: pd.DataFrame) -> list[dict]:
         if pd.notna(r["Reps"]) and r["Reps"] >= 1:
             out.append({"exercise_id": ex_id, "reps": int(r["Reps"]),
                         "weight_kg": float(r["Peso (kg)"]) if pd.notna(r["Peso (kg)"]) and r["Peso (kg)"] > 0 else None,
-                        "rpe": float(r["RPE"]) if pd.notna(r["RPE"]) else None})
+                        "reached_failure": bool(r["Fallo"]) if pd.notna(r["Fallo"]) else None})
     return out
 
 
@@ -161,6 +316,7 @@ with tab_reg:
         if worked:
             body += f"<div style='margin-top:6px'>Músculos trabajados: {ui.chips(worked, 'green')}</div>"
         ui.card(body)
+        show_feedback(saved.get("feedback") or [])
 
     # ── Nivel 1: tipo de sesión ──
     type_key = st.segmented_control("Tipo de sesión", list(TYPES), default="strength", key="w_type",
@@ -189,6 +345,8 @@ with tab_reg:
         metrics = {"avg_hr_bpm": int(hr) if hr >= 30 else None}
         st.caption("La IA estima las calorías con el deporte y la duración. (No se enciende el mapa muscular: no hay un perfil muscular fiable para cada deporte.)")
     else:   # fuerza / cuerpo entero / estiramientos
+        if cat == "strength":
+            recommended_section()
         chosen_muscles = muscle_picker(cat) if cat in ("strength", "stretching") else []
         chosen_equip = equipment_picker(cat) if cat in ("strength", "full_body") else []
         text = st.text_input("🔎 Buscar ejercicio", key=f"q_{cat}", placeholder="p. ej. sentadilla, curl, estiramiento…")
@@ -255,6 +413,9 @@ with tab_reg:
         if res:
             st.session_state.update(saved_workout=res, reset_form=True)
             st.session_state.pop("_hist", None)
+            st.session_state.pop("_last", None)
+            st.session_state.pop("_plan_targets", None)
+            plan_state(refresh=True)        # la sesión guardada hace avanzar el día sugerido
             st.rerun()
 
 # ═════════════════════════ Historial ═════════════════════════
@@ -285,8 +446,14 @@ with tab_hist:
                 st.write(w["notes"])
             for ex in w["exercises"]:
                 st.markdown(f"**{ex['exercise']}** · {MUSCLES.get(ex['primary_muscle'], '')}")
-                df = pd.DataFrame(ex["sets"]).rename(columns={"set_number": "Serie", "reps": "Reps", "weight_kg": "Peso (kg)", "rpe": "RPE"})
+                df = pd.DataFrame(ex["sets"]).rename(columns={"set_number": "Serie", "reps": "Reps", "weight_kg": "Peso (kg)",
+                                                              "reached_failure": "Fallo", "rpe": "RPE (antiguo)"})
+                df["Fallo"] = df["Fallo"].map(yes_no)
+                if df["RPE (antiguo)"].isna().all():      # el RPE solo se muestra en sesiones antiguas que lo tienen
+                    df = df.drop(columns="RPE (antiguo)")
                 st.dataframe(df, hide_index=True, width="stretch")
+            if w["exercises"] and st.toggle("💡 Ver recomendaciones de esta sesión", key=f"fb_{w['id']}"):
+                show_feedback((api.get(f"/workouts/{w['id']}") or {}).get("feedback") or [])
             b1, b2, _ = st.columns([2, 1, 4])
             if b1.button("🔄 Recalcular calorías (IA)", key=f"re_{w['id']}"):
                 with st.spinner("Estimando…"):
@@ -393,6 +560,54 @@ with tab_muscles:
             with st.expander("Detalle por músculo"):
                 st.dataframe(df, hide_index=True, width="stretch")
 
+
+def plan_ui(plan: dict, targets: dict) -> None:
+    """Plan estructurado: días con ejercicios editables (series, repeticiones, descanso) + plan antiguo en texto."""
+    if not plan.get("has_plan"):
+        ui.empty("📋", "Todavía no tienes un plan estructurado", "Se crea con ejercicios reales de la lista a partir de tu perfil.")
+        if st.button("✨ Crear mi plan", type="primary", key="plan_create_tab"):
+            with st.spinner("Preparando tu plan…"):
+                if api.post("/plan/generate", timeout=api.LONG_TIMEOUT):
+                    st.rerun()
+    else:
+        p = plan["plan"]
+        origin = {"llm": "propuesto por la IA", "auto": "generado por reglas", "manual": "editado por ti"}.get(p["source"], "")
+        ui.section(p["name"], f"Plan {origin}. Edita series, repeticiones y descansos; los ejercicios siempre son de la lista.", "📋")
+        for d in p["days"]:
+            star = " ⭐ (siguiente)" if d["id"] == plan.get("suggested_day_id") else ""
+            with st.expander(f"{d['label']}{star}", expanded=d["id"] == plan.get("suggested_day_id")):
+                ui.html(ui.chips([MUSCLES.get(m, m) for m in d["muscle_focus"]], "orange"))
+                df0 = pd.DataFrame([{"ID": e["exercise_id"], "Ejercicio": e["exercise"], "Series": e["sets"], "Reps mín": e["reps_min"],
+                                     "Reps máx": e["reps_max"], "Descanso (s)": e["rest_s"] or 0} for e in d["exercises"]])
+                df = st.data_editor(df0, hide_index=True, num_rows="dynamic", key=f"pe_{d['id']}_{len(d['exercises'])}", width="stretch", disabled=["Ejercicio"],
+                                    column_config={"ID": None, "Series": st.column_config.NumberColumn(min_value=1, max_value=8, step=1),
+                                                   "Reps mín": st.column_config.NumberColumn(min_value=1, max_value=50, step=1),
+                                                   "Reps máx": st.column_config.NumberColumn(min_value=1, max_value=50, step=1),
+                                                   "Descanso (s)": st.column_config.NumberColumn(min_value=0, max_value=600, step=15)})
+                for e in d["exercises"]:
+                    guide(e["exercise_id"], f"pl{d['id']}")
+                add = st.text_input("Añadir ejercicio al día", key=f"pa_q_{d['id']}", placeholder="Busca por nombre…")
+                found = (api.get("/exercises", kind="strength", q=add.strip()) or [])[:15] if add.strip() else []
+                new_id = st.selectbox("Resultado", [None] + [f["id"] for f in found], key=f"pa_s_{d['id']}",
+                                      format_func=lambda i, found=found: "—" if i is None else next(f["name"] for f in found if f["id"] == i), disabled=not found)
+                b = st.columns([1, 1, 3])
+                if b[0].button("💾 Guardar día", key=f"ps_{d['id']}", type="primary"):
+                    rows = [r for r in df.itertuples() if pd.notna(r.ID)]
+                    exs = [{"exercise_id": int(r.ID), "sets": int(r.Series), "reps_min": int(r._4), "reps_max": int(r._5), "rest_s": int(r._6) or None} for r in rows]
+                    if new_id and new_id not in [x["exercise_id"] for x in exs]:
+                        exs.append({"exercise_id": new_id, "sets": 3, "reps_min": 8, "reps_max": 12, "rest_s": 90})
+                    if api.put(f"/plan/days/{d['id']}", {"exercises": exs}):
+                        st.toast("Día guardado", icon="💾")
+                        st.rerun()
+        if st.button("🔄 Regenerar plan", key="plan_regen", help="Crea un plan nuevo; el anterior se conserva en el histórico"):
+            with st.spinner("Preparando tu plan…"):
+                if api.post("/plan/generate", timeout=api.LONG_TIMEOUT):
+                    st.rerun()
+    if plan.get("legacy_markdown") or targets.get("training_plan"):
+        with st.expander("📝 Texto del plan original"):
+            st.markdown(plan.get("legacy_markdown") or targets.get("training_plan"))
+
+
 # ═════════════════════════ Plan y peso ═════════════════════════
 with tab_plan:
     targets = api.get("/targets") or {"workouts_per_week": 3}
@@ -402,10 +617,7 @@ with tab_plan:
     goal = max(targets["workouts_per_week"], 1)
     st.metric("Sesiones esta semana", f"{len(this_week)} / {targets['workouts_per_week']}")
     st.progress(min(len(this_week) / goal, 1.0))
-    if targets.get("training_plan"):
-        with st.container(border=True):
-            st.markdown("**Plan recomendado" + (" por la IA" if targets.get("source") == "llm" else "") + "**")
-            st.markdown(targets["training_plan"])
+    plan_ui(plan_state(refresh=True), targets)
     st.subheader("Peso corporal")
     st.caption("Se usa para estimar las calorías quemadas y tus objetivos.")
     with st.form("weight", clear_on_submit=True):

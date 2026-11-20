@@ -1,4 +1,4 @@
-"""Búsqueda híbrida: primero Postgres (instantánea), y Open Food Facts solo si hace falta."""
+"""Búsqueda híbrida: primero Postgres (instantánea, con el catálogo cargado por ingesta batch), y Open Food Facts solo si hace falta."""
 import logging
 
 from sqlalchemy.orm import Session

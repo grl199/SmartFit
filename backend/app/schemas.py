@@ -1,7 +1,10 @@
+import datetime as dt
 from datetime import date, datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
+
+from .clock import age_on
 
 Meal = Literal["breakfast", "lunch", "snack", "dinner"]
 
@@ -45,6 +48,11 @@ class FoodOut(FoodBase):
     user_id: int | None = None           # None = catálogo compartido (OFF / comunidad); si no, es tuyo
     share_status: str = "private"        # private | pending | verified (solo alimentos propios)
     confirmed_by: int | None = None      # usuarios que confirmaron un producto de la comunidad
+    # Procedencia del dato (fuente, fiabilidad y licencia)
+    external_id: str | None = None
+    confidence: str | None = None        # high | medium | low
+    license: str | None = None
+    attribution: str | None = None
 
 
 class BarcodeOut(BaseModel):
@@ -55,11 +63,43 @@ class BarcodeOut(BaseModel):
     brand: str | None = None
 
 
+class FoodMineOut(FoodOut):
+    times_used: int = 0                  # veces que lo has registrado en el diario
+
+
+class FoodCopyIn(BaseModel):
+    """Copia personal de cualquier alimento visible. Lo que no indiques se hereda del original."""
+    name: str | None = Field(None, min_length=1, max_length=300)
+    brand: str | None = None
+    serving_g: float | None = Field(None, gt=0, le=5000)
+    kcal: float | None = Field(None, ge=0, le=950)
+    protein_g: float | None = Field(None, ge=0, le=100)
+    carbs_g: float | None = Field(None, ge=0, le=100)
+    sugars_g: float | None = Field(None, ge=0, le=100)
+    fat_g: float | None = Field(None, ge=0, le=100)
+    sat_fat_g: float | None = Field(None, ge=0, le=100)
+    fiber_g: float | None = Field(None, ge=0, le=100)
+    sodium_mg: float | None = Field(None, ge=0)
+
+
 class LogCreate(BaseModel):
+    """Cantidad en gramos, o en unidades de una ración del alimento (`serving_id` + `quantity`): 2 cucharadas, 3 lonchas...
+    Internamente todo se guarda y calcula en gramos."""
     food_id: int
-    grams: float = Field(gt=0, le=5000)
+    grams: float | None = Field(None, gt=0, le=5000)
+    serving_id: int | None = None
+    quantity: float | None = Field(None, gt=0, le=1000)
     meal: Meal | None = None
     log_date: date | None = None
+
+    @model_validator(mode="after")
+    def _one_way(self):
+        if self.serving_id is not None:
+            if self.quantity is None:
+                raise ValueError("Indica la cantidad de unidades")
+        elif self.grams is None:
+            raise ValueError("Indica los gramos o una unidad (serving_id y quantity)")
+        return self
 
 
 class LogOut(BaseModel):
@@ -91,11 +131,6 @@ ExperienceCode = Literal["beginner", "intermediate", "advanced"]
 MIN_AGE = 18
 
 
-def _age(birth: date) -> int:
-    t = date.today()
-    return t.year - birth.year - ((t.month, t.day) < (birth.month, birth.day))
-
-
 class ProfileIO(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     sex: SexCode | None = None
@@ -111,7 +146,7 @@ class ProfileIO(BaseModel):
     @field_validator("birth_date")
     @classmethod
     def _adult(cls, v: date | None):
-        if v is not None and not (MIN_AGE <= _age(v) <= 100):
+        if v is not None and not (MIN_AGE <= age_on(v) <= 100):
             raise ValueError(f"La app está pensada para personas de {MIN_AGE} a 100 años")
         return v
 
@@ -137,6 +172,8 @@ class TargetIO(BaseModel):
     fat_g: float = Field(ge=0, le=500)
     fiber_g: float = Field(ge=0, le=200)
     workouts_per_week: int = Field(ge=0, le=14)
+    water_ml: int | None = Field(None, ge=500, le=10000, description="Objetivo diario de agua (ml). Omitido = no cambia")
+    steps_goal: int | None = Field(None, ge=1000, le=50000, description="Objetivo diario de pasos. Omitido = no cambia")
 
 
 class TargetOut(TargetIO):
@@ -216,7 +253,8 @@ class SetIn(BaseModel):
     exercise_id: int
     reps: int = Field(ge=1, le=200)
     weight_kg: float | None = Field(None, ge=0, le=1000)
-    rpe: float | None = Field(None, ge=1, le=10)
+    reached_failure: bool | None = Field(None, description="¿Llegó al fallo muscular? None = sin indicar")
+    rpe: float | None = Field(None, ge=1, le=10, description="OBSOLETO: se acepta por compatibilidad, la interfaz ya no lo usa")
 
 
 class SetOut(BaseModel):
@@ -226,6 +264,7 @@ class SetOut(BaseModel):
     set_number: int
     reps: int
     weight_kg: float | None = None
+    reached_failure: bool | None = None
     rpe: float | None = None
 
 
@@ -281,8 +320,41 @@ class WorkoutExerciseOut(BaseModel):
     sets: list[dict]
 
 
+class ExerciseFeedbackOut(BaseModel):
+    exercise_id: int
+    exercise: str
+    status: Literal["personal_record", "progress", "maintain", "regression", "first_time", "insufficient_data"]
+    message: str
+    suggested_weight_kg: float | None = None
+    personal_record: bool = False
+    compared_with: date | None = None      # fecha de la sesión anterior usada como referencia
+
+
 class WorkoutDetail(WorkoutOut):
     exercises: list[WorkoutExerciseOut] = []
+    feedback: list[ExerciseFeedbackOut] = []
+
+
+class LastSessionOut(BaseModel):
+    """Resumen de la última vez que se hizo un ejercicio y su mejor marca histórica."""
+    exercise_id: int
+    has_history: bool
+    date: dt.date | None = None            # (dt.date: el campo se llama «date» y sombrearía el tipo)
+    sets: list[dict] = []
+    max_weight_kg: float | None = None
+    total_reps: int = 0
+    any_failure: bool | None = None        # None si ninguna serie tiene el dato
+    best_weight_kg: float | None = None    # mejor peso histórico
+    best_weight_date: dt.date | None = None
+
+
+class EnergyOut(BaseModel):
+    """Gasto energético calculado por código (sin IA)."""
+    age: int | None = None
+    weight_kg: float | None = None
+    bmr: float | None = None
+    tdee: float | None = None
+    missing: list[str] = []
 
 
 class WeightIn(BaseModel):

@@ -10,9 +10,10 @@ from ..db import get_db
 from ..deps import current_user_id
 from ..models import BodyMetric, Exercise, Workout, WorkoutSet
 from ..schemas import (
-    ExerciseIn, ExerciseOut, WeightIn, WeightOut, WorkoutDetail, WorkoutExerciseOut, WorkoutIn,
+    ExerciseFeedbackOut, ExerciseIn, ExerciseOut, LastSessionOut, WeightIn, WeightOut, WorkoutDetail, WorkoutExerciseOut, WorkoutIn,
 )
 from ..services import training as tsvc
+from ..services import workout_feedback as fb
 from ..services.calories import CaloriesNotEstimable, estimate_workout_calories
 from ..services.nutrition import today_local
 from ..services.rag import index_day_task
@@ -22,7 +23,16 @@ router = APIRouter(tags=["training"])
 
 
 # ───────────── helpers ─────────────
-def _details(db: Session, workouts: list[Workout]) -> list[WorkoutDetail]:
+def _safe_feedback(db: Session, w: Workout) -> list[ExerciseFeedbackOut]:
+    """El feedback nunca debe impedir guardar ni consultar una sesión."""
+    try:
+        return [ExerciseFeedbackOut(**f) for f in fb.workout_feedback(db, w)]
+    except Exception:  # noqa: BLE001
+        log.exception("Fallo calculando el feedback de la sesión %s", w.id)
+        return []
+
+
+def _details(db: Session, workouts: list[Workout], with_feedback: bool = False) -> list[WorkoutDetail]:
     by_workout: dict[int, list[WorkoutSet]] = defaultdict(list)
     if workouts:
         for s in db.scalars(select(WorkoutSet).where(WorkoutSet.workout_id.in_([w.id for w in workouts])).order_by(WorkoutSet.id)):
@@ -31,6 +41,8 @@ def _details(db: Session, workouts: list[Workout]) -> list[WorkoutDetail]:
     for w in workouts:
         d = WorkoutDetail.model_validate(w)
         d.exercises = [WorkoutExerciseOut(**g) for g in tsvc.workout_sets_summary(by_workout[w.id])]
+        if with_feedback:
+            d.feedback = _safe_feedback(db, w)
         out.append(d)
     return out
 
@@ -99,6 +111,13 @@ def exercise_history(exercise_id: int, limit: int = Query(10, ge=1, le=50),
     return tsvc.exercise_history(db, uid, exercise_id, limit)
 
 
+@router.get("/exercises/{exercise_id}/last-session", response_model=LastSessionOut)
+def exercise_last_session(exercise_id: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
+    """Tarjeta «Última sesión» del ejercicio: series, peso máximo, fallo y mejor peso histórico."""
+    _visible_exercise(db, exercise_id, uid)
+    return fb.last_session(db, uid, exercise_id)
+
+
 @router.get("/exercises/{exercise_id}/progress")
 def exercise_progress(exercise_id: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
     _visible_exercise(db, exercise_id, uid)
@@ -123,12 +142,13 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
     for s in body.sets:
         counters[s.exercise_id] += 1
         db.add(WorkoutSet(user_id=uid, workout_id=w.id, exercise_id=s.exercise_id, set_number=counters[s.exercise_id],
-                          reps=s.reps, weight_kg=s.weight_kg or None, rpe=s.rpe))
+                          reps=s.reps, weight_kg=s.weight_kg or None, rpe=s.rpe,
+                          reached_failure=s.reached_failure))
     db.commit()
     if body.kcal_burned is None and body.estimate_calories:
         _try_estimate(db, w)
     bg.add_task(index_day_task, uid, w.performed_on)
-    return _details(db, [w])[0]
+    return _details(db, [w], with_feedback=True)[0]
 
 
 @router.get("/workouts", response_model=list[WorkoutDetail])
@@ -141,7 +161,7 @@ def list_workouts(days: int = Query(30, ge=1, le=365), db: Session = Depends(get
 
 @router.get("/workouts/{wid}", response_model=WorkoutDetail)
 def get_workout(wid: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    return _details(db, [_own_workout(db, wid, uid)])[0]
+    return _details(db, [_own_workout(db, wid, uid)], with_feedback=True)[0]
 
 
 @router.post("/workouts/{wid}/estimate-calories", response_model=WorkoutDetail)

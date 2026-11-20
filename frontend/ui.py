@@ -13,30 +13,61 @@ MEAL_ICONS = {"breakfast": "🍳", "lunch": "🍽️", "snack": "🍎", "dinner"
 
 CSS = """
 <style>
-.block-container {padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1100px;}
-h1 {font-weight: 750; letter-spacing: -.02em;}
-.sf-card {border: 1px solid rgba(128,128,128,.28); border-radius: 14px; padding: 14px 16px;
-          background: rgba(128,128,128,.06); margin-bottom: 10px;}
-.sf-card h4 {margin: 0 0 6px 0; font-size: 1rem;}
+:root {--sf-radius: 18px; --sf-line: rgba(128,128,128,.24); --sf-soft: rgba(128,128,128,.07);}
+.block-container {padding-top: 1.6rem; padding-bottom: 4rem; max-width: 1100px;}
+h1 {font-weight: 780; letter-spacing: -.02em; margin-bottom: .2rem;}
+h2, h3 {letter-spacing: -.01em;}
+/* Tarjetas */
+.sf-card {border: 1px solid var(--sf-line); border-radius: var(--sf-radius); padding: 16px 18px; background: var(--sf-soft);
+          margin-bottom: 12px; box-shadow: 0 1px 2px rgba(0,0,0,.04);}
+.sf-card h4 {margin: 0 0 6px 0; font-size: 1.02rem;}
+div[data-testid="stVerticalBlockBorderWrapper"] {border-radius: var(--sf-radius) !important;}
+/* Cabecera de página */
+.sf-hero {border-radius: 22px; padding: 20px 22px; margin: 0 0 16px 0; color: inherit;
+          background: linear-gradient(135deg, rgba(22,163,74,.18), rgba(37,99,235,.16)); border: 1px solid var(--sf-line);}
+.sf-hero .t {font-size: 1.55rem; font-weight: 780; letter-spacing: -.02em; line-height: 1.2;}
+.sf-hero .s {opacity: .75; margin-top: 4px; font-size: .98rem;}
+/* Secciones y estados vacíos */
+.sf-section {margin: 22px 0 6px 0; font-size: 1.15rem; font-weight: 720; letter-spacing: -.01em;}
+.sf-section-sub {opacity: .65; font-size: .88rem; margin: 0 0 8px 0;}
+.sf-empty {border: 1.5px dashed var(--sf-line); border-radius: var(--sf-radius); padding: 22px 16px; text-align: center; opacity: .85;}
+.sf-empty .i {font-size: 2rem;} .sf-empty .t {font-weight: 650; margin-top: 4px;} .sf-empty .d {opacity: .7; font-size: .9rem;}
+/* Texto, chips, barras */
 .sf-muted {opacity: .65; font-size: .85rem;}
-.sf-chip {display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: .78rem; margin: 2px 4px 2px 0;
+.sf-chip {display: inline-block; padding: 3px 11px; border-radius: 999px; font-size: .8rem; margin: 2px 4px 2px 0;
           background: rgba(128,128,128,.16); white-space: nowrap;}
 .sf-chip.green {background: rgba(22,163,74,.18);} .sf-chip.orange {background: rgba(249,115,22,.2);}
 .sf-chip.red {background: rgba(220,38,38,.18);} .sf-chip.blue {background: rgba(37,99,235,.18);}
 .sf-chip.purple {background: rgba(124,58,237,.18);}
-.sf-bar {height: 10px; border-radius: 6px; background: rgba(128,128,128,.22); overflow: hidden; margin: 4px 0 10px 0;}
-.sf-bar > span {display: block; height: 100%; border-radius: 6px;}
-.sf-row {display: flex; justify-content: space-between; font-size: .9rem;}
+.sf-bar {height: 12px; border-radius: 8px; background: rgba(128,128,128,.22); overflow: hidden; margin: 5px 0 10px 0;}
+.sf-bar > span {display: block; height: 100%; border-radius: 8px; transition: width .4s;}
+.sf-row {display: flex; justify-content: space-between; align-items: center; font-size: .92rem;}
 .sf-ns {display: inline-flex; gap: 2px; align-items: center; vertical-align: middle;}
 .sf-ns b {display: inline-block; width: 20px; height: 20px; line-height: 20px; text-align: center; font-size: .72rem;
           color: #fff; border-radius: 4px; opacity: .35;}
 .sf-ns b.on {opacity: 1; width: 26px; height: 26px; line-height: 26px; font-size: .95rem; border-radius: 6px;
              box-shadow: 0 1px 4px rgba(0,0,0,.35);}
-.sf-img {width: 84px; height: 84px; object-fit: contain; border-radius: 10px; background: #fff; border: 1px solid rgba(128,128,128,.25);}
+.sf-img {width: 84px; height: 84px; object-fit: contain; border-radius: 12px; background: #fff; border: 1px solid var(--sf-line);}
 .sf-food {display: flex; gap: 14px; align-items: center;}
-.sf-big {font-size: 1.35rem; font-weight: 700;}
+.sf-big {font-size: 1.35rem; font-weight: 720;}
+/* Indicadores compactos (agua, pasos, ánimo...) */
+.sf-meter {border: 1px solid var(--sf-line); border-radius: var(--sf-radius); padding: 14px 16px; background: var(--sf-soft);}
+.sf-meter .h {display: flex; justify-content: space-between; align-items: baseline; font-weight: 650;}
+.sf-meter .v {font-size: 1.45rem; font-weight: 760; margin: 2px 0 0 0;}
+.sf-step {display: flex; gap: 10px; align-items: flex-start; padding: 6px 0;}
+.sf-step .n {flex: 0 0 26px; height: 26px; border-radius: 50%; background: rgba(22,163,74,.2); text-align: center; line-height: 26px; font-weight: 700; font-size: .85rem;}
+.sf-good {border-left: 4px solid #16a34a; padding: 6px 12px; margin: 6px 0; background: rgba(22,163,74,.08); border-radius: 0 12px 12px 0;}
+.sf-todo {border-left: 4px solid #f97316; padding: 6px 12px; margin: 6px 0; background: rgba(249,115,22,.08); border-radius: 0 12px 12px 0;}
+/* Controles: más grandes y táctiles */
+button[kind="secondary"], button[kind="primary"] {border-radius: 12px; min-height: 2.6rem;}
+button[kind="primary"] {font-weight: 650;}
 div[data-testid="stMetricValue"] {font-size: 1.5rem;}
-button[kind="secondary"] {border-radius: 999px;}
+button[role="tab"] {font-size: 1rem; padding-top: .6rem; padding-bottom: .6rem;}
+@media (max-width: 640px) {
+  .block-container {padding: 1rem .7rem 4rem;}
+  .sf-hero {padding: 14px 16px;} .sf-hero .t {font-size: 1.25rem;}
+  h1 {font-size: 1.6rem;}
+}
 </style>
 """
 
@@ -198,3 +229,43 @@ def food_header(food: dict) -> str:
             f'<div class="sf-big">{escape(food["name"])}</div><div class="sf-muted">{sub}</div>{generic}'
             f'<div>{code}{chip("🌐 Open Food Facts") if food.get("source") == "openfoodfacts" else ""}</div>'
             f'<div style="margin-top:4px">{badges}</div><div>{allergens}</div>{original}</div></div>')
+
+
+# ───────── Componentes de página (v2) ─────────
+MOODS = {1: ("😞", "Muy mal"), 2: ("🙁", "Mal"), 3: ("😐", "Normal"), 4: ("🙂", "Bien"), 5: ("😄", "Muy bien")}
+
+
+def hero(title: str, subtitle: str = "") -> None:
+    """Cabecera amable de página con degradado suave (funciona en claro y oscuro)."""
+    sub = f'<div class="s">{escape(subtitle)}</div>' if subtitle else ""
+    html(f'<div class="sf-hero"><div class="t">{escape(title)}</div>{sub}</div>')
+
+
+def section(title: str, caption: str = "", icon: str = "") -> None:
+    html(f'<div class="sf-section">{escape((icon + " ") if icon else "")}{escape(title)}</div>'
+         + (f'<div class="sf-section-sub">{escape(caption)}</div>' if caption else ""))
+
+
+def empty(icon: str, title: str, text: str = "") -> None:
+    """Estado vacío con llamada a la acción (en lugar de un aviso seco)."""
+    html(f'<div class="sf-empty"><div class="i">{icon}</div><div class="t">{escape(title)}</div>'
+         + (f'<div class="d">{escape(text)}</div>' if text else "") + "</div>")
+
+
+def meter(icon: str, label: str, value: str, pct: float | None, color: str = GREEN, sub: str = "") -> str:
+    """Indicador compacto con barra (agua, pasos...). Devuelve HTML."""
+    bar = (f'<div class="sf-bar"><span style="width:{min(max(pct, 0), 100):.0f}%; background:{color}"></span></div>' if pct is not None else "")
+    return (f'<div class="sf-meter"><div class="h"><span>{icon} {escape(label)}</span>'
+            f'<span class="sf-muted">{escape(sub)}</span></div><div class="v">{escape(value)}</div>{bar}</div>')
+
+
+def good(text: str) -> str:
+    return f'<div class="sf-good">✅ {escape(text)}</div>'
+
+
+def todo(text: str) -> str:
+    return f'<div class="sf-todo">🎯 {escape(text)}</div>'
+
+
+def steps_list(items: list[str]) -> str:
+    return "".join(f'<div class="sf-step"><div class="n">{i}</div><div>{escape(t)}</div></div>' for i, t in enumerate(items, 1))

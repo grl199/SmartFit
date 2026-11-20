@@ -9,7 +9,7 @@ import ui
 st.set_page_config(page_title="Progreso", page_icon="📈", layout="wide")
 ui.inject_css()
 auth.require_login()
-st.title("📈 Progreso")
+ui.hero("📈 Progreso", "Cómo evolucionas: nutrición, entrenamiento y hábitos.")
 
 days = st.segmented_control("Periodo", [7, 14, 30, 90], default=14, format_func=lambda d: f"{d} días", label_visibility="collapsed") or 14
 data = api.get("/dashboard/range", days=days)
@@ -66,8 +66,33 @@ if not wdf.empty:
 else:
     kpi(k[3], "Peso actual", "—", "Sin pesadas registradas", "#94a3b8")
 
+# ═════════════ Análisis automático ═════════════
+ui.section("Analiza mi progreso", f"Compara tus últimos {days} días con los {days} anteriores, con datos reales de tu diario.", "🔍")
+ai_text = st.toggle("Redactar con IA", value=False, key="ins_ai", help="Los números y logros se calculan siempre por código; la IA solo los redacta.")
+if st.button(f"🔍 Analizar mis últimos {days} días", type="primary", key="ins_go"):
+    with st.spinner("Analizando tus datos…"):
+        st.session_state["_insights"] = api.get("/progress/insights", days=days, ai=str(ai_text).lower())
+res = st.session_state.get("_insights")
+if res and res["period"]["days"] == days:
+    with st.container(border=True):
+        st.markdown(res["ai_summary"] or res["summary"])
+        if ai_text and not res["ai_summary"] and res["enough_data"]:
+            st.caption("La IA no está disponible ahora mismo: te muestro el resumen calculado.")
+        if res["achievements"]:
+            ui.html("".join(ui.good(a) for a in res["achievements"]))
+        if res["pending"]:
+            ui.html("".join(ui.todo(a) for a in res["pending"]))
+        tr, nu = res["training"], res["nutrition"]
+        if res["enough_data"]:
+            cmp = st.columns(4)
+            cmp[0].metric("Sesiones", tr["sessions"], delta=tr["sessions"] - tr["prev_sessions"], help="Frente al periodo anterior equivalente")
+            cmp[1].metric("Volumen (kg)", f"{tr['volume_kg']:,}".replace(",", "."), delta=tr["volume_kg"] - tr["prev_volume_kg"])
+            cmp[2].metric("Proteína media", f"{nu['avg_protein_g']} g" if nu["avg_protein_g"] is not None else "—")
+            cmp[3].metric("Días con registro", f"{nu['days_logged']} / {days}")
+        st.caption(res["note"])
+
 if not has_food and not workouts:
-    st.info("Todavía no hay datos en este periodo. Registra tus comidas y entrenamientos y aquí verás cómo evolucionas.")
+    ui.empty("📈", "Todavía no hay datos en este periodo", "Registra tus comidas y entrenamientos y aquí verás cómo evolucionas.")
     st.page_link("pages/1_Registrar.py", label="Registrar una comida", icon="➕")
     st.page_link("pages/4_Entrenamiento.py", label="Registrar un entrenamiento", icon="🏋️")
     st.stop()
@@ -115,3 +140,22 @@ if workouts:
     daily = wk.groupby("date", as_index=False)["kcal_burned"].sum()
     right.markdown("**Kcal quemadas por día**")
     right.altair_chart(charts.simple_bars(daily, "date", "kcal_burned", "kcal", ui.ORANGE), width="stretch")
+
+# ═════════════ Hábitos y bienestar ═════════════
+water, act, moods = api.get("/water/summary", days=days) or {}, api.get("/activity/summary", days=days) or {}, api.get("/checkins", days=days) or []
+if water.get("days_logged"):
+    box = section("💧 Agua", f"Objetivo diario: {water['goal_ml']} ml · cumplido {water['days_goal_met']} de {days} días.")
+    wdf = pd.DataFrame(water["days"]).assign(date=lambda x: pd.to_datetime(x["date"]))
+    box.altair_chart(charts.simple_bars(wdf, "date", "ml", "ml", ui.BLUE, goal=water["goal_ml"]), width="stretch")
+if act.get("days_recorded"):
+    box = section("👣 Pasos", f"Media {act['avg_steps']:,} pasos · objetivo {act['goal']:,}.".replace(",", "."))
+    adf = pd.DataFrame(act["days"]).dropna(subset=["steps"]).assign(date=lambda x: pd.to_datetime(x["date"]))
+    box.altair_chart(charts.simple_bars(adf, "date", "steps", "pasos", ui.PURPLE, goal=act["goal"]), width="stretch")
+if len(moods) >= 2:
+    box = section("🙂 Estado de ánimo y energía", "Se muestran como contexto junto al resto de hábitos; coincidir en el tiempo no implica causa y efecto.")
+    mdf = pd.DataFrame(moods).assign(date=lambda x: pd.to_datetime(x["date"])).drop(columns=["notes"])
+    long = mdf.melt(id_vars="date", value_vars=["mood", "energy_level"], var_name="Indicador", value_name="v").dropna()
+    long["Indicador"] = long["Indicador"].map({"mood": "Ánimo", "energy_level": "Energía"})
+    box.altair_chart(charts._finish(charts.alt.Chart(long).mark_line(strokeWidth=2.5, point=True).encode(
+        x=charts._x(), y=charts.alt.Y("v:Q", scale=charts.alt.Scale(domain=[1, 5]), title="1 a 5"),
+        color=charts.alt.Color("Indicador:N", legend=charts.alt.Legend(orient="bottom", title=None)))), width="stretch")

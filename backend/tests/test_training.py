@@ -160,7 +160,7 @@ def test_history_progress_and_1rm(client, onboarded):
     session(today - timedelta(days=1), 100, 5)
     hist = client.get(f"/exercises/{pb}/history", headers=h).json()
     assert [x["date"] for x in hist] == [(today - timedelta(days=1)).isoformat(), (today - timedelta(days=6)).isoformat()]  # reciente primero
-    assert hist[0]["sets"][0] == {"set_number": 1, "reps": 5, "weight_kg": 100, "rpe": None}
+    assert hist[0]["sets"][0] == {"set_number": 1, "reps": 5, "weight_kg": 100, "rpe": None, "reached_failure": None}
     prog = client.get(f"/exercises/{pb}/progress", headers=h).json()
     assert [p["best_weight_kg"] for p in prog] == [70, 100]                      # cronológico
     assert prog[1]["est_1rm_kg"] == round(100 * (1 + 5 / 30), 1) and prog[1]["volume_kg"] == 1500 and prog[1]["sets"] == 3

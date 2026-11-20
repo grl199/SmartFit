@@ -49,6 +49,18 @@ _COLUMNS = [
     "ALTER TABLE foods ADD COLUMN IF NOT EXISTS share_status VARCHAR(10) NOT NULL DEFAULT 'private'",
     f"ALTER TABLE foods ADD COLUMN IF NOT EXISTS search_text TEXT GENERATED ALWAYS AS ({FOOD_SEARCH_SQL}) STORED",
     "CREATE INDEX IF NOT EXISTS ix_foods_search_trgm ON foods USING gin (search_text gin_trgm_ops)",
+    # Series: fallo / no fallo (sustituye a RPE, que se conserva como histórico)
+    "ALTER TABLE workout_sets ADD COLUMN IF NOT EXISTS reached_failure BOOLEAN",
+    # Procedencia de los alimentos (fuentes externas, licencia y fiabilidad)
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS external_id VARCHAR(64)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS confidence VARCHAR(10)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS license VARCHAR(40)",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS attribution TEXT",
+    "ALTER TABLE foods ADD COLUMN IF NOT EXISTS source_updated_at TIMESTAMPTZ",
+    "CREATE UNIQUE INDEX IF NOT EXISTS uq_foods_source_external ON foods (source, external_id) WHERE external_id IS NOT NULL AND user_id IS NULL",
+    # Objetivos de agua y pasos
+    "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS water_ml INTEGER NOT NULL DEFAULT 2000",
+    "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS steps_goal INTEGER NOT NULL DEFAULT 8000",
     # Taxonomía nueva: sin «oblicuos» (se funden con abdominales) y sesiones reagrupadas
     "UPDATE exercises SET primary_muscle = 'abs' WHERE primary_muscle = 'obliques'",
     """UPDATE exercises SET secondary_muscles = (

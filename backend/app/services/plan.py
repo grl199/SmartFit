@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy.orm import Session
 
 from .. import enums
+from ..clock import age_on
 from ..llm import chat_text
 from ..models import UserProfile, UserTarget
 from .nutrition import latest_weight
@@ -62,11 +63,6 @@ recomposición: -5% a 0%; mantener: TDEE ±3%.
 """
 
 
-def _age(birth: date, today: date | None = None) -> int:
-    t = today or date.today()
-    return t.year - birth.year - ((t.month, t.day) < (birth.month, birth.day))
-
-
 def energy(sex: str, weight_kg: float, height_cm: float, age: int, activity: str) -> tuple[float, float]:
     """(BMR, TDEE) con Mifflin-St Jeor y factor de actividad."""
     bmr = 10 * weight_kg + 6.25 * height_cm - 5 * age + (5 if sex == "male" else -161)
@@ -83,7 +79,7 @@ def _inputs(db: Session, user_id: int) -> dict:
                if not v]
     if missing:
         raise PlanRejected("Faltan datos del perfil: " + ", ".join(missing))
-    age = _age(p.birth_date)
+    age = age_on(p.birth_date)
     bmi = w.weight_kg / (p.height_cm / 100) ** 2
     if p.goal in enums.DEFICIT_GOALS and bmi < MIN_BMI_FOR_DEFICIT:
         raise PlanRejected(f"Con tu IMC actual ({bmi:.1f}) no se recomienda un objetivo de pérdida de grasa. "
@@ -132,6 +128,16 @@ def validate_plan(plan: GeneratedPlan, i: dict) -> list[str]:
     return errors
 
 
+def _structure_plan(db: Session, user_id: int) -> None:
+    """Convierte el plan en una estructura consultable (ejercicios reales del catálogo). Nunca bloquea los objetivos."""
+    from . import training_plan
+    try:
+        training_plan.generate_plan(db, user_id, chat=chat_text)
+    except Exception:  # noqa: BLE001
+        db.rollback()
+        log.exception("No se pudo estructurar el plan de entrenamiento")
+
+
 def generate_targets(db: Session, user_id: int) -> dict:
     """Genera con el LLM, valida y guarda los objetivos. Devuelve {targets, bmr, tdee}.
     Lanza PlanRejected (perfil) o PlanGenerationError (el modelo no acierta)."""
@@ -162,4 +168,5 @@ def generate_targets(db: Session, user_id: int) -> dict:
     t.training_plan, t.rationale, t.source = plan.training_plan, plan.rationale, "llm"
     db.add(t)
     db.commit()
+    _structure_plan(db, user_id)
     return {"targets": t, "bmr": i["bmr"], "tdee": i["tdee"], "profile": i["profile"]}

@@ -9,7 +9,9 @@ from ..config import get_settings
 from ..db import get_db
 from ..deps import current_user
 from ..models import (
-    BodyMetric, ChatMessage, Conversation, Exercise, Food, FoodLog, MemoryChunk, User, UserProfile, UserTarget, Workout, WorkoutSet,
+    ActivityConnection, BodyMetric, ChatMessage, Conversation, DailyActivity, DailyCheckIn, Exercise, ExerciseContent, Food, FoodLog,
+    FoodServing, HydrationLog, MemoryChunk, Recipe, RecipeIngredient, TrainingPlan, TrainingPlanDay, TrainingPlanExercise, User,
+    UserProfile, UserTarget, Workout, WorkoutSet,
 )
 from ..schemas import Credentials, DeleteAccountIn, TokenOut, UserOut
 from ..security import (
@@ -67,8 +69,21 @@ def delete_account(body: DeleteAccountIn, user: User = Depends(current_user), db
         raise HTTPException(401, "Contraseña incorrecta")
     uid = user.id
     # Orden: primero lo que referencia a otras tablas. Los alimentos compartidos (user_id NULL) no se tocan.
-    for model in (MemoryChunk, ChatMessage, Conversation, FoodLog, WorkoutSet, Workout, BodyMetric):
+    for model in (MemoryChunk, ChatMessage, Conversation, FoodLog, WorkoutSet, Workout, BodyMetric,
+                  HydrationLog, DailyCheckIn, DailyActivity, ActivityConnection):
         db.execute(delete(model).where(model.user_id == uid))
+    # Plan de entrenamiento (ejercicios -> días -> planes) y recetas (ingredientes -> recetas) propios
+    plans = select(TrainingPlan.id).where(TrainingPlan.user_id == uid)
+    days = select(TrainingPlanDay.id).where(TrainingPlanDay.plan_id.in_(plans))
+    db.execute(delete(TrainingPlanExercise).where(TrainingPlanExercise.day_id.in_(days)))
+    db.execute(delete(TrainingPlanDay).where(TrainingPlanDay.plan_id.in_(plans)))
+    db.execute(delete(TrainingPlan).where(TrainingPlan.user_id == uid))
+    # Ingredientes que usan alimentos propios en recetas del sistema no existen (las del sistema solo usan catálogo).
+    db.execute(delete(RecipeIngredient).where(RecipeIngredient.recipe_id.in_(select(Recipe.id).where(Recipe.user_id == uid))))
+    db.execute(delete(Recipe).where(Recipe.user_id == uid))
+    own_foods = select(Food.id).where(Food.user_id == uid)
+    db.execute(delete(FoodServing).where(FoodServing.food_id.in_(own_foods)))
+    db.execute(delete(ExerciseContent).where(ExerciseContent.exercise_id.in_(select(Exercise.id).where(Exercise.user_id == uid))))
     db.execute(delete(Food).where(Food.user_id == uid))
     db.execute(delete(Exercise).where(Exercise.user_id == uid))
     db.execute(delete(UserTarget).where(UserTarget.user_id == uid))

@@ -245,7 +245,9 @@ def parse_search_hit(hit: dict) -> dict | None:
 
 def _store(db: Session, item: dict) -> bool:
     stmt = (pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
-                                   source="openfoodfacts", serving_g=item["serving_g"], **item["nutrients"], **item["meta"])
+                                   source="openfoodfacts", serving_g=item["serving_g"], confidence="medium", license="ODbL",
+                                   attribution="Open Food Facts contributors (ODbL)", source_updated_at=func.now(),
+                                   **item["nutrients"], **item["meta"])
             .on_conflict_do_nothing(index_elements=[func.coalesce(Food.user_id, 0), Food.barcode]).returning(Food.id))
     return db.execute(stmt).scalar() is not None  # rowcount no es fiable con ON CONFLICT (-1 en psycopg)
 

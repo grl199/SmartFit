@@ -87,6 +87,8 @@ class UserTarget(Base):
     fat_g: Mapped[float] = mapped_column(Float, default=65, comment="Objetivo diario de grasas, en gramos.")
     fiber_g: Mapped[float] = mapped_column(Float, default=30, comment="Objetivo diario de fibra, en gramos.")
     workouts_per_week: Mapped[int] = mapped_column(Integer, default=3, comment="Objetivo de sesiones de entrenamiento por semana.")
+    water_ml: Mapped[int] = mapped_column(Integer, default=2000, server_default=text("2000"), comment="Objetivo diario de agua, en ml.")
+    steps_goal: Mapped[int] = mapped_column(Integer, default=8000, server_default=text("8000"), comment="Objetivo diario de pasos.")
     training_plan: Mapped[str | None] = mapped_column(
         Text, comment="Plan de entrenamiento semanal recomendado por la IA (texto markdown breve). NULL si los objetivos son manuales.")
     rationale: Mapped[str | None] = mapped_column(Text, comment="Explicación breve de la IA sobre por qué propone estos objetivos.")
@@ -103,6 +105,9 @@ class Food(Base):
     __table_args__ = (
         # Un mismo código puede existir una vez por propietario: el catálogo compartido (user_id NULL) y cada usuario.
         Index("uq_foods_owner_barcode", text("coalesce(user_id, 0)"), text("barcode"), unique=True),
+        # Un mismo alimento de una fuente externa solo una vez en el catálogo compartido.
+        Index("uq_foods_source_external", "source", "external_id", unique=True,
+              postgresql_where=text("external_id IS NOT NULL AND user_id IS NULL")),
         Index("ix_foods_search_trgm", "search_text", postgresql_using="gin", postgresql_ops={"search_text": "gin_trgm_ops"}),
         {"comment": "Catálogo de alimentos con sus valores nutricionales POR 100 g. Incluye productos cacheados de Open Food Facts "
                     "(compartidos), productos confirmados por la comunidad y alimentos creados por usuarios."},
@@ -118,7 +123,7 @@ class Food(Base):
         comment="Código de barras numérico (EAN-8/13, UPC-A, GTIN-14 o código interno de tienda). Único por propietario; NULL si no tiene.")
     source: Mapped[str] = mapped_column(
         String(30), default="manual",
-        comment="Origen de los datos: 'manual' | 'openfoodfacts' | 'web' (encontrado por el asistente) | 'community' (confirmado por varios usuarios).")
+        comment="Origen de los datos: 'manual' | 'openfoodfacts' | 'usda' | 'catalog' (catálogo interno SmartFit) | 'recipe' (receta guardada) | 'web' (encontrado por el asistente) | 'community' (confirmado por varios usuarios).")
     share_status: Mapped[str] = mapped_column(
         String(10), default="private", server_default=text("'private'"),
         comment="Solo en alimentos de usuario: 'private' (solo él) | 'pending' (ofrecido a la comunidad, a la espera de que otro usuario "
@@ -138,6 +143,14 @@ class Food(Base):
     ecoscore_grade: Mapped[str | None] = mapped_column(String(1), comment="Eco-Score / Green-Score ambiental de OFF: 'a' a 'e'. NULL si no consta.")
     image_url: Mapped[str | None] = mapped_column(Text, comment="URL de la foto frontal del producto (Open Food Facts).")
     quantity: Mapped[str | None] = mapped_column(String(100), comment="Cantidad del envase tal como figura en la etiqueta (p. ej. '800 g').")
+    external_id: Mapped[str | None] = mapped_column(
+        String(64), comment="Identificador en la fuente original (p. ej. fdcId de USDA). Con `source` evita duplicados en el catálogo compartido.")
+    confidence: Mapped[str | None] = mapped_column(
+        String(10), comment="Fiabilidad de los datos: 'high' (laboratorio/fuente oficial) | 'medium' (fabricante/comunidad) | 'low' (estimado). NULL = sin valorar.")
+    license: Mapped[str | None] = mapped_column(String(40), comment="Licencia de los datos de la fuente (ODbL, CC0...).")
+    attribution: Mapped[str | None] = mapped_column(Text, comment="Texto de atribución/cita exigido por la licencia de la fuente.")
+    source_updated_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), comment="Cuándo se consultó/actualizó este dato en la fuente original.")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="Fecha en que se guardó el alimento.")
     kcal: Mapped[float] = _nutr("Energía", "kcal", True)
@@ -260,7 +273,10 @@ class WorkoutSet(Base):
     set_number: Mapped[int] = mapped_column(Integer, comment="Número de serie dentro de ese ejercicio en la sesión (1, 2, 3...).")
     reps: Mapped[int] = mapped_column(Integer, comment="Repeticiones realizadas.")
     weight_kg: Mapped[float | None] = mapped_column(Float, comment="Peso usado en kilogramos. NULL o 0 = peso corporal.")
-    rpe: Mapped[float | None] = mapped_column(Float, comment="Esfuerzo percibido de 1 a 10 (opcional).")
+    rpe: Mapped[float | None] = mapped_column(
+        Float, comment="OBSOLETO: esfuerzo percibido 1-10. Ya no se pide; se conserva el histórico. No equivale a reached_failure.")
+    reached_failure: Mapped[bool | None] = mapped_column(
+        Boolean, comment="TRUE si la serie llegó al fallo muscular, FALSE si no. NULL = sin indicar (series anteriores o estiramientos).")
     exercise: Mapped[Exercise] = relationship(lazy="joined")
 
 
@@ -318,3 +334,156 @@ class MemoryChunk(Base):
         Vector(get_settings().embedding_dim),
         comment=f"Embedding del contenido ({get_settings().embedding_dim} dimensiones, distancia coseno, índice HNSW).")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación del fragmento.")
+
+
+# ═════════════════════════ Entrenamiento: contenido didáctico y plan estructurado ═════════════════════════
+class ExerciseContent(Base):
+    __tablename__ = "exercise_contents"
+    __table_args__ = {"comment": "Contenido didáctico de un ejercicio (1:1 con exercises), separado del catálogo básico."}
+    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id"), primary_key=True, comment="Ejercicio (PK y FK a exercises.id).")
+    description: Mapped[str | None] = mapped_column(Text, comment="Qué trabaja y para qué sirve.")
+    start_position: Mapped[str | None] = mapped_column(Text, comment="Posición inicial.")
+    instructions: Mapped[list] = mapped_column(JSONB, default=list, comment="Lista JSON de pasos de ejecución, en orden.")
+    common_mistakes: Mapped[list] = mapped_column(JSONB, default=list, comment="Lista JSON de errores frecuentes.")
+    image_url: Mapped[str | None] = mapped_column(Text, comment="Imagen/GIF demostrativo (solo contenido propio o con licencia). NULL si no hay.")
+    video_url: Mapped[str | None] = mapped_column(Text, comment="Vídeo demostrativo (solo contenido propio o con licencia). NULL si no hay.")
+    media_type: Mapped[str | None] = mapped_column(String(10), comment="Tipo del recurso visual: 'image' | 'gif' | 'video'.")
+    media_credit: Mapped[str | None] = mapped_column(Text, comment="Autoría/licencia del recurso visual.")
+
+
+class TrainingPlan(Base):
+    __tablename__ = "training_plans"
+    __table_args__ = {"comment": "Plan de entrenamiento estructurado. Solo uno activo por usuario; los anteriores se conservan como histórico."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del plan.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Propietario.")
+    name: Mapped[str] = mapped_column(String(120), comment="Nombre del plan.")
+    source: Mapped[str] = mapped_column(String(10), default="auto", comment="Origen: 'llm' (propuesto por la IA) | 'auto' (reglas por código) | 'manual'.")
+    active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=text("true"), comment="TRUE = plan vigente.")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación.")
+
+
+class TrainingPlanDay(Base):
+    __tablename__ = "training_plan_days"
+    __table_args__ = {"comment": "Día de entrenamiento de un plan (p. ej. «Día 1 · Pecho y tríceps»)."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del día.")
+    plan_id: Mapped[int] = mapped_column(ForeignKey("training_plans.id"), index=True, comment="Plan al que pertenece.")
+    position: Mapped[int] = mapped_column(Integer, comment="Orden dentro del plan (0, 1, 2...).")
+    label: Mapped[str] = mapped_column(String(120), comment="Título del día.")
+    muscle_focus: Mapped[list] = mapped_column(JSONB, default=list, comment="Lista JSON de grupos musculares que se trabajan ese día.")
+
+
+class TrainingPlanExercise(Base):
+    __tablename__ = "training_plan_exercises"
+    __table_args__ = {"comment": "Ejercicio de un día del plan. Referencia SIEMPRE un ejercicio real del catálogo."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    day_id: Mapped[int] = mapped_column(ForeignKey("training_plan_days.id"), index=True, comment="Día al que pertenece.")
+    exercise_id: Mapped[int] = mapped_column(ForeignKey("exercises.id"), comment="Ejercicio del catálogo (FK a exercises.id).")
+    position: Mapped[int] = mapped_column(Integer, comment="Orden dentro del día.")
+    sets: Mapped[int] = mapped_column(Integer, default=3, comment="Número de series objetivo.")
+    reps_min: Mapped[int] = mapped_column(Integer, default=8, comment="Repeticiones objetivo (mínimo del rango).")
+    reps_max: Mapped[int] = mapped_column(Integer, default=12, comment="Repeticiones objetivo (máximo del rango).")
+    rest_s: Mapped[int | None] = mapped_column(Integer, comment="Descanso entre series, en segundos.")
+    notes: Mapped[str | None] = mapped_column(Text, comment="Observaciones.")
+    exercise: Mapped[Exercise] = relationship(lazy="joined")
+
+
+# ═════════════════════════ Nutrición: raciones y recetas ═════════════════════════
+class FoodServing(Base):
+    __tablename__ = "food_servings"
+    __table_args__ = (
+        UniqueConstraint("food_id", "unit_name", name="uq_food_serving_unit"),
+        {"comment": "Equivalencias orientativas entre unidades habituales y gramos, ESPECÍFICAS de cada alimento. "
+                    "Internamente todo sigue calculándose en gramos."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), index=True, comment="Alimento al que aplica.")
+    unit_name: Mapped[str] = mapped_column(String(40), comment="Unidad en singular (cucharada, rebanada...). 'ml' = mililitros (grams_per_unit = densidad).")
+    unit_name_plural: Mapped[str | None] = mapped_column(String(40), comment="Plural (cucharadas, rebanadas...).")
+    grams_per_unit: Mapped[float] = mapped_column(Float, comment="Gramos que equivale una unidad.")
+    description: Mapped[str | None] = mapped_column(String(200), comment="Aclaración (p. ej. «rasa», «de unos 30 g»).")
+
+
+class Recipe(Base):
+    __tablename__ = "recipes"
+    __table_args__ = {"comment": "Alimento compuesto: ingredientes + cantidades. user_id NULL = receta predefinida del sistema. "
+                                 "Cada receta tiene un alimento «sombra» (foods.source='recipe') para poder buscarla y registrarla."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador de la receta.")
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, comment="Propietario. NULL = receta del sistema.")
+    name: Mapped[str] = mapped_column(String(200), comment="Nombre de la receta.")
+    description: Mapped[str | None] = mapped_column(Text, comment="Descripción o notas.")
+    serving_count: Mapped[float] = mapped_column(Float, default=1, comment="Raciones que salen de la cantidad total de ingredientes.")
+    food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), comment="Alimento sombra (por 100 g de plato terminado).")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación.")
+    ingredients: Mapped[list["RecipeIngredient"]] = relationship(
+        lazy="selectin", order_by="RecipeIngredient.id", cascade="all, delete-orphan")
+
+
+class RecipeIngredient(Base):
+    __tablename__ = "recipe_ingredients"
+    __table_args__ = {"comment": "Ingrediente de una receta: alimento + gramos (para la receta completa)."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), index=True, comment="Receta.")
+    food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), comment="Alimento ingrediente.")
+    quantity_g: Mapped[float] = mapped_column(Float, comment="Gramos del ingrediente en la receta completa.")
+    food: Mapped[Food] = relationship(lazy="joined")
+
+
+# ═════════════════════════ Hábitos y bienestar ═════════════════════════
+class HydrationLog(Base):
+    __tablename__ = "hydration_logs"
+    __table_args__ = {"comment": "Registro de agua: cada fila es una toma."}
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario.")
+    logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="Instante del registro.")
+    log_date: Mapped[date] = mapped_column(Date, index=True, comment="Día local al que se imputa.")
+    quantity_ml: Mapped[int] = mapped_column(Integer, comment="Cantidad en ml.")
+    source: Mapped[str] = mapped_column(String(10), default="manual", comment="'manual' | 'quick' (botón rápido) | 'import'.")
+
+
+class DailyCheckIn(Base):
+    __tablename__ = "daily_checkins"
+    __table_args__ = (
+        UniqueConstraint("user_id", "checkin_date", name="uq_checkin_user_date"),
+        {"comment": "Check-in diario de bienestar (un registro por usuario y día, editable). PRIVADO: las notas nunca se envían a la IA."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario.")
+    checkin_date: Mapped[date] = mapped_column(Date, comment="Día del check-in.")
+    mood: Mapped[int] = mapped_column(Integer, comment="Estado emocional 1 (muy mal) a 5 (muy bien).")
+    energy_level: Mapped[int | None] = mapped_column(Integer, comment="Energía 1-5 (opcional).")
+    stress_level: Mapped[int | None] = mapped_column(Integer, comment="Estrés 1-5 (opcional; 5 = mucho estrés).")
+    sleep_quality: Mapped[int | None] = mapped_column(Integer, comment="Calidad del descanso 1-5 (opcional).")
+    notes: Mapped[str | None] = mapped_column(Text, comment="Nota personal privada.")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), default=func.now(), onupdate=func.now(),
+                                                 comment="Última edición.")
+
+
+class DailyActivity(Base):
+    __tablename__ = "daily_activity"
+    __table_args__ = (
+        UniqueConstraint("user_id", "activity_date", "source", name="uq_activity_user_date_source"),
+        {"comment": "Actividad diaria normalizada (pasos, distancia, calorías activas) por fuente. La sincronización es idempotente: "
+                    "reenviar el mismo día y fuente actualiza la fila."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario.")
+    activity_date: Mapped[date] = mapped_column(Date, index=True, comment="Día local.")
+    steps: Mapped[int] = mapped_column(Integer, default=0, comment="Pasos del día según esta fuente.")
+    distance_km: Mapped[float | None] = mapped_column(Float, comment="Distancia (km).")
+    active_calories: Mapped[float | None] = mapped_column(Float, comment="Calorías activas (kcal).")
+    source: Mapped[str] = mapped_column(String(20), comment="'manual' | 'google_health' | 'health_connect' | 'samsung_health'.")
+    external_id: Mapped[str | None] = mapped_column(String(120), comment="Id del registro en el proveedor (para trazabilidad).")
+    synced_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), default=func.now(), comment="Última sincronización.")
+
+
+class ActivityConnection(Base):
+    __tablename__ = "activity_connections"
+    __table_args__ = (
+        UniqueConstraint("user_id", "provider", name="uq_activity_conn_user_provider"),
+        {"comment": "Consentimiento explícito del usuario para recibir datos de un proveedor de actividad. Revocable en cualquier momento."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario.")
+    provider: Mapped[str] = mapped_column(String(20), comment="'google_health' | 'health_connect' | 'samsung_health'.")
+    consented_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Cuándo dio su consentimiento.")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="Cuándo lo revocó (NULL = activo).")
