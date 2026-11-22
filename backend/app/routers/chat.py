@@ -8,6 +8,7 @@ from ..deps import current_user_id, read_image
 from ..models import ChatMessage, Conversation
 from ..schemas import ChatMessageOut, ChatOut, ConversationOut, ConversationRename
 from ..services.rag import reindex_all
+from ..services.audio import audio_transcription_available, transcribe_audio
 
 router = APIRouter(tags=["chat"])
 MAX_CONVERSATIONS = 200
@@ -21,8 +22,13 @@ def _own(db: Session, conv_id: int, uid: int) -> Conversation:
 
 
 # `def` (no async): el SDK de OpenAI y SQLAlchemy son síncronos -> FastAPI lo ejecuta en su threadpool.
+@router.get("/chat/capabilities")
+def chat_capabilities():
+    return {"audio": audio_transcription_available()}
+
+
 @router.post("/chat", response_model=ChatOut)
-def chat(message: str = Form(""), image: UploadFile | None = File(None), conversation_id: int | None = Form(None),
+def chat(message: str = Form(""), image: UploadFile | None = File(None), audio: UploadFile | None = File(None), conversation_id: int | None = Form(None),
          db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
     """Envía un mensaje. Sin `conversation_id` se crea una conversación nueva (queda guardada en el histórico)."""
     if not message.strip() and image is None:
