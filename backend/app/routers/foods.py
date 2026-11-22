@@ -100,7 +100,7 @@ def estimate_food(
     except Exception as exc:  # noqa: BLE001
         log.exception("Error estimando una comida")
         raise HTTPException(502, "No se pudo estimar la comida con el proveedor de IA configurado") from exc
-    result["method"] = "photo" if image_bytes is not None else "description"
+    result["method"] = "photo" if image_bytes is not None else method
     return result
 
 
