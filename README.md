@@ -83,13 +83,13 @@ Consulta también [los prompts para ampliar el catálogo y generar vídeos de ej
 ### Estimación de comidas por IA
 
 En Registrar → «Estimar con IA» puedes describir un plato, o introducir directamente las kcal totales cuando ya las
-conoces. La propuesta por IA se desglosa en ingredientes y cantidades editables; el backend recalcula los nutrientes
+conoces. La propuesta por IA puede partir de texto, fotografía o nota de voz (receta dictada). El audio se transcribe y puedes corregir el texto antes de estimar. La propuesta se desglosa en ingredientes y cantidades editables; el backend recalcula los nutrientes
 y solo crea el alimento y el registro cuando confirmas. Las entradas estimadas quedan marcadas con confianza baja
 y guardan el desglose usado. La descripción utiliza el proveedor configurado en `AI_PROVIDER`.
 
-Con `AI_PROVIDER=gemini`, la fotografía utiliza el mismo modelo Gemini y la misma clave de Cloud Run. Con OpenAI,
+Con `AI_PROVIDER=gemini`, la fotografía y las notas de voz utilizan Gemini y la misma clave de Cloud Run. Para notas de voz con otro proveedor, puedes configurar además `GEMINI_API_KEY` o una clave de OpenAI directa/en Vault; el audio se procesa en memoria y no se almacena. Con OpenAI,
 se mantiene la opción separada `FOOD_VISION_ENABLED=true`, `FOOD_VISION_MODEL=gpt-4.1-mini` y OPENAI_API_KEY/Vault.
-Las imágenes se procesan en memoria y no se guardan como archivos en la base de datos. Revisa siempre los ingredientes
+Las imágenes y notas de voz se procesan en memoria y no se guardan como archivos en la base de datos. Revisa siempre los ingredientes
 y las cantidades estimadas, especialmente aceites, salsas y alimentos ocultos.
 
 Con `AI_PROVIDER=openrouter`, el chat usa OpenRouter y los embeddings siguen su configuración independiente. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`. Gemini utiliza function calling e imágenes mediante el endpoint compatible con OpenAI; no añade grounding/búsqueda web automática.
@@ -193,7 +193,7 @@ versión quedan en «Conversación anterior».
 
 ## Medios de ejercicios
 
-Las fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
+La pestaña Entrenamiento → «Ejercicios 3D» incorpora un visor interactivo Three.js con 20 movimientos (selección, pausa y rotación de cámara) en `frontend/exercise_animations_3d.html`. Las animaciones son demostraciones visuales orientativas y requieren revisión técnica antes de considerarlas instrucciones biomecánicas.\n\nLas fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
 reproduce el recurso con `st.video()`. No se incluyen vídeos de terceros en el repositorio sin comprobar derechos de
 redistribución. El procedimiento para añadir recursos propios o con licencia está en
 [`docs/MEDIA_EJERCICIOS.md`](docs/MEDIA_EJERCICIOS.md).
