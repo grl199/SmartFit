@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     bootstrap_username: str | None = None
     bootstrap_password: str | None = None
 
-    # Proveedor de chat y embeddings: "openrouter" o "openai".
+    # Proveedor de chat: "openrouter", "openai" o "gemini".
     ai_provider: str = "openrouter"
+    # Proveedor de embeddings. "auto" conserva el proveedor histórico; con Gemini usa OpenRouter si hay key,
+    # o OpenAI/Vault como alternativa. No cambiar el modelo de embeddings sin reindexar el RAG.
+    embedding_provider: str = "auto"
 
     # OpenRouter
     openrouter_api_key: str | None = None
@@ -35,6 +38,12 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
     openai_api_key: str | None = None  # solo desarrollo; en prod viene de Vault
+
+    # Gemini Developer API (GEMINI_API_KEY se inyecta desde Cloud Run Secret Manager).
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    # Flex es más barato que Standard; usa Standard si priorizas latencia sobre coste.
+    gemini_service_tier: str = "flex"
 
     # Vault (KV v2)
     vault_addr: str | None = None

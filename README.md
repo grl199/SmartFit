@@ -1,17 +1,18 @@
 # HealthApp
 
-Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de IA es seleccionable por variable de entorno: OpenRouter u OpenAI.
+Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de chat es seleccionable por variable de entorno: OpenRouter, OpenAI o Gemini.
 
 ```
 Streamlit ──HTTP──▶ FastAPI ──▶ PostgreSQL (+pgvector)
                       │
-                      ├─▶ Agente (OpenRouter Chat Completions u OpenAI Responses API)
+                      ├─▶ Agente (OpenRouter, OpenAI Responses API o Gemini OpenAI-compatible API)
                       │     ├─ herramientas locales: resúmenes SQL, barcode, foods, log_food, RAG, remember
                       │     └─ web_search alojado (solo OpenAI)
-                      ├─▶ Embeddings RAG (OpenRouter u OpenAI según AI_PROVIDER)
+                      ├─▶ Embeddings RAG (proveedor independiente para preservar el índice existente)
                       ├─▶ Open Food Facts (barcode → nutrientes)
                       ├─▶ zxing-cpp (decodifica el código de la foto, determinista)
-                      └─▶ Vault (opcional, API key de OpenAI directo)
+                      ├─▶ Vault (opcional, API key de OpenAI directo)
+                      └─▶ Cloud Run Secret Manager (GEMINI_API_KEY inyectada como variable de entorno)
 ```
 
 ## Puesta en marcha
@@ -55,8 +56,13 @@ OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 # OPENAI_MODEL=gpt-5.5
 ```
 
-`openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente, pero no se pueden leer etiquetas o analizar imágenes.
+`openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente.
 
+**Gemini:** `AI_PROVIDER=gemini` usa el endpoint oficial compatible con OpenAI, por lo que mantiene el mismo bucle de function calling y las herramientas de SmartFit. El modelo por defecto es `gemini-3.1-flash-lite` con `GEMINI_SERVICE_TIER=flex` (menor coste y menor prioridad; cambia a `standard` si necesitas menor latencia). La API oficial publica para Flex un precio de USD 0,125/M tokens de entrada y USD 0,75/M de salida. Las fotos del chat y del registro de comida también se pueden analizar con Gemini.
+
+En Cloud Run crea un secreto en **Secret Manager** y asígnalo a la variable `GEMINI_API_KEY` del contenedor (por ejemplo, `--update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1`). Con variables de entorno, Google recomienda fijar una versión concreta del secreto. No añadas la clave a `.env`, al repositorio ni a los logs.
+
+**Embeddings y RAG:** se mantienen separados del proveedor de chat para no mezclar vectores de modelos distintos. Con `EMBEDDING_PROVIDER=auto` y `AI_PROVIDER=gemini`, SmartFit usa OpenRouter si existe `OPENROUTER_API_KEY`; como alternativa, OpenAI/Vault. Mantén esa credencial si usas RAG. No cambies el proveedor/modelo de embeddings sin reindexar primero todos los documentos.
 ### Estimación de comidas por IA
 
 En Registrar → «Estimar con IA» puedes describir un plato, o introducir directamente las kcal totales cuando ya las
@@ -64,12 +70,12 @@ conoces. La propuesta por IA se desglosa en ingredientes y cantidades editables;
 y solo crea el alimento y el registro cuando confirmas. Las entradas estimadas quedan marcadas con confianza baja
 y guardan el desglose usado. La descripción utiliza el proveedor configurado en `AI_PROVIDER`.
 
-La fotografía es opcional y va por separado del proveedor de chat. Para activarla, configura `FOOD_VISION_ENABLED=true`
-y `FOOD_VISION_MODEL=gpt-4.1-mini`; proporciona `OPENAI_API_KEY` en desarrollo o configura Vault en producción.
-La fotografía se procesa en memoria y no se guarda como archivo en la base de datos. La estimación es orientativa:
-revisa cantidades e ingredientes, especialmente aceites, salsas y alimentos ocultos.
+Con `AI_PROVIDER=gemini`, la fotografía utiliza el mismo modelo Gemini y la misma clave de Cloud Run. Con OpenAI,
+se mantiene la opción separada `FOOD_VISION_ENABLED=true`, `FOOD_VISION_MODEL=gpt-4.1-mini` y OPENAI_API_KEY/Vault.
+Las imágenes se procesan en memoria y no se guardan como archivos en la base de datos. Revisa siempre los ingredientes
+y las cantidades estimadas, especialmente aceites, salsas y alimentos ocultos.
 
-Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRouter. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`.
+Con `AI_PROVIDER=openrouter`, el chat usa OpenRouter y los embeddings siguen su configuración independiente. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`. Gemini utiliza function calling e imágenes mediante el endpoint compatible con OpenAI; no añade grounding/búsqueda web automática.
 
 ## Autenticación y onboarding
 

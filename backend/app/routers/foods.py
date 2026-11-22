@@ -60,7 +60,9 @@ def estimate_capabilities():
     """Indica qué modos de estimación están configurados, sin revelar secretos."""
     from ..config import get_settings
     settings = get_settings()
-    return {"description": True, "photo": settings.food_vision_enabled}
+    provider = settings.ai_provider.strip().lower()
+    photo_enabled = provider == "gemini" or (provider == "openai" and settings.food_vision_enabled)
+    return {"description": True, "photo": photo_enabled}
 
 
 @router.post("/estimate")

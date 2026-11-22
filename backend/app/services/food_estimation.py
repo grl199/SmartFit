@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from ..config import get_settings
-from ..llm import get_chat_client, get_openai_client
+from ..llm import get_chat_client
 from .images import prepare_for_llm
 
 
@@ -137,30 +137,51 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
     user_text = description.strip() or (
         "Analiza la fotografía del plato. Identifica ingredientes, cantidades y estimación nutricional."
     )
+    provider = settings.ai_provider.strip().lower()
+    client = get_chat_client()
     if image is not None:
-        if not settings.food_vision_enabled:
-            raise VisionEstimationDisabled(
-                "La estimación por fotografía está desactivada. Configura FOOD_VISION_ENABLED=true y una clave de OpenAI."
+        if provider == "gemini":
+            jpg, mime = prepare_for_llm(image)
+            image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
+            kwargs: dict[str, Any] = {
+                "model": settings.gemini_model,
+                "service_tier": settings.gemini_service_tier,
+                "messages": [
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ]},
+                ],
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
+            }
+            response = client.chat.completions.create(**kwargs)
+        elif provider == "openai" and settings.food_vision_enabled:
+            jpg, mime = prepare_for_llm(image)
+            image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
+            response = client.chat.completions.create(
+                model=settings.food_vision_model,
+                messages=[
+                    {"role": "system", "content": SYSTEM_PROMPT},
+                    {"role": "user", "content": [
+                        {"type": "text", "text": user_text},
+                        {"type": "image_url", "image_url": {"url": image_url}},
+                    ]},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0.2,
             )
-        client = get_openai_client()
-        jpg, mime = prepare_for_llm(image)
-        image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
-        response = client.chat.completions.create(
-            model=settings.food_vision_model,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": [
-                    {"type": "text", "text": user_text},
-                    {"type": "image_url", "image_url": {"url": image_url}},
-                ]},
-            ],
-            response_format={"type": "json_object"},
-            temperature=0.2,
-        )
+        else:
+            raise VisionEstimationDisabled(
+                "La estimación por fotografía requiere AI_PROVIDER=gemini o AI_PROVIDER=openai con FOOD_VISION_ENABLED=true."
+            )
     else:
-        client = get_chat_client()
-        provider = settings.ai_provider.strip().lower()
-        model = settings.openrouter_model if provider == "openrouter" else settings.openai_model
+        model = (
+            settings.openrouter_model if provider == "openrouter"
+            else settings.openai_model if provider == "openai"
+            else settings.gemini_model
+        )
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": [
@@ -169,8 +190,10 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
             ],
             "temperature": 0.2,
         }
-        if provider == "openai":
+        if provider in ("openai", "gemini"):
             kwargs["response_format"] = {"type": "json_object"}
+        if provider == "gemini":
+            kwargs["service_tier"] = settings.gemini_service_tier
         response = client.chat.completions.create(**kwargs)
 
     raw = response.choices[0].message.content or ""
