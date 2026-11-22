@@ -98,7 +98,7 @@ with tab_scan:
 # ───────── Estimación de platos con IA ─────────
 with tab_estimate:
     capabilities = api.get("/foods/estimate-capabilities") or {"description": True, "photo": False}
-    modes = ["Descripción", "Fotografía"] if capabilities.get("photo") else ["Descripción"]
+    modes = ["Descripción", "Solo kcal"] + (["Fotografía"] if capabilities.get("photo") else [])
     mode = st.radio("¿Cómo quieres registrar la comida?", modes, horizontal=True, key="ai_food_mode")
     description = st.text_area(
         "Describe el plato o añade contexto",
@@ -106,15 +106,40 @@ with tab_estimate:
         height=100,
         key="ai_food_description",
     )
+    if mode == "Solo kcal":
+        st.caption("Para comidas cuyo valor energético ya conoces. Los macronutrientes son opcionales y la entrada queda marcada como manual.")
+        with st.form("manual_meal_calories", clear_on_submit=True):
+            manual_name = st.text_input("Nombre de la comida", placeholder="Ensalada casera")
+            c1, c2 = st.columns(2)
+            manual_kcal = c1.number_input("Calorías totales (kcal)", min_value=0.0, max_value=9500.0, step=5.0)
+            manual_grams = c2.number_input("Peso aproximado de la ración (g)", min_value=1.0, max_value=5000.0, value=100.0, step=5.0,
+                                           help="Si no conoces el peso, deja 100 g como referencia. Las kcal totales que introduzcas se conservan.")
+            with st.expander("Macronutrientes (opcional)"):
+                mc = st.columns(3)
+                manual_protein = mc[0].number_input("Proteína (g)", min_value=0.0, max_value=500.0, step=1.0)
+                manual_carbs = mc[1].number_input("Hidratos (g)", min_value=0.0, max_value=500.0, step=1.0)
+                manual_fat = mc[2].number_input("Grasa (g)", min_value=0.0, max_value=500.0, step=1.0)
+            if st.form_submit_button("Añadir al diario", type="primary"):
+                if not manual_name.strip():
+                    st.warning("Escribe un nombre para identificar la comida.")
+                else:
+                    saved = api.post("/foods/manual-log", json={
+                        "name": manual_name.strip(), "grams": manual_grams, "kcal": manual_kcal,
+                        "protein_g": manual_protein, "carbs_g": manual_carbs, "fat_g": manual_fat,
+                        "meal": kw["meal"], "log_date": kw["log_date"],
+                    })
+                    if saved:
+                        st.toast(f"Registrado: {manual_name} · {manual_kcal:.0f} kcal", icon="✅")
+                        st.rerun()
     photo = None
     if mode == "Fotografía":
         st.caption("Haz una foto del plato completo, con buena luz y desde arriba. La estimación visual es aproximada.")
         photo = st.camera_input("Fotografía del plato", key="ai_food_camera")
         uploaded = st.file_uploader("…o sube una fotografía", type=["jpg", "jpeg", "png", "webp"], key="ai_food_upload")
         photo = photo or uploaded
-    elif not capabilities.get("photo"):
+    elif mode == "Descripción" and not capabilities.get("photo"):
         st.caption("La estimación por fotografía está disponible al activar FOOD_VISION_ENABLED y configurar una clave de OpenAI en el backend.")
-    estimate_clicked = st.button("✨ Estimar ingredientes y calorías", type="primary", key="ai_food_estimate")
+    estimate_clicked = st.button("✨ Estimar ingredientes y calorías", type="primary", key="ai_food_estimate") if mode != "Solo kcal" else False
     if estimate_clicked:
         if mode == "Fotografía" and photo is None:
             st.warning("Adjunta una fotografía para continuar.")
