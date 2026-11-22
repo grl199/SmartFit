@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   backend-and-contracts:
-    name: Python tests and API contracts
+    name: Python tests, API contracts and web
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -44,10 +44,13 @@ jobs:
         run: pytest -q tests/test_pure.py tests/test_openapi.py
 
       - name: Install workspace
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --no-frozen-lockfile
 
       - name: Generate OpenAPI and TypeScript contracts
         run: pnpm contracts:generate
 
-      - name: Type-check contracts
+      - name: Type-check contracts and web
         run: pnpm typecheck
+
+      - name: Build web
+        run: pnpm build:web
