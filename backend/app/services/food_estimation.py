@@ -132,7 +132,7 @@ def normalize_estimate(payload: dict[str, Any]) -> dict[str, Any]:
 
 
 def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any]:
-    """Llama al proveedor configurado para texto; usa OpenAI Vision opcional para fotografías."""
+    """Estima texto con el proveedor configurado; Gemini u OpenAI pueden analizar fotografías."""
     settings = get_settings()
     user_text = description.strip() or (
         "Analiza la fotografía del plato. Identifica ingredientes, cantidades y estimación nutricional."

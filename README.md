@@ -62,7 +62,24 @@ OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 
 En Cloud Run crea un secreto en **Secret Manager** y asígnalo a la variable `GEMINI_API_KEY` del contenedor (por ejemplo, `--update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1`). Con variables de entorno, Google recomienda fijar una versión concreta del secreto. No añadas la clave a `.env`, al repositorio ni a los logs.
 
+Ejemplo de despliegue (ajusta servicio, región y cuenta de servicio):
+
+```bash
+# La cuenta de servicio de Cloud Run necesita roles/secretmanager.secretAccessor.
+gcloud secrets add-iam-policy-binding smartfit-gemini-api-key \\
+  --member="serviceAccount:TU_SERVICE_ACCOUNT" \\
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud run services update TU_SERVICIO --region TU_REGION \\
+  --update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1 \\
+  --update-env-vars=AI_PROVIDER=gemini,GEMINI_MODEL=gemini-3.1-flash-lite,GEMINI_SERVICE_TIER=flex
+```
+
+Crea previamente `smartfit-gemini-api-key` en Secret Manager y carga la Gemini API key como una versión del secreto. Si el servicio ya tiene variables de entorno administradas por IaC, incorpora estos valores en esa configuración para que el siguiente despliegue no los sobrescriba.
+
 **Embeddings y RAG:** se mantienen separados del proveedor de chat para no mezclar vectores de modelos distintos. Con `EMBEDDING_PROVIDER=auto` y `AI_PROVIDER=gemini`, SmartFit usa OpenRouter si existe `OPENROUTER_API_KEY`; como alternativa, OpenAI/Vault. Mantén esa credencial si usas RAG. No cambies el proveedor/modelo de embeddings sin reindexar primero todos los documentos.
+Consulta también [los prompts para ampliar el catálogo y generar vídeos de ejercicios](docs/PROMPTS_CATALOGO_Y_VIDEOS.md).
+
 ### Estimación de comidas por IA
 
 En Registrar → «Estimar con IA» puedes describir un plato, o introducir directamente las kcal totales cuando ya las
