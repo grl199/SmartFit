@@ -86,6 +86,7 @@ def transcribe_food_audio(
 def estimate_food(
     description: str = Form(""),
     image: UploadFile | None = File(None),
+    method: Literal["description", "audio", "photo"] = Form("description"),
 ):
     """Propone ingredientes y nutrientes; no guarda nada hasta que el usuario confirma."""
     image_bytes = read_image(image) if image is not None else None
