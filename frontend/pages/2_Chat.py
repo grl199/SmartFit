@@ -11,7 +11,6 @@ ui.inject_css()
 auth.require_login()
 
 st.session_state.setdefault("used_photos", set())
-st.session_state.setdefault("used_voice_notes", set())
 audio_capabilities = api.get("/chat/capabilities") or {"audio": False}
 convs = api.get("/conversations", limit=60) or []
 by_id = {c["id"]: c for c in convs}
