@@ -58,7 +58,6 @@ class FoodOut(FoodBase):
 class BarcodeOut(BaseModel):
     status: str
     barcodes: list[str] = []
-    transcription: str | None = None
     food: FoodOut | None = None
     name: str | None = None
     brand: str | None = None
@@ -377,6 +376,7 @@ class ChatOut(BaseModel):
     sources: list[dict] = []
     tools_used: list[str] = []
     barcodes: list[str] = []
+    transcription: str | None = None
 
 
 class ChatMessageOut(BaseModel):
