@@ -193,7 +193,9 @@ versión quedan en «Conversación anterior».
 
 ## Medios de ejercicios
 
-La pestaña Entrenamiento → «Ejercicios 3D» incorpora un visor interactivo Three.js con 20 movimientos (selección, pausa y rotación de cámara) en `frontend/exercise_animations_3d.html`. Las animaciones son demostraciones visuales orientativas y requieren revisión técnica antes de considerarlas instrucciones biomecánicas.\n\nLas fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
+La pestaña Entrenamiento → «Ejercicios 3D» incorpora un visor interactivo Three.js con 20 movimientos (selección, pausa y rotación de cámara) en `frontend/exercise_animations_3d.html`. Las animaciones son demostraciones visuales orientativas y requieren revisión técnica antes de considerarlas instrucciones biomecánicas.
+
+Las fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
 reproduce el recurso con `st.video()`. No se incluyen vídeos de terceros en el repositorio sin comprobar derechos de
 redistribución. El procedimiento para añadir recursos propios o con licencia está en
 [`docs/MEDIA_EJERCICIOS.md`](docs/MEDIA_EJERCICIOS.md).
