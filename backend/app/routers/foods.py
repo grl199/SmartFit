@@ -13,6 +13,7 @@ from ..models import Food, FoodLog, FoodServing, RecipeIngredient
 from ..schemas import BarcodeOut, FoodBase, FoodCopyIn, FoodCreate, FoodMineOut, FoodOut, LogOut, Meal
 from ..services.images import decode_barcodes
 from ..services.food_estimation import VisionEstimationDisabled, estimate_meal
+from ..services.audio import audio_transcription_available, transcribe_audio
 from ..services.nutrition import create_log
 from ..services import community
 from ..services.food_search import search_hybrid
@@ -42,7 +43,7 @@ class EstimatedFoodLogIn(BaseModel):
     grams: float = Field(gt=0, le=5000)
     log_date: date | None = None
     meal: Meal | None = None
-    method: Literal["description", "photo"] = "description"
+    method: Literal["description", "photo", "audio"] = "description"
     description: str = Field("", max_length=2000)
     kcal: float = Field(ge=0, le=950)
     protein_g: float = Field(ge=0, le=100)
@@ -62,7 +63,23 @@ def estimate_capabilities():
     settings = get_settings()
     provider = settings.ai_provider.strip().lower()
     photo_enabled = provider == "gemini" or (provider == "openai" and settings.food_vision_enabled)
-    return {"description": True, "photo": photo_enabled}
+    return {"description": True, "photo": photo_enabled, "audio": audio_transcription_available()}
+
+
+@router.post("/transcribe-audio")
+def transcribe_food_audio(
+    audio: UploadFile = File(...),
+    uid: int = Depends(current_user_id),
+):
+    """Transcribe una nota de voz para que el usuario pueda revisar la receta antes de estimarla."""
+    try:
+        transcript = transcribe_audio(audio.file.read(), audio.content_type, audio.filename)
+    except ValueError as exc:
+        raise HTTPException(422, str(exc)) from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Error transcribiendo una receta")
+        raise HTTPException(502, str(exc)[:300]) from exc
+    return {"transcript": transcript}
 
 
 @router.post("/estimate")
