@@ -100,12 +100,14 @@ with tab_estimate:
     capabilities = api.get("/foods/estimate-capabilities") or {"description": True, "photo": False}
     modes = ["Descripción", "Solo kcal"] + (["Fotografía"] if capabilities.get("photo") else [])
     mode = st.radio("¿Cómo quieres registrar la comida?", modes, horizontal=True, key="ai_food_mode")
-    description = st.text_area(
-        "Describe el plato o añade contexto",
-        placeholder="Ej.: ensalada con lechuga, tomate, medio aguacate, una lata de atún y una cucharada de aceite...",
-        height=100,
-        key="ai_food_description",
-    )
+    description = ""
+    if mode in ("Descripción", "Fotografía"):
+        description = st.text_area(
+            "Describe el plato o añade contexto",
+            placeholder="Ej.: ensalada con lechuga, tomate, medio aguacate, una lata de atún y una cucharada de aceite...",
+            height=100,
+            key="ai_food_description",
+        )
     if mode == "Solo kcal":
         st.caption("Para comidas cuyo valor energético ya conoces. Los macronutrientes son opcionales y la entrada queda marcada como manual.")
         with st.form("manual_meal_calories", clear_on_submit=True):

@@ -1,4 +1,3 @@
-import logging
 from datetime import date
 from typing import Literal
 
@@ -20,7 +19,6 @@ from ..services.food_search import search_hybrid
 from ..services.names import pending_count, translate_pending_names
 from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
 
-log = logging.getLogger(__name__)
 router = APIRouter(prefix="/foods", tags=["foods"])
 
 
@@ -39,22 +37,6 @@ class EstimatedComponentIn(BaseModel):
     confidence: Literal["low", "medium"] = "low"
 
 
-
-class ManualMealLogIn(BaseModel):
-    name: str = Field(min_length=1, max_length=300)
-    grams: float = Field(100, gt=0, le=5000, description="Peso aproximado de la ración; por defecto 100 g de referencia.")
-    kcal: float = Field(ge=0, le=9500, description="Calorías TOTALES de la ración.")
-    protein_g: float = Field(0, ge=0, le=500)
-    carbs_g: float = Field(0, ge=0, le=500)
-    sugars_g: float = Field(0, ge=0, le=500)
-    fat_g: float = Field(0, ge=0, le=500)
-    sat_fat_g: float = Field(0, ge=0, le=500)
-    fiber_g: float = Field(0, ge=0, le=500)
-    sodium_mg: float = Field(0, ge=0, le=100000)
-    meal: Meal | None = None
-    log_date: date | None = None
-
-
 class EstimatedFoodLogIn(BaseModel):
     name: str = Field(min_length=1, max_length=300)
     grams: float = Field(gt=0, le=5000)
@@ -71,47 +53,6 @@ class EstimatedFoodLogIn(BaseModel):
     fiber_g: float = Field(ge=0, le=100)
     sodium_mg: float = Field(ge=0, le=10000)
     components: list[EstimatedComponentIn] = Field(min_length=1, max_length=25)
-
-
-
-@router.post("/manual-log", status_code=201)
-def manual_meal_log(
-    body: ManualMealLogIn,
-    db: Session = Depends(get_db),
-    uid: int = Depends(current_user_id),
-):
-    """Registra una comida introduciendo sus calorías totales (macros opcionales)."""
-    scale = 100 / body.grams
-    values = {
-        "kcal": body.kcal * scale,
-        "protein_g": body.protein_g * scale,
-        "carbs_g": body.carbs_g * scale,
-        "sugars_g": body.sugars_g * scale,
-        "fat_g": body.fat_g * scale,
-        "sat_fat_g": body.sat_fat_g * scale,
-        "fiber_g": body.fiber_g * scale,
-        "sodium_mg": body.sodium_mg * scale,
-    }
-    if values["kcal"] > 950 or values["protein_g"] > 100 or values["carbs_g"] > 100 or values["fat_g"] > 100:
-        raise HTTPException(422, "El peso indicado y los nutrientes producen valores por 100 g no plausibles; ajusta el peso de la ración")
-    if values["protein_g"] + values["carbs_g"] + values["fat_g"] > 105:
-        raise HTTPException(422, "Los macronutrientes superan un valor plausible por 100 g")
-    if values["sugars_g"] > values["carbs_g"] + 0.5 or values["sat_fat_g"] > values["fat_g"] + 0.5:
-        raise HTTPException(422, "Los nutrientes no son coherentes")
-    food = Food(
-        user_id=uid,
-        source="manual",
-        name=body.name.strip(),
-        serving_g=body.grams,
-        confidence="low",
-        attribution="Valores introducidos manualmente por el usuario; no verificados.",
-        extra={"manual_calorie_entry": True},
-        **values,
-    )
-    db.add(food)
-    db.flush()
-    logged = create_log(db, uid, food, body.grams, body.meal, body.log_date)
-    return {"food": FoodOut.model_validate(food), "log": LogOut.model_validate(logged)}
 
 
 @router.get("/estimate-capabilities")
@@ -151,36 +92,13 @@ def confirm_estimated_food(
     uid: int = Depends(current_user_id),
 ):
     """Guarda la estimación revisada como alimento privado y registra su instantánea nutricional."""
+    if body.protein_g + body.carbs_g + body.fat_g > 105:
+        raise HTTPException(422, "Los macronutrientes superan un valor plausible por 100 g")
+    if body.sugars_g > body.carbs_g + 0.5 or body.sat_fat_g > body.fat_g + 0.5:
+        raise HTTPException(422, "Los nutrientes no son coherentes")
     components = [item.model_dump() for item in body.components]
-    component_weight = sum(item["grams"] for item in components)
-    if abs(component_weight - body.grams) > max(5.0, body.grams * 0.05):
+    if abs(sum(item["grams"] for item in components) - body.grams) > max(5.0, body.grams * 0.05):
         raise HTTPException(422, "La suma de los ingredientes no coincide con el peso total de la comida")
-
-    # El backend vuelve a calcular los totales a partir de los componentes revisados.
-    nutrient_columns = {
-        "kcal": "kcal_per_100g",
-        "protein_g": "protein_g_per_100g",
-        "carbs_g": "carbs_g_per_100g",
-        "sugars_g": "sugars_g_per_100g",
-        "fat_g": "fat_g_per_100g",
-        "sat_fat_g": "sat_fat_g_per_100g",
-        "fiber_g": "fiber_g_per_100g",
-        "sodium_mg": "sodium_mg_per_100g",
-    }
-    totals = {key: 0.0 for key in nutrient_columns}
-    for item in components:
-        for key, column in nutrient_columns.items():
-            value = item[column]
-            totals[key] += value * item["grams"] / 100
-        if item["protein_g_per_100g"] + item["carbs_g_per_100g"] + item["fat_g_per_100g"] > 105:
-            raise HTTPException(422, f"Macronutrientes no plausibles en {item['name']}")
-        if item["sugars_g_per_100g"] > item["carbs_g_per_100g"] + 0.5 or item["sat_fat_g_per_100g"] > item["fat_g_per_100g"] + 0.5:
-            raise HTTPException(422, f"Nutrientes incoherentes en {item['name']}")
-    calculated = {key: round(value * 100 / body.grams, 2) for key, value in totals.items()}
-    if calculated["protein_g"] + calculated["carbs_g"] + calculated["fat_g"] > 105:
-        raise HTTPException(422, "Los macronutrientes agregados no son plausibles")
-    if calculated["sugars_g"] > calculated["carbs_g"] + 0.5 or calculated["sat_fat_g"] > calculated["fat_g"] + 0.5:
-        raise HTTPException(422, "Los nutrientes agregados no son coherentes")
     food = Food(
         user_id=uid,
         source="manual",
@@ -194,7 +112,9 @@ def confirm_estimated_food(
             "estimate_description": body.description,
             "estimate_components": components,
         },
-        **calculated,
+        **{key: getattr(body, key) for key in (
+            "kcal", "protein_g", "carbs_g", "sugars_g", "fat_g", "sat_fat_g", "fiber_g", "sodium_mg"
+        )},
     )
     db.add(food)
     db.flush()

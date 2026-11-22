@@ -13,6 +13,7 @@ from ..schemas import (
     ExerciseFeedbackOut, ExerciseIn, ExerciseOut, LastSessionOut, WeightIn, WeightOut, WorkoutDetail, WorkoutExerciseOut, WorkoutIn,
 )
 from ..services import training as tsvc
+from ..services import exercise_content as content_svc
 from ..services import workout_feedback as fb
 from ..services.calories import CaloriesNotEstimable, estimate_workout_calories
 from ..services.nutrition import today_local
@@ -101,6 +102,13 @@ def _visible_exercise(db: Session, ex_id: int, uid: int) -> Exercise:
     if not ex or ex.user_id not in (None, uid):
         raise HTTPException(404, "Ejercicio no encontrado")
     return ex
+
+
+@router.get("/exercises/{exercise_id}/content")
+def exercise_content(exercise_id: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
+    """Guía y medio demostrativo del ejercicio, si existe y el usuario puede verlo."""
+    ex = _visible_exercise(db, exercise_id, uid)
+    return content_svc.content_for(db, ex)
 
 
 @router.get("/exercises/{exercise_id}/history")
