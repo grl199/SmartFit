@@ -98,7 +98,7 @@ with tab_scan:
 # ───────── Estimación de platos con IA ─────────
 with tab_estimate:
     capabilities = api.get("/foods/estimate-capabilities") or {"description": True, "photo": False}
-    modes = ["Descripción", "Solo kcal"] + (["Fotografía"] if capabilities.get("photo") else [])
+    modes = ["Descripción", "Solo kcal"] + (["Fotografía"] if capabilities.get("photo") else []) + (["Nota de voz"] if capabilities.get("audio") else [])
     mode = st.radio("¿Cómo quieres registrar la comida?", modes, horizontal=True, key="ai_food_mode")
     description = ""
     if mode in ("Descripción", "Fotografía"):
@@ -108,6 +108,25 @@ with tab_estimate:
             height=100,
             key="ai_food_description",
         )
+    if mode == "Nota de voz":
+        st.caption("Graba cómo has preparado la receta o dicta los ingredientes y cantidades. La nota se transcribe para que puedas corregirla antes de estimar.")
+        voice = st.audio_input("Grabar nota de voz", key="ai_food_voice")
+        if st.button("🎙️ Transcribir nota de voz", disabled=voice is None, key="ai_food_transcribe"):
+            transcript_result = api.post(
+                "/foods/transcribe-audio",
+                files={"audio": (voice.name or "receta.wav", voice.getvalue(), voice.type or "audio/wav")},
+                timeout=api.LONG_TIMEOUT,
+            )
+            if transcript_result:
+                st.session_state["ai_food_description"] = transcript_result["transcript"]
+                st.session_state["_ai_food_voice_transcribed"] = True
+                st.rerun()
+        if st.session_state.get("_ai_food_voice_transcribed"):
+            description = st.text_area(
+                "Transcripción (puedes corregirla antes de estimar)",
+                key="ai_food_description",
+                height=140,
+            )
     if mode == "Solo kcal":
         st.caption("Para comidas cuyo valor energético ya conoces. Los macronutrientes son opcionales y la entrada queda marcada como manual.")
         with st.form("manual_meal_calories", clear_on_submit=True):
