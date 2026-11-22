@@ -66,12 +66,12 @@ Ejemplo de despliegue (ajusta servicio, región y cuenta de servicio):
 
 ```bash
 # La cuenta de servicio de Cloud Run necesita roles/secretmanager.secretAccessor.
-gcloud secrets add-iam-policy-binding smartfit-gemini-api-key \\
-  --member="serviceAccount:TU_SERVICE_ACCOUNT" \\
+gcloud secrets add-iam-policy-binding smartfit-gemini-api-key \
+  --member="serviceAccount:TU_SERVICE_ACCOUNT" \
   --role="roles/secretmanager.secretAccessor"
 
-gcloud run services update TU_SERVICIO --region TU_REGION \\
-  --update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1 \\
+gcloud run services update TU_SERVICIO --region TU_REGION \
+  --update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1 \
   --update-env-vars=AI_PROVIDER=gemini,GEMINI_MODEL=gemini-3.1-flash-lite,GEMINI_SERVICE_TIER=flex,EMBEDDING_PROVIDER=gemini,GEMINI_EMBEDDING_MODEL=gemini-embedding-001
 ```
 
