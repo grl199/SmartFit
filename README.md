@@ -59,10 +59,10 @@ OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 
 ### Estimación de comidas por IA
 
-En Registrar → «Estimar con IA» puedes describir un plato. La propuesta se desglosa en ingredientes y cantidades
-editables; los nutrientes se recalculan por código y solo se crea el alimento y el registro cuando confirmas.
-Las entradas generadas quedan marcadas con confianza baja y guardan el desglose usado. La descripción utiliza
-el proveedor configurado en `AI_PROVIDER`.
+En Registrar → «Estimar con IA» puedes describir un plato, o introducir directamente las kcal totales cuando ya las
+conoces. La propuesta por IA se desglosa en ingredientes y cantidades editables; el backend recalcula los nutrientes
+y solo crea el alimento y el registro cuando confirmas. Las entradas estimadas quedan marcadas con confianza baja
+y guardan el desglose usado. La descripción utiliza el proveedor configurado en `AI_PROVIDER`.
 
 La fotografía es opcional y va por separado del proveedor de chat. Para activarla, configura `FOOD_VISION_ENABLED=true`
 y `FOOD_VISION_MODEL=gpt-4.1-mini`; proporciona `OPENAI_API_KEY` en desarrollo o configura Vault en producción.
