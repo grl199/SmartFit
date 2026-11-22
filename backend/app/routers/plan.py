@@ -97,12 +97,6 @@ def edit_day(day_id: int, body: DayIn, db: Session = Depends(get_db), uid: int =
 
 
 # ───────────── contenido didáctico ─────────────
-@router.get("/exercises/{exercise_id}/content")
-def exercise_content(exercise_id: int, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    """Ficha didáctica: qué trabaja, posición, pasos, errores frecuentes y recurso visual si lo hay."""
-    return content_svc.content_for(db, _visible(db, exercise_id, uid))
-
-
 @router.put("/exercises/{exercise_id}/content")
 def put_exercise_content(exercise_id: int, body: ContentIn, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
     """Solo en ejercicios propios: el contenido del catálogo compartido no se edita."""

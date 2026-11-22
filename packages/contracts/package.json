@@ -12,6 +12,6 @@
   },
   "scripts": {
     "generate": "pnpm dlx openapi-typescript@7.6.1 openapi.json -o src/generated.ts",
-    "typecheck": "pnpm dlx --package typescript@5.8.3 tsc --noEmit --project tsconfig.json"
+    "typecheck": "pnpm --package=typescript@5.8.3 dlx tsc --noEmit --project tsconfig.json"
   }
 }

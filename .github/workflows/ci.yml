@@ -39,9 +39,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r backend/requirements.txt
 
-      - name: Run pure backend tests
+      - name: Run backend unit and OpenAPI tests
         working-directory: backend
-        run: pytest -q tests/test_pure.py
+        run: pytest -q tests/test_pure.py tests/test_openapi.py
 
       - name: Install workspace
         run: pnpm install --frozen-lockfile
