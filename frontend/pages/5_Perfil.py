@@ -28,8 +28,17 @@ def pick(label, key, current, **kw):
 # ───────── Energía (calculada por código, sin IA) ─────────
 en = api.get("/profile/energy") or {}
 st.subheader("Tu gasto energético")
-if en.get("missing"):
-    st.info("Completa en el perfil (más abajo) para calcularlo: " + ", ".join(en["missing"]) + ".")
+# No asumir que el backend devuelve siempre todas las claves: en despliegues
+# con frontend/backend actualizados en momentos distintos puede faltar alguna.
+energy_fields = ("age", "bmr", "tdee", "weight_kg")
+missing_energy = en.get("missing") or []
+missing_fields = [key for key in energy_fields if en.get(key) is None]
+if missing_energy or missing_fields:
+    if missing_energy:
+        details = ", ".join(missing_energy)
+    else:
+        details = "datos del perfil o del peso todavía no disponibles"
+    st.info("Completa o revisa estos datos en el perfil (más abajo) para calcularlo: " + details + ".")
 else:
     m = st.columns(4)
     m[0].metric("Edad", f"{en['age']} años")
