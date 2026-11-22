@@ -10,7 +10,7 @@ st.set_page_config(page_title="Asistente", page_icon="💬", layout="wide")
 ui.inject_css()
 auth.require_login()
 
-st.session_state.setdefault("used_photos", set())
+st.session_state.setdefault("used_photos", set())\nst.session_state.setdefault("used_voice_notes", set())\naudio_capabilities = api.get("/chat/capabilities") or {"audio": False}
 convs = api.get("/conversations", limit=60) or []
 by_id = {c["id"]: c for c in convs}
 
@@ -100,7 +100,7 @@ if prompt:
             data = {"message": text, **({"conversation_id": str(conv_id)} if conv_id else {})}
             res = api.post("/chat", data=data, files={"image": (image.name, image.getvalue(), image.type)} if image else None)
     if res:
-        st.session_state.chat += [{"role": "user", "content": text + (" 📷" if image else "")},
+        st.session_state.chat += [{"role": "user", "content": text + (" 📷" if image else "") + ((" 🎙️ " + res["transcription"]) if res.get("transcription") else "")},
                                   {"role": "assistant", "content": res["reply"], "sources": res["sources"], "tools": res["tools_used"]}]
         st.session_state.conv_id = st.session_state.chat_conv = res["conversation_id"]  # una conversación nueva queda abierta
         st.rerun()  # refresca la lista lateral (título y orden)
