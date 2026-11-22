@@ -164,8 +164,8 @@ with tab_estimate:
     if estimate_clicked:
         if mode == "Fotografía" and photo is None:
             st.warning("Adjunta una fotografía para continuar.")
-        elif mode == "Descripción" and not description.strip():
-            st.warning("Describe qué has comido para poder estimarlo.")
+        elif mode in ("Descripción", "Nota de voz") and not description.strip():
+            st.warning("Describe qué has comido o transcribe una nota de voz para poder estimarlo.")
         else:
             st.session_state.pop("_ai_food_estimate_result", None)
             st.session_state.pop("ai_food_editor", None)
@@ -173,7 +173,7 @@ with tab_estimate:
             files = {"image": (photo.name or "comida.jpg", photo.getvalue(), photo.type or "image/jpeg")} if photo else None
             result = api.post(
                 "/foods/estimate",
-                data={"description": description.strip()},
+                data={"description": description.strip(), "method": "audio" if mode == "Nota de voz" else "description"},
                 files=files,
                 timeout=240,
             )
