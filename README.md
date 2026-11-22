@@ -77,7 +77,7 @@ gcloud run services update TU_SERVICIO --region TU_REGION \\
 
 Crea previamente `smartfit-gemini-api-key` en Secret Manager y carga la Gemini API key como una versión del secreto. Si el servicio ya tiene variables de entorno administradas por IaC, incorpora estos valores en esa configuración para que el siguiente despliegue no los sobrescriba.
 
-**Embeddings y RAG:** se mantienen separados del proveedor de chat para no mezclar vectores de modelos distintos. Con `EMBEDDING_PROVIDER=auto` y `AI_PROVIDER=gemini`, SmartFit usa OpenRouter si existe `OPENROUTER_API_KEY`; como alternativa, OpenAI/Vault. Mantén esa credencial si usas RAG. No cambies el proveedor/modelo de embeddings sin reindexar primero todos los documentos.
+**Embeddings y RAG:** el proveedor se configura por separado para no mezclar vectores de modelos distintos. Con `EMBEDDING_PROVIDER=auto` y `AI_PROVIDER=gemini`, SmartFit conserva los embeddings actuales usando OpenRouter si existe `OPENROUTER_API_KEY`, o OpenAI/Vault. Si quieres depender únicamente de Gemini, configura `EMBEDDING_PROVIDER=gemini` y `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`; esta opción usa la misma `GEMINI_API_KEY`, dimensión 1536 y normaliza los vectores. **Es obligatorio reindexar los recuerdos existentes después del cambio**: inicia sesión y llama una vez a `POST /rag/reindex` antes de volver a usar la búsqueda semántica. El endpoint re-embebe los fragmentos y reconstruye los resúmenes diarios. Los espacios vectoriales de Gemini y OpenAI/OpenRouter son incompatibles.
 Consulta también [los prompts para ampliar el catálogo y generar vídeos de ejercicios](docs/PROMPTS_CATALOGO_Y_VIDEOS.md).
 
 ### Estimación de comidas por IA

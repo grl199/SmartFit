@@ -32,7 +32,7 @@ def client():
     from app.main import app
     from app.services import rag
 
-    with patch.object(rag, "embed", lambda t: [[0.01] * 1536 for _ in t]), TestClient(app) as c:
+    with patch.object(rag, "embed", lambda t, **kwargs: [[0.01] * 1536 for _ in t]), TestClient(app) as c:
         yield c
 
 

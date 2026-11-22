@@ -1,6 +1,9 @@
 """Clientes de OpenRouter, OpenAI y Gemini para chat y embeddings."""
 from functools import lru_cache
+import math
 
+from google import genai
+from google.genai import types
 from openai import OpenAI
 
 from .config import get_settings
@@ -25,6 +28,15 @@ def get_openrouter_client() -> OpenAI:
     )
 
 
+
+
+@lru_cache
+def get_gemini_embeddings_client():
+    """Cliente nativo para embeddings Gemini (separado del cliente OpenAI-compatible de chat)."""
+    s = get_settings()
+    if not s.gemini_api_key:
+        raise RuntimeError("Falta GEMINI_API_KEY para generar embeddings Gemini.")
+    return genai.Client(api_key=s.gemini_api_key)
 
 
 @lru_cache
@@ -59,7 +71,7 @@ def get_client() -> OpenAI:
     return get_openai_client()
 
 
-def embed_texts(texts: list[str]) -> list[list[float]]:
+def embed_texts(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
     """Genera embeddings y verifica que coincidan con la dimensión de pgvector."""
     if not texts:
         return []
@@ -78,22 +90,46 @@ def embed_texts(texts: list[str]) -> list[list[float]]:
                 provider = "openai"
             else:
                 raise RuntimeError(
-                    "Gemini está configurado para chat, pero el RAG necesita su proveedor de embeddings anterior. "
-                    "Mantén OPENROUTER_API_KEY o configura OPENAI_API_KEY/Vault; no cambies de modelo sin reindexar."
+                    "Gemini está configurado para chat, pero no hay credenciales para conservar los embeddings actuales. "
+                    "Configura EMBEDDING_PROVIDER=gemini (y ejecuta POST /rag/reindex una vez) o mantén OPENROUTER_API_KEY "
+                    "u OPENAI_API_KEY/Vault para conservar el índice existente."
                 )
         else:
             raise ValueError(f"AI_PROVIDER no válido: {chat_provider!r}.")
-    if provider == "openai":
+    if provider == "gemini":
+        client = get_gemini_embeddings_client()
+        config = types.EmbedContentConfig(
+            task_type=task_type,
+            output_dimensionality=s.embedding_dim,
+        )
+        response = client.models.embed_content(
+            model=s.gemini_embedding_model,
+            contents=texts,
+            config=config,
+        )
+        vectors = [item.values for item in (response.embeddings or [])]
+        # Gemini Embedding 001 no normaliza automáticamente cuando se reduce la dimensión.
+        # Normalizamos localmente; pgvector utiliza cosine_distance en el RAG.
+        normalized = []
+        for vector in vectors:
+            norm = math.sqrt(sum(value * value for value in vector))
+            if not norm:
+                raise RuntimeError("Gemini devolvió un embedding nulo.")
+            normalized.append([value / norm for value in vector])
+        vectors = normalized
+        model = s.gemini_embedding_model
+    elif provider == "openai":
         client = get_openai_client()
         model = s.embedding_model
+        response = client.embeddings.create(model=model, input=texts)
+        vectors = [item.embedding for item in response.data]
     elif provider == "openrouter":
         client = get_openrouter_client()
         model = s.openrouter_embedding_model
+        response = client.embeddings.create(model=model, input=texts)
+        vectors = [item.embedding for item in response.data]
     else:
-        raise ValueError("EMBEDDING_PROVIDER debe ser 'auto', 'openrouter' o 'openai'.")
-
-    response = client.embeddings.create(model=model, input=texts)
-    vectors = [item.embedding for item in response.data]
+        raise ValueError("EMBEDDING_PROVIDER debe ser 'auto', 'openrouter', 'openai' o 'gemini'.")
     if len(vectors) != len(texts):
         raise RuntimeError(
             f"El modelo de embeddings {model!r} devolvió {len(vectors)} vectores "

@@ -17,8 +17,8 @@ WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "do
 MEALS = {"breakfast": "Desayuno", "lunch": "Comida", "snack": "Merienda/snack", "dinner": "Cena"}
 
 
-def embed(texts: list[str]) -> list[list[float]]:
-    return embed_texts(texts)
+def embed(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
+    return embed_texts(texts, task_type=task_type)
 
 
 def build_daily_summary(db: Session, user_id: int, day: date) -> str | None:
@@ -51,7 +51,7 @@ def build_daily_summary(db: Session, user_id: int, day: date) -> str | None:
 
 
 def _upsert(db: Session, user_id: int, kind: str, content: str, ref_date: date | None) -> None:
-    vector = embed([content])[0]
+    vector = embed([content], task_type="RETRIEVAL_DOCUMENT")[0]
     stmt = insert(MemoryChunk).values(
         user_id=user_id, kind=kind, ref_date=ref_date, content=content, embedding=vector
     )
@@ -92,7 +92,7 @@ def reindex_all(db: Session, user_id: int) -> dict[str, int]:
     }
     for start in range(0, len(chunks), 64):
         batch = chunks[start:start + 64]
-        vectors = embed([chunk.content for chunk in batch])
+        vectors = embed([chunk.content for chunk in batch], task_type="RETRIEVAL_DOCUMENT")
         for chunk, vector in zip(batch, vectors, strict=True):
             chunk.embedding = vector
     db.commit()
@@ -116,7 +116,7 @@ def add_note(db: Session, user_id: int, text: str) -> None:
 
 
 def search_memory(db: Session, user_id: int, query: str, k: int = 5) -> list[dict]:
-    query_vector = embed([query])[0]
+    query_vector = embed([query], task_type="RETRIEVAL_QUERY")[0]
     distance = MemoryChunk.embedding.cosine_distance(query_vector).label("dist")
     rows = db.execute(
         select(MemoryChunk, distance).where(MemoryChunk.user_id == user_id)

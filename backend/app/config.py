@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     gemini_model: str = "gemini-3.1-flash-lite"
     # Flex es más barato que Standard; usa Standard si priorizas latencia sobre coste.
     gemini_service_tier: str = "flex"
+    gemini_embedding_model: str = "gemini-embedding-001"
 
     # Vault (KV v2)
     vault_addr: str | None = None
