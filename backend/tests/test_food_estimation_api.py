@@ -98,3 +98,15 @@ def test_manual_calorie_entry_preserves_total_kcal(client, onboarded):
     assert response.status_code == 201, response.text
     assert response.json()["log"]["kcal"] == pytest.approx(400)
     assert response.json()["food"]["confidence"] == "low"
+
+
+def test_voice_note_transcription_returns_text_without_logging(client, onboarded):
+    with patch("app.routers.foods.transcribe_audio", return_value="Pollo con arroz y aceite de oliva") as transcribe:
+        response = client.post(
+            "/foods/transcribe-audio",
+            headers=_headers(onboarded),
+            files={"audio": ("receta.wav", b"fake-audio", "audio/wav")},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["transcript"] == "Pollo con arroz y aceite de oliva"
+    transcribe.assert_called_once()
