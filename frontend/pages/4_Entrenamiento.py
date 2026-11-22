@@ -630,3 +630,14 @@ with tab_plan:
     if weights:
         wdf = pd.DataFrame(weights).assign(measured_on=lambda x: pd.to_datetime(x["measured_on"])).set_index("measured_on")
         st.line_chart(wdf[["weight_kg"]].rename(columns={"weight_kg": "Peso (kg)"}))
+
+
+# ════════════════════════ Animaciones 3D ════════════════════════
+with tab_3d:
+    st.markdown("### 🎞️ Biblioteca de movimientos en 3D")
+    st.caption("20 ejercicios animados en bucle. Selecciona el movimiento, pausa la repetición o arrastra la escena para cambiar el ángulo. Son demostraciones visuales orientativas; ajusta la técnica a tu movilidad y carga.")
+    animation_file = Path(__file__).resolve().parents[1] / "exercise_animations_3d.html"
+    if animation_file.is_file():
+        st.components.v1.html(animation_file.read_text(encoding="utf-8"), height=650, scrolling=False)
+    else:
+        st.error("No se encuentra el visor 3D. Comprueba que frontend/exercise_animations_3d.html está incluido en el despliegue.")
