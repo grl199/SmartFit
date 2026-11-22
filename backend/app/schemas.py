@@ -58,6 +58,7 @@ class FoodOut(FoodBase):
 class BarcodeOut(BaseModel):
     status: str
     barcodes: list[str] = []
+    transcription: str | None = None
     food: FoodOut | None = None
     name: str | None = None
     brand: str | None = None
