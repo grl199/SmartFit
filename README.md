@@ -57,6 +57,18 @@ OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 
 `openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente, pero no se pueden leer etiquetas o analizar imágenes.
 
+### Estimación de comidas por IA
+
+En Registrar → «Estimar con IA» puedes describir un plato. La propuesta se desglosa en ingredientes y cantidades
+editables; los nutrientes se recalculan por código y solo se crea el alimento y el registro cuando confirmas.
+Las entradas generadas quedan marcadas con confianza baja y guardan el desglose usado. La descripción utiliza
+el proveedor configurado en `AI_PROVIDER`.
+
+La fotografía es opcional y va por separado del proveedor de chat. Para activarla, configura `FOOD_VISION_ENABLED=true`
+y `FOOD_VISION_MODEL=gpt-4.1-mini`; proporciona `OPENAI_API_KEY` en desarrollo o configura Vault en producción.
+La fotografía se procesa en memoria y no se guarda como archivo en la base de datos. La estimación es orientativa:
+revisa cantidades e ingredientes, especialmente aceites, salsas y alimentos ocultos.
+
 Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRouter. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`.
 
 ## Autenticación y onboarding
@@ -155,6 +167,13 @@ versión quedan en «Conversación anterior».
 - **Mapa muscular** frontal y posterior (modo claro/oscuro) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5),
   ranking por músculo y lista de los no trabajados. **Progresión** de fuerza: peso máximo, 1RM estimado (Epley) y volumen.
 - El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
+
+## Medios de ejercicios
+
+Las fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
+reproduce el recurso con `st.video()`. No se incluyen vídeos de terceros en el repositorio sin comprobar derechos de
+redistribución. El procedimiento para añadir recursos propios o con licencia está en
+[`docs/MEDIA_EJERCICIOS.md`](docs/MEDIA_EJERCICIOS.md).
 
 ## Interfaz
 

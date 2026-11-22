@@ -1,4 +1,7 @@
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from datetime import date
+from typing import Literal
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
@@ -7,14 +10,116 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user_id, read_image
 from ..models import Food, FoodLog, FoodServing, RecipeIngredient
-from ..schemas import BarcodeOut, FoodBase, FoodCopyIn, FoodCreate, FoodMineOut, FoodOut
+from ..schemas import BarcodeOut, FoodBase, FoodCopyIn, FoodCreate, FoodMineOut, FoodOut, LogOut, Meal
 from ..services.images import decode_barcodes
+from ..services.food_estimation import VisionEstimationDisabled, estimate_meal
+from ..services.nutrition import create_log
 from ..services import community
 from ..services.food_search import search_hybrid
 from ..services.names import pending_count, translate_pending_names
 from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
 
 router = APIRouter(prefix="/foods", tags=["foods"])
+
+
+
+class EstimatedComponentIn(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    grams: float = Field(gt=0, le=5000)
+    kcal_per_100g: float = Field(ge=0, le=950)
+    protein_g_per_100g: float = Field(ge=0, le=100)
+    carbs_g_per_100g: float = Field(ge=0, le=100)
+    sugars_g_per_100g: float = Field(ge=0, le=100)
+    fat_g_per_100g: float = Field(ge=0, le=100)
+    sat_fat_g_per_100g: float = Field(ge=0, le=100)
+    fiber_g_per_100g: float = Field(ge=0, le=100)
+    sodium_mg_per_100g: float = Field(ge=0, le=10000)
+    confidence: Literal["low", "medium"] = "low"
+
+
+class EstimatedFoodLogIn(BaseModel):
+    name: str = Field(min_length=1, max_length=300)
+    grams: float = Field(gt=0, le=5000)
+    log_date: date | None = None
+    meal: Meal | None = None
+    method: Literal["description", "photo"] = "description"
+    description: str = Field("", max_length=2000)
+    kcal: float = Field(ge=0, le=950)
+    protein_g: float = Field(ge=0, le=100)
+    carbs_g: float = Field(ge=0, le=100)
+    sugars_g: float = Field(ge=0, le=100)
+    fat_g: float = Field(ge=0, le=100)
+    sat_fat_g: float = Field(ge=0, le=100)
+    fiber_g: float = Field(ge=0, le=100)
+    sodium_mg: float = Field(ge=0, le=10000)
+    components: list[EstimatedComponentIn] = Field(min_length=1, max_length=25)
+
+
+@router.get("/estimate-capabilities")
+def estimate_capabilities():
+    """Indica qué modos de estimación están configurados, sin revelar secretos."""
+    from ..config import get_settings
+    settings = get_settings()
+    return {"description": True, "photo": settings.food_vision_enabled}
+
+
+@router.post("/estimate")
+def estimate_food(
+    description: str = Form(""),
+    image: UploadFile | None = File(None),
+):
+    """Propone ingredientes y nutrientes; no guarda nada hasta que el usuario confirma."""
+    image_bytes = read_image(image) if image is not None else None
+    if not description.strip() and image_bytes is None:
+        raise HTTPException(422, "Describe la comida o adjunta una fotografía")
+    try:
+        result = estimate_meal(description, image_bytes)
+    except VisionEstimationDisabled as exc:
+        raise HTTPException(503, str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(502, f"No se pudo interpretar la estimación: {exc}") from exc
+    except Exception as exc:  # noqa: BLE001
+        log.exception("Error estimando una comida")
+        raise HTTPException(502, "No se pudo estimar la comida con el proveedor de IA configurado") from exc
+    result["method"] = "photo" if image_bytes is not None else "description"
+    return result
+
+
+@router.post("/estimate-log", status_code=201)
+def confirm_estimated_food(
+    body: EstimatedFoodLogIn,
+    db: Session = Depends(get_db),
+    uid: int = Depends(current_user_id),
+):
+    """Guarda la estimación revisada como alimento privado y registra su instantánea nutricional."""
+    if body.protein_g + body.carbs_g + body.fat_g > 105:
+        raise HTTPException(422, "Los macronutrientes superan un valor plausible por 100 g")
+    if body.sugars_g > body.carbs_g + 0.5 or body.sat_fat_g > body.fat_g + 0.5:
+        raise HTTPException(422, "Los nutrientes no son coherentes")
+    components = [item.model_dump() for item in body.components]
+    if abs(sum(item["grams"] for item in components) - body.grams) > max(5.0, body.grams * 0.05):
+        raise HTTPException(422, "La suma de los ingredientes no coincide con el peso total de la comida")
+    food = Food(
+        user_id=uid,
+        source="manual",
+        name=body.name.strip(),
+        serving_g=body.grams,
+        confidence="low",
+        attribution="Estimación orientativa de IA revisada por el usuario; no equivale a un análisis nutricional.",
+        extra={
+            "ai_estimated": True,
+            "estimate_method": body.method,
+            "estimate_description": body.description,
+            "estimate_components": components,
+        },
+        **{key: getattr(body, key) for key in (
+            "kcal", "protein_g", "carbs_g", "sugars_g", "fat_g", "sat_fat_g", "fiber_g", "sodium_mg"
+        )},
+    )
+    db.add(food)
+    db.flush()
+    log = create_log(db, uid, food, body.grams, body.meal, body.log_date)
+    return {"food": FoodOut.model_validate(food), "log": LogOut.model_validate(log)}
 
 
 @router.get("/search", response_model=list[FoodOut])

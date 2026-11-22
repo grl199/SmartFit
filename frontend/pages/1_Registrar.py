@@ -1,5 +1,6 @@
 from datetime import date
 
+import pandas as pd
 import streamlit as st
 from streamlit_searchbox import st_searchbox
 
@@ -24,7 +25,7 @@ kw = {"log_date": log_date.isoformat(), "meal": meal}
 with st.expander("⭐ Habituales", expanded=True):
     quick_add_bar()
 
-tab_search, tab_recipe, tab_mine, tab_scan, tab_manual = st.tabs(["🔎 Buscar", "🍳 Recetas", "👤 Mis alimentos", "📷 Código", "✍️ Crear manual"])
+tab_search, tab_recipe, tab_mine, tab_scan, tab_manual, tab_estimate = st.tabs(["🔎 Buscar", "🍳 Recetas", "👤 Mis alimentos", "📷 Código", "✍️ Crear manual", "✨ Estimar con IA"])
 
 with tab_mine:
     my_foods_tab(kw)
@@ -92,6 +93,127 @@ with tab_scan:
             if st.button("✍️ Crear este producto manualmente", key="prefill_btn"):
                 st.session_state["prefill_barcode"] = code
                 st.info("Código copiado. Ve a la pestaña «Crear manual»: la próxima vez que lo escanees se reconocerá solo.")
+
+
+# ───────── Estimación de platos con IA ─────────
+with tab_estimate:
+    capabilities = api.get("/foods/estimate-capabilities") or {"description": True, "photo": False}
+    modes = ["Descripción", "Fotografía"] if capabilities.get("photo") else ["Descripción"]
+    mode = st.radio("¿Cómo quieres registrar la comida?", modes, horizontal=True, key="ai_food_mode")
+    description = st.text_area(
+        "Describe el plato o añade contexto",
+        placeholder="Ej.: ensalada con lechuga, tomate, medio aguacate, una lata de atún y una cucharada de aceite...",
+        height=100,
+        key="ai_food_description",
+    )
+    photo = None
+    if mode == "Fotografía":
+        st.caption("Haz una foto del plato completo, con buena luz y desde arriba. La estimación visual es aproximada.")
+        photo = st.camera_input("Fotografía del plato", key="ai_food_camera")
+        uploaded = st.file_uploader("…o sube una fotografía", type=["jpg", "jpeg", "png", "webp"], key="ai_food_upload")
+        photo = photo or uploaded
+    elif not capabilities.get("photo"):
+        st.caption("La estimación por fotografía está disponible al activar FOOD_VISION_ENABLED y configurar una clave de OpenAI en el backend.")
+    estimate_clicked = st.button("✨ Estimar ingredientes y calorías", type="primary", key="ai_food_estimate")
+    if estimate_clicked:
+        if mode == "Fotografía" and photo is None:
+            st.warning("Adjunta una fotografía para continuar.")
+        elif mode == "Descripción" and not description.strip():
+            st.warning("Describe qué has comido para poder estimarlo.")
+        else:
+            st.session_state.pop("_ai_food_estimate_result", None)
+            st.session_state.pop("ai_food_editor", None)
+            st.session_state.pop("ai_food_name", None)
+            files = {"image": (photo.name or "comida.jpg", photo.getvalue(), photo.type or "image/jpeg")} if photo else None
+            result = api.post(
+                "/foods/estimate",
+                data={"description": description.strip()},
+                files=files,
+                timeout=240,
+            )
+            if result:
+                st.session_state["_ai_food_estimate_result"] = result
+
+    estimate = st.session_state.get("_ai_food_estimate_result")
+    if estimate:
+        st.markdown(f"**Propuesta de la IA: {estimate['name']}**")
+        st.caption("Estimación orientativa. Revisa ingredientes y cantidades: una fotografía no permite conocer pesos exactos.")
+        if estimate.get("assumptions"):
+            with st.expander("Suposiciones de la estimación"):
+                for assumption in estimate["assumptions"]:
+                    st.write(f"• {assumption}")
+        frame = pd.DataFrame(estimate["items"])
+        editable = st.data_editor(
+            frame,
+            hide_index=True,
+            num_rows="dynamic",
+            width="stretch",
+            disabled=["confidence"],
+            key="ai_food_editor",
+            column_config={
+                "grams": st.column_config.NumberColumn("Gramos", min_value=0.1, max_value=5000, step=1),
+                "kcal_per_100g": st.column_config.NumberColumn("kcal/100 g", min_value=0, max_value=950, step=1),
+                "protein_g_per_100g": st.column_config.NumberColumn("Proteína/100 g", min_value=0, max_value=100, step=0.1),
+                "carbs_g_per_100g": st.column_config.NumberColumn("Hidratos/100 g", min_value=0, max_value=100, step=0.1),
+                "fat_g_per_100g": st.column_config.NumberColumn("Grasa/100 g", min_value=0, max_value=100, step=0.1),
+            },
+        )
+        editable = editable.copy()
+        editable["name"] = editable["name"].fillna("").astype(str).str.strip()
+        editable["grams"] = pd.to_numeric(editable["grams"], errors="coerce").fillna(0)
+        editable = editable[(editable["name"] != "") & (editable["grams"] > 0)]
+        total_grams = float(editable["grams"].sum())
+        nutrient_map = {
+            "kcal": "kcal_per_100g",
+            "protein_g": "protein_g_per_100g",
+            "carbs_g": "carbs_g_per_100g",
+            "sugars_g": "sugars_g_per_100g",
+            "fat_g": "fat_g_per_100g",
+            "sat_fat_g": "sat_fat_g_per_100g",
+            "fiber_g": "fiber_g_per_100g",
+            "sodium_mg": "sodium_mg_per_100g",
+        }
+        totals = {}
+        per100 = {}
+        for nutrient, column in nutrient_map.items():
+            values = pd.to_numeric(editable[column], errors="coerce").fillna(0) if column in editable else pd.Series(dtype=float)
+            totals[nutrient] = float((values * editable["grams"] / 100).sum()) if len(editable) else 0.0
+            per100[nutrient] = totals[nutrient] * 100 / total_grams if total_grams else 0.0
+
+        if total_grams > 0:
+            st.markdown("**Totales de la comida revisada**")
+            cals = st.columns(4)
+            cals[0].metric("Peso", f"{total_grams:.0f} g")
+            cals[1].metric("Calorías", f"{totals['kcal']:.0f} kcal")
+            cals[2].metric("Proteína", f"{totals['protein_g']:.1f} g")
+            cals[3].metric("Hidratos / grasa", f"{totals['carbs_g']:.1f} / {totals['fat_g']:.1f} g")
+            st.text_input("Nombre para el diario", value=estimate["name"], key="ai_food_name")
+            st.caption("Al confirmar se guardará un alimento privado con confianza baja («estimado») y el detalle de los ingredientes. El registro conserva una instantánea de nutrientes.")
+            if st.button("✅ Confirmar y añadir al diario", type="primary", key="ai_food_confirm"):
+                components = []
+                for row in editable.to_dict("records"):
+                    item = {"name": row["name"], "grams": float(row["grams"])}
+                    for col in nutrient_map.values():
+                        item[col] = float(row.get(col) or 0)
+                    item["confidence"] = str(row.get("confidence") or "low")
+                    components.append(item)
+                payload = {
+                    "name": st.session_state.get("ai_food_name") or estimate["name"],
+                    "grams": round(total_grams, 1),
+                    "log_date": kw["log_date"],
+                    "meal": kw["meal"],
+                    "method": estimate.get("method", "description"),
+                    "description": description.strip(),
+                    **{key: round(value, 3) for key, value in per100.items()},
+                    "components": components,
+                }
+                saved = api.post("/foods/estimate-log", json=payload)
+                if saved:
+                    st.toast(f"Registrado: {payload['name']} · {totals['kcal']:.0f} kcal", icon="✅")
+                    st.session_state.pop("_ai_food_estimate_result", None)
+                    st.rerun()
+        else:
+            st.warning("Añade al menos un ingrediente con una cantidad mayor que cero.")
 
 # ───────── Crear manual ─────────
 with tab_manual:

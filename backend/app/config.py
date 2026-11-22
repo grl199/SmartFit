@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     # Traduce al español (con IA, en segundo plano) los nombres de productos de OFF guardados
     translate_names: bool = True
 
+    # Estimación por fotografía: usa OpenAI Vision de forma independiente del proveedor de chat.
+    # Requiere FOOD_VISION_ENABLED=true y OPENAI_API_KEY o Vault.
+    food_vision_enabled: bool = False
+    food_vision_model: str = "gpt-4.1-mini"
+
 
 @lru_cache
 def get_settings() -> Settings:
