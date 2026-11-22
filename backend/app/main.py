@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
 from . import enums
@@ -51,6 +52,13 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="SmartFit API", version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Públicas / solo autenticadas: auth (login, registro) y perfil (incluye el onboarding).
 app.include_router(auth.router)

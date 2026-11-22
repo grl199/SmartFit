@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://health:health@localhost:5432/health"
     timezone: str = "Europe/Madrid"
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # --- Autenticación ---
     # Clave para firmar los JWT. Genera una con: python -c "import secrets; print(secrets.token_urlsafe(48))"
