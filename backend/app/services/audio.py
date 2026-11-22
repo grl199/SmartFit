@@ -26,7 +26,6 @@ def audio_transcription_available() -> bool:
     settings = get_settings()
     if settings.gemini_api_key:
         return True
-    provider = settings.ai_provider.strip().lower()
     return bool(settings.openai_api_key or settings.vault_addr)
 
 
@@ -54,7 +53,6 @@ def transcribe_audio(data: bytes, mime_type: str | None = None, filename: str | 
     if not data:
         raise ValueError("La nota de voz está vacía.")
     settings = get_settings()
-    provider = settings.ai_provider.strip().lower()
     mime = _normalise_mime(mime_type, filename)
 
     if settings.gemini_api_key:
