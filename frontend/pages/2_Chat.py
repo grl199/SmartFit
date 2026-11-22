@@ -11,6 +11,7 @@ ui.inject_css()
 auth.require_login()
 
 st.session_state.setdefault("used_photos", set())
+audio_capabilities = api.get("/chat/capabilities") or {"audio": False}
 convs = api.get("/conversations", limit=60) or []
 by_id = {c["id"]: c for c in convs}
 
@@ -71,6 +72,8 @@ with st.sidebar:
 # ───────── Conversación ─────────
 st.title("💬 Asistente")
 st.caption(by_id[conv_id]["title"] if conv_id in by_id else "Nueva conversación")
+if not audio_capabilities.get("audio"):
+    st.caption("Para activar las notas de voz, configura GEMINI_API_KEY o una clave de OpenAI directa/en Vault en el backend.")
 if not st.session_state.chat:
     st.info("Prueba: «¿Cuánta proteína me falta hoy?» · «¿Cómo ha sido mi semana de entreno?» · adjunta la foto de un producto y pregunta qué lleva.")
 for m in st.session_state.chat:
@@ -84,9 +87,12 @@ for m in st.session_state.chat:
             st.caption("Herramientas: " + ", ".join(m["tools"]))
 
 prompt = st.chat_input("Pregunta algo o adjunta una foto…", accept_file=True, file_type=["jpg", "jpeg", "png", "webp"])
-if prompt:
-    text = prompt.text or ""
-    image = prompt.files[0] if prompt.files else None
+voice_note = st.audio_input("Grabar nota de voz", key="chat_voice_note") if audio_capabilities.get("audio") else None
+send_voice = st.button("🎙️ Enviar nota de voz", disabled=voice_note is None, key="chat_send_voice") if audio_capabilities.get("audio") else False
+if prompt or send_voice:
+    text = (prompt.text or "") if prompt else ""
+    image = prompt.files[0] if prompt and prompt.files else None
+    audio = voice_note if send_voice else None
     if image is None and cam and cam.file_id not in st.session_state.used_photos:
         image = cam
         st.session_state.used_photos.add(cam.file_id)
@@ -95,12 +101,20 @@ if prompt:
         st.markdown(text)
         if image:
             st.image(image, width=240)
+        if audio:
+            st.audio(audio.getvalue(), format=audio.type or "audio/wav")
     with st.chat_message("assistant"):
         with st.spinner("Pensando…"):
             data = {"message": text, **({"conversation_id": str(conv_id)} if conv_id else {})}
-            res = api.post("/chat", data=data, files={"image": (image.name, image.getvalue(), image.type)} if image else None)
+            uploads = {}
+            if image:
+                uploads["image"] = (image.name, image.getvalue(), image.type)
+            if audio:
+                uploads["audio"] = (audio.name or "nota-de-voz.wav", audio.getvalue(), audio.type or "audio/wav")
+            res = api.post("/chat", data=data, files=uploads or None, timeout=api.LONG_TIMEOUT)
     if res:
-        st.session_state.chat += [{"role": "user", "content": text + (" 📷" if image else "")},
+        user_content = text + (" 📷" if image else "") + ((" 🎙️ " + res["transcription"]) if res.get("transcription") else "")
+        st.session_state.chat += [{"role": "user", "content": user_content},
                                   {"role": "assistant", "content": res["reply"], "sources": res["sources"], "tools": res["tools_used"]}]
-        st.session_state.conv_id = st.session_state.chat_conv = res["conversation_id"]  # una conversación nueva queda abierta
-        st.rerun()  # refresca la lista lateral (título y orden)
+        st.session_state.conv_id = st.session_state.chat_conv = res["conversation_id"]
+        st.rerun()

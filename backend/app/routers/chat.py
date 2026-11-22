@@ -8,6 +8,7 @@ from ..deps import current_user_id, read_image
 from ..models import ChatMessage, Conversation
 from ..schemas import ChatMessageOut, ChatOut, ConversationOut, ConversationRename
 from ..services.rag import reindex_all
+from ..services.audio import audio_transcription_available, transcribe_audio
 
 router = APIRouter(tags=["chat"])
 MAX_CONVERSATIONS = 200
@@ -21,13 +22,27 @@ def _own(db: Session, conv_id: int, uid: int) -> Conversation:
 
 
 # `def` (no async): el SDK de OpenAI y SQLAlchemy son síncronos -> FastAPI lo ejecuta en su threadpool.
+@router.get("/chat/capabilities")
+def chat_capabilities():
+    return {"audio": audio_transcription_available()}
+
+
 @router.post("/chat", response_model=ChatOut)
-def chat(message: str = Form(""), image: UploadFile | None = File(None), conversation_id: int | None = Form(None),
+def chat(message: str = Form(""), image: UploadFile | None = File(None), audio: UploadFile | None = File(None), conversation_id: int | None = Form(None),
          db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
     """Envía un mensaje. Sin `conversation_id` se crea una conversación nueva (queda guardada en el histórico)."""
-    if not message.strip() and image is None:
-        raise HTTPException(422, "Escribe un mensaje o adjunta una imagen")
+    if not message.strip() and image is None and audio is None:
+        raise HTTPException(422, "Escribe un mensaje o adjunta una imagen o nota de voz")
     data = read_image(image) if image else None
+    transcript = None
+    if audio is not None:
+        try:
+            transcript = transcribe_audio(audio.file.read(), audio.content_type, audio.filename)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc)) from exc
+        except Exception as exc:  # noqa: BLE001
+            raise HTTPException(502, str(exc)[:300]) from exc
+        message = (message.strip() + "\n\n" + transcript).strip()
     if conversation_id is None:
         conv = Conversation(user_id=uid, title=DEFAULT_TITLE)
         db.add(conv)
@@ -35,7 +50,9 @@ def chat(message: str = Form(""), image: UploadFile | None = File(None), convers
     else:
         conv = _own(db, conversation_id, uid)
     try:
-        return run_agent(db, uid, message, data, conv.id)
+        result = run_agent(db, uid, message, data, conv.id)
+        result["transcription"] = transcript
+        return result
     except ValueError as e:  # imagen corrupta
         raise HTTPException(422, str(e))
 

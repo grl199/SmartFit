@@ -19,8 +19,11 @@ class Settings(BaseSettings):
     bootstrap_username: str | None = None
     bootstrap_password: str | None = None
 
-    # Proveedor de chat y embeddings: "openrouter" o "openai".
+    # Proveedor de chat: "openrouter", "openai" o "gemini".
     ai_provider: str = "openrouter"
+    # Proveedor de embeddings. "auto" conserva el proveedor histórico; con Gemini usa OpenRouter si hay key,
+    # o OpenAI/Vault como alternativa. No cambiar el modelo de embeddings sin reindexar el RAG.
+    embedding_provider: str = "auto"
 
     # OpenRouter
     openrouter_api_key: str | None = None
@@ -36,6 +39,13 @@ class Settings(BaseSettings):
     embedding_dim: int = 1536
     openai_api_key: str | None = None  # solo desarrollo; en prod viene de Vault
 
+    # Gemini Developer API (GEMINI_API_KEY se inyecta desde Cloud Run Secret Manager).
+    gemini_api_key: str | None = None
+    gemini_model: str = "gemini-3.1-flash-lite"
+    # Flex es más barato que Standard; usa Standard si priorizas latencia sobre coste.
+    gemini_service_tier: str = "flex"
+    gemini_embedding_model: str = "gemini-embedding-001"
+
     # Vault (KV v2)
     vault_addr: str | None = None
     vault_token: str | None = None
@@ -49,6 +59,11 @@ class Settings(BaseSettings):
     off_search_per_minute: int = 8
     # Traduce al español (con IA, en segundo plano) los nombres de productos de OFF guardados
     translate_names: bool = True
+
+    # Estimación por fotografía al usar OpenAI directo. Gemini tiene visión integrada con GEMINI_API_KEY.
+    # Requiere FOOD_VISION_ENABLED=true y OPENAI_API_KEY o Vault si AI_PROVIDER=openai.
+    food_vision_enabled: bool = False
+    food_vision_model: str = "gpt-4.1-mini"
 
 
 @lru_cache

@@ -1,5 +1,7 @@
 from datetime import date, timedelta
 from html import escape
+from pathlib import Path
+import re
 
 import pandas as pd
 import streamlit as st
@@ -197,12 +199,52 @@ def last_session_card(card: dict) -> None:
     st.dataframe(df, hide_index=True, width="stretch")
 
 
+
+@st.cache_data(show_spinner=False)
+def _exercise_animation_source() -> tuple[str, dict[str, int]]:
+    """Carga el visor 3D y crea un índice nombre -> animación."""
+    path = Path(__file__).resolve().parents[1] / "exercise_animations_3d.html"
+    if not path.is_file():
+        return "", {}
+    source = path.read_text(encoding="utf-8")
+    names = re.findall(r"\{n:'([^']+)'", source)
+    return source, {name.casefold(): i for i, name in enumerate(names)}
+
+
+def show_exercise_animation(name: str) -> bool:
+    """Muestra solo la animación del ejercicio seleccionado, con encuadre compacto."""
+    source, index = _exercise_animation_source()
+    if not source:
+        return False
+    selected = index.get(name.casefold())
+    if selected is None:
+        return False
+    compact_css = (
+        "html,body{margin:0!important;padding:0!important;overflow:hidden!important}"
+        "main{max-width:100%!important;margin:0!important;padding:0!important}"
+        "h1,p.s,nav{display:none!important}"
+        "canvas{width:100%!important;max-height:340px!important;border-radius:10px}"
+        ".info{margin:5px 0 0!important;padding:7px 9px!important;gap:7px!important}"
+        "#br{max-width:42%;font-size:11px!important}"
+        "#tn{font-size:13px!important}#tm{font-size:11px!important}"
+        "#pz{padding:5px 9px!important;font-size:12px!important}"
+    )
+    source = source.replace("</style>", compact_css + "</style>", 1)
+    source = source.replace("new THREE.PerspectiveCamera(42,16/9,.1,50)",
+                            "new THREE.PerspectiveCamera(48,16/9,.1,50)")
+    source = source.replace("dist=5.1*z", "dist=6.0*z")
+    source = source.replace("rs();pick(0);requestAnimationFrame(loop);",
+                            f"rs();pick({selected});requestAnimationFrame(loop);")
+    st.components.v1.html(source, height=420, scrolling=False)
+    return True
+
 def exercise_block(ex: dict) -> pd.DataFrame:
     """Tabla editable de series de un ejercicio, precargada con la última vez que lo hiciste (el fallo NO se precarga)."""
     hist = last_sets(ex["id"])
     card = last_card(ex["id"])
     with st.container(border=True):
         ui.html(f"<b>{escape(ex['name'])}</b><br>{muscle_chips(ex)}")
+        show_exercise_animation(ex["name"])
         target = st.session_state.get("_plan_targets", {}).get(ex["id"])
         if target:
             st.caption(f"🎯 Objetivo del plan: {target[0]} series × {target[1]}-{target[2]} repeticiones")
@@ -369,6 +411,11 @@ with tab_reg:
         if cat == "stretching":
             if selected:
                 ui.html("".join(ui.chip(cache[i]["name"].replace("Estiramiento de ", ""), "green") for i in selected))
+                for ex_id in selected:
+                    with st.container(border=True):
+                        st.markdown(f"**{cache[ex_id]['name']}**")
+                        if not show_exercise_animation(cache[ex_id]["name"]):
+                            st.caption("Aún no hay una animación 3D para este estiramiento.")
         else:
             for ex_id in selected:
                 edited[ex_id] = exercise_block(cache[ex_id])

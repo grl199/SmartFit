@@ -44,6 +44,20 @@ def test_seed_is_idempotent(client):
         assert seed_catalog(db) == 0
 
 
+def test_exercise_content_endpoint_returns_guide_and_respects_visibility(client, onboarded):
+    h = onboarded["headers"]
+    exercise_id = ex_id(client, h, "Dominadas")
+    response = client.get(f"/exercises/{exercise_id}/content", headers=h)
+    assert response.status_code == 200, response.text
+    content = response.json()
+    assert content["name"] == "Dominadas"
+    assert content["description"]
+    assert content["instructions"]
+    assert content["video_url"] is None  # no se inventan ni se incrustan vídeos sin licencia
+    other = onboard_new_user(client)
+    assert client.get(f"/exercises/{exercise_id}/content", headers=other["headers"]).status_code == 200  # catálogo compartido
+
+
 def test_custom_exercises(client, onboarded):
     h, tag = onboarded["headers"], rnd(6)
     made = client.post("/exercises", headers=h, json={"name": f"Remo Pendlay {tag}", "primary_muscle": "upper_back",

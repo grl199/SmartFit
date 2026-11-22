@@ -8,6 +8,7 @@ numpy>=1.26
 pydantic>=2.8
 pydantic-settings>=2.4
 openai>=1.99
+google-genai>=1.0
 hvac>=2.3
 argon2-cffi>=23.1
 PyJWT>=2.8

@@ -376,6 +376,7 @@ class ChatOut(BaseModel):
     sources: list[dict] = []
     tools_used: list[str] = []
     barcodes: list[str] = []
+    transcription: str | None = None
 
 
 class ChatMessageOut(BaseModel):

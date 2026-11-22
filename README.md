@@ -1,17 +1,18 @@
 # HealthApp
 
-Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de IA es seleccionable por variable de entorno: OpenRouter u OpenAI.
+Seguimiento de nutrición y entrenamiento con un asistente que consulta tus datos reales. El proveedor de chat es seleccionable por variable de entorno: OpenRouter, OpenAI o Gemini.
 
 ```
 Streamlit ──HTTP──▶ FastAPI ──▶ PostgreSQL (+pgvector)
                       │
-                      ├─▶ Agente (OpenRouter Chat Completions u OpenAI Responses API)
+                      ├─▶ Agente (OpenRouter, OpenAI Responses API o Gemini OpenAI-compatible API)
                       │     ├─ herramientas locales: resúmenes SQL, barcode, foods, log_food, RAG, remember
                       │     └─ web_search alojado (solo OpenAI)
-                      ├─▶ Embeddings RAG (OpenRouter u OpenAI según AI_PROVIDER)
+                      ├─▶ Embeddings RAG (proveedor independiente para preservar el índice existente)
                       ├─▶ Open Food Facts (barcode → nutrientes)
                       ├─▶ zxing-cpp (decodifica el código de la foto, determinista)
-                      └─▶ Vault (opcional, API key de OpenAI directo)
+                      ├─▶ Vault (opcional, API key de OpenAI directo)
+                      └─▶ Cloud Run Secret Manager (GEMINI_API_KEY inyectada como variable de entorno)
 ```
 
 ## Puesta en marcha
@@ -55,9 +56,43 @@ OPENROUTER_EMBEDDING_MODEL=openai/text-embedding-3-small
 # OPENAI_MODEL=gpt-5.5
 ```
 
-`openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente, pero no se pueden leer etiquetas o analizar imágenes.
+`openai/gpt-oss-20b:free` es la variante gratuita de chat de OpenRouter, sujeta a límites y disponibilidad. Los embeddings se envían también a OpenRouter con `openai/text-embedding-3-small` y pueden generar cargos separados. Este modelo de chat acepta texto, no imágenes: los códigos de barras de las fotos se decodifican localmente.
 
-Con `AI_PROVIDER=openrouter`, el chat y los embeddings usan la clave de OpenRouter. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`.
+**Gemini:** `AI_PROVIDER=gemini` usa el endpoint oficial compatible con OpenAI, por lo que mantiene el mismo bucle de function calling y las herramientas de SmartFit. El modelo por defecto es `gemini-3.1-flash-lite` con `GEMINI_SERVICE_TIER=flex` (menor coste y menor prioridad; cambia a `standard` si necesitas menor latencia). La API oficial publica para Flex un precio de USD 0,125/M tokens de entrada y USD 0,75/M de salida. Las fotos del chat y del registro de comida también se pueden analizar con Gemini.
+
+En Cloud Run crea un secreto en **Secret Manager** y asígnalo a la variable `GEMINI_API_KEY` del contenedor (por ejemplo, `--update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1`). Con variables de entorno, Google recomienda fijar una versión concreta del secreto. No añadas la clave a `.env`, al repositorio ni a los logs.
+
+Ejemplo de despliegue (ajusta servicio, región y cuenta de servicio):
+
+```bash
+# La cuenta de servicio de Cloud Run necesita roles/secretmanager.secretAccessor.
+gcloud secrets add-iam-policy-binding smartfit-gemini-api-key \
+  --member="serviceAccount:TU_SERVICE_ACCOUNT" \
+  --role="roles/secretmanager.secretAccessor"
+
+gcloud run services update TU_SERVICIO --region TU_REGION \
+  --update-secrets=GEMINI_API_KEY=smartfit-gemini-api-key:1 \
+  --update-env-vars=AI_PROVIDER=gemini,GEMINI_MODEL=gemini-3.1-flash-lite,GEMINI_SERVICE_TIER=flex,EMBEDDING_PROVIDER=gemini,GEMINI_EMBEDDING_MODEL=gemini-embedding-001
+```
+
+Crea previamente `smartfit-gemini-api-key` en Secret Manager y carga la Gemini API key como una versión del secreto. Si el servicio ya tiene variables de entorno administradas por IaC, incorpora estos valores en esa configuración para que el siguiente despliegue no los sobrescriba.
+
+**Embeddings y RAG:** el proveedor se configura por separado para no mezclar vectores de modelos distintos. Con `EMBEDDING_PROVIDER=auto` y `AI_PROVIDER=gemini`, SmartFit conserva los embeddings actuales usando OpenRouter si existe `OPENROUTER_API_KEY`, o OpenAI/Vault. Si quieres depender únicamente de Gemini, configura `EMBEDDING_PROVIDER=gemini` y `GEMINI_EMBEDDING_MODEL=gemini-embedding-001`; esta opción usa la misma `GEMINI_API_KEY`, dimensión 1536 y normaliza los vectores. **Es obligatorio reindexar los recuerdos existentes después del cambio**: inicia sesión y llama una vez a `POST /rag/reindex` antes de volver a usar la búsqueda semántica. El endpoint re-embebe los fragmentos y reconstruye los resúmenes diarios. Los espacios vectoriales de Gemini y OpenAI/OpenRouter son incompatibles. Gemini Embedding 001 tiene un coste publicado de USD 0,15 por millón de tokens de entrada (antes de descuentos/límites de tier); se factura aparte del modelo de chat.
+Consulta también [los prompts para ampliar el catálogo y generar vídeos de ejercicios](docs/PROMPTS_CATALOGO_Y_VIDEOS.md).
+
+### Estimación de comidas por IA
+
+En Registrar → «Estimar con IA» puedes describir un plato, o introducir directamente las kcal totales cuando ya las
+conoces. La propuesta por IA puede partir de texto, fotografía o nota de voz (receta dictada). El audio se transcribe y puedes corregir el texto antes de estimar. La propuesta se desglosa en ingredientes y cantidades editables; el backend recalcula los nutrientes
+y solo crea el alimento y el registro cuando confirmas. Las entradas estimadas quedan marcadas con confianza baja
+y guardan el desglose usado. La descripción utiliza el proveedor configurado en `AI_PROVIDER`.
+
+Con `AI_PROVIDER=gemini`, la fotografía y las notas de voz utilizan Gemini y la misma clave de Cloud Run. Para notas de voz con otro proveedor, puedes configurar además `GEMINI_API_KEY` o una clave de OpenAI directa/en Vault; el audio se procesa en memoria y no se almacena. Con OpenAI,
+se mantiene la opción separada `FOOD_VISION_ENABLED=true`, `FOOD_VISION_MODEL=gpt-4.1-mini` y OPENAI_API_KEY/Vault.
+Las imágenes y notas de voz se procesan en memoria y no se guardan como archivos en la base de datos. Revisa siempre los ingredientes
+y las cantidades estimadas, especialmente aceites, salsas y alimentos ocultos.
+
+Con `AI_PROVIDER=openrouter`, el chat usa OpenRouter y los embeddings siguen su configuración independiente. Las herramientas locales (SQL, alimentos, registro y memoria) siguen activas; no hay búsqueda web integrada en este flujo. OpenAI directo mantiene su flujo original, incluido `web_search`, cuando `AI_PROVIDER=openai`. Gemini utiliza function calling e imágenes mediante el endpoint compatible con OpenAI; no añade grounding/búsqueda web automática.
 
 ## Autenticación y onboarding
 
@@ -131,7 +166,8 @@ mismo código).
 
 Cada conversación se guarda y tiene su propio historial: la barra lateral las agrupa por fecha (hoy, ayer, últimos 7 días…) y permite
 saltar de una a otra, renombrarlas y eliminarlas. La primera pregunta da título a la conversación. Los mensajes que había antes de esta
-versión quedan en «Conversación anterior».
+versión quedan en «Conversación anterior». El chat admite también notas de voz: se transcriben antes de enviar el texto al agente.
+La transcripción utiliza Gemini si hay `GEMINI_API_KEY`, o OpenAI si hay una clave directa/en Vault; el audio se procesa en memoria.
 
 ## Entrenamiento
 
@@ -155,6 +191,15 @@ versión quedan en «Conversación anterior».
 - **Mapa muscular** frontal y posterior (modo claro/oscuro) coloreado por series ponderadas por semana (principal = 1, secundarios = 0,5),
   ranking por músculo y lista de los no trabajados. **Progresión** de fuerza: peso máximo, 1RM estimado (Epley) y volumen.
 - El agente dispone de `get_workout_log` para responder sobre tus sesiones, series y volumen por músculo.
+
+## Medios de ejercicios
+
+La pestaña Entrenamiento → «Ejercicios 3D» incorpora un visor interactivo Three.js con 20 movimientos (selección, pausa y rotación de cámara) en `frontend/exercise_animations_3d.html`. Las animaciones son demostraciones visuales orientativas y requieren revisión técnica antes de considerarlas instrucciones biomecánicas.
+
+Las fichas ya soportan `ExerciseContent.video_url`, `media_type='video'` y `media_credit`; la pantalla de entrenamiento
+reproduce el recurso con `st.video()`. No se incluyen vídeos de terceros en el repositorio sin comprobar derechos de
+redistribución. El procedimiento para añadir recursos propios o con licencia está en
+[`docs/MEDIA_EJERCICIOS.md`](docs/MEDIA_EJERCICIOS.md).
 
 ## Interfaz
 

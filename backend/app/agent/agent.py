@@ -60,23 +60,27 @@ def _chat_tools() -> list[dict]:
 
 
 def _run_chat_completions(client, model: str, system: str, history: list[dict],
-                          user_text: str, ctx: ToolContext, used: list[str]) -> str:
+                          user_text: str, ctx: ToolContext, used: list[str],
+                          user_content=None, service_tier: str | None = None) -> str:
     """Bucle de herramientas compatible con la API Chat Completions."""
     messages = [
         {"role": "system", "content": system},
         *history,
-        {"role": "user", "content": user_text},
+        {"role": "user", "content": user_content if user_content is not None else user_text},
     ]
     tools = _chat_tools()
 
     for _ in range(MAX_STEPS):
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=tools,
-            tool_choice="auto",
-            temperature=0.2,
-        )
+        request = {
+            "model": model,
+            "messages": messages,
+            "tools": tools,
+            "tool_choice": "auto",
+            "temperature": 0.2,
+        }
+        if service_tier:
+            request["service_tier"] = service_tier
+        response = client.chat.completions.create(**request)
         assistant = response.choices[0].message
         calls = assistant.tool_calls or []
         if not calls:
@@ -138,6 +142,22 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
         reply = _run_chat_completions(
             client, s.openrouter_model, system, history, text, ctx, used
         )
+
+    elif provider == "gemini":
+        # Gemini admite texto, imágenes y function calling en el endpoint compatible con OpenAI.
+        # `text` ya está normalizado y disponible antes de seleccionar proveedor.
+        content = text
+        if image:
+            jpg, mime = prepare_for_llm(image)
+            encoded = base64.b64encode(jpg).decode("ascii")
+            content = [
+                {"type": "text", "text": text},
+                {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}},
+            ]
+        reply = _run_chat_completions(
+            client, s.gemini_model, system, history, text, ctx, used,
+            user_content=content, service_tier=s.gemini_service_tier,
+        )
     elif provider == "openai":
         content = []
         if image:
@@ -172,7 +192,7 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
         )
     else:
         raise ValueError(
-            f"AI_PROVIDER no válido: {provider!r}. Usa 'openrouter' o 'openai'."
+            f"AI_PROVIDER no válido: {provider!r}. Usa 'openrouter', 'openai' o 'gemini'."
         )
 
     user_text = message.strip() + (" 📷" if image else "")
