@@ -47,7 +47,7 @@ SET video_url = EXCLUDED.video_url,
 Sustituye el ID, URL, titular y licencia por datos reales. No reutilices el ejemplo ficticio. La interfaz consulta
 `GET /exercises/{id}/content` y muestra el vídeo automáticamente cuando `media_type='video'` y existe `video_url`.
 
-## Animaciones 3D generadas
+## Visor 3D incluido\n\nEl frontend incluye `frontend/exercise_animations_3d.html`, un visor Three.js con 20 movimientos, selector de ejercicio, ciclo de repetición, pausa y rotación de cámara. Se muestra desde Entrenamiento → «Ejercicios 3D». El recurso se carga dentro de un componente HTML aislado y requiere conexión al CDN de Three.js. Las posturas son demostraciones visuales, no una certificación de técnica ni una prescripción individual.\n\n## Animaciones 3D generadas
 
 Para demostraciones simuladas, una vía reproducible es crear un rig humano en Blender y animaciones revisadas por un
 profesional del entrenamiento. Claude Code puede ayudar a escribir scripts de Blender y automatizar exportaciones,
