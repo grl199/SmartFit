@@ -107,3 +107,26 @@ def test_account_deletion_removes_conversations(client, onboarded):
     with SessionLocal() as db:
         assert db.scalar(select(Conversation).where(Conversation.user_id == onboarded["id"])) is None
         assert db.scalar(select(ChatMessage).where(ChatMessage.user_id == onboarded["id"])) is None
+
+
+def test_voice_note_is_transcribed_and_sent_as_user_message(client, onboarded):
+    llm = FakeLLM()
+    with patch("app.routers.chat.transcribe_audio", return_value="He comido arroz con pollo y verduras") as transcribe, \
+         patch("app.agent.agent.get_chat_client", lambda: llm):
+        response = client.post(
+            "/chat",
+            headers=onboarded["headers"],
+            data={"message": "Ayúdame con esta receta"},
+            files={"audio": ("nota.wav", b"fake-audio", "audio/wav")},
+        )
+
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert payload["transcription"] == "He comido arroz con pollo y verduras"
+    assert "arroz con pollo y verduras" in llm.sent_text()
+    messages = client.get(
+        f"/conversations/{payload['conversation_id']}/messages",
+        headers=onboarded["headers"],
+    ).json()
+    assert "arroz con pollo y verduras" in messages[0]["content"]
+    transcribe.assert_called_once()
