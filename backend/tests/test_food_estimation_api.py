@@ -110,3 +110,23 @@ def test_voice_note_transcription_returns_text_without_logging(client, onboarded
     assert response.status_code == 200, response.text
     assert response.json()["transcript"] == "Pollo con arroz y aceite de oliva"
     transcribe.assert_called_once()
+
+
+def test_audio_transcript_can_be_estimated_and_keeps_audio_method(client, onboarded):
+    proposal = {
+        "name": "Pollo con arroz",
+        "items": [_component("Arroz cocido", 100)],
+        "assumptions": [],
+        "total_grams": 100,
+        "totals": {"kcal": 130},
+        "per_100g": {"kcal_per_100g": 130},
+        "confidence": "low",
+    }
+    with patch("app.routers.foods.estimate_meal", return_value=proposal):
+        response = client.post(
+            "/foods/estimate",
+            headers=_headers(onboarded),
+            data={"description": "Arroz cocido con pollo", "method": "audio"},
+        )
+    assert response.status_code == 200, response.text
+    assert response.json()["method"] == "audio"
