@@ -72,6 +72,8 @@ with st.sidebar:
 # ───────── Conversación ─────────
 st.title("💬 Asistente")
 st.caption(by_id[conv_id]["title"] if conv_id in by_id else "Nueva conversación")
+if not audio_capabilities.get("audio"):
+    st.caption("Para activar las notas de voz, configura GEMINI_API_KEY o una clave de OpenAI directa/en Vault en el backend.")
 if not st.session_state.chat:
     st.info("Prueba: «¿Cuánta proteína me falta hoy?» · «¿Cómo ha sido mi semana de entreno?» · adjunta la foto de un producto y pregunta qué lleva.")
 for m in st.session_state.chat:
