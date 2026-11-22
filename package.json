@@ -1,0 +1,12 @@
+{
+  "name": "smartfit",
+  "private": true,
+  "packageManager": "pnpm@10.12.1",
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "contracts:generate": "python backend/scripts/export_openapi.py && pnpm --filter @smartfit/contracts generate",
+    "typecheck": "pnpm --filter @smartfit/contracts typecheck"
+  }
+}

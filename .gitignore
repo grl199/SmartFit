@@ -38,6 +38,16 @@ pgdata/
 uploads/
 *.log
 
+# --- Node / pnpm / frontend builds ---
+node_modules/
+.pnpm-store/
+dist/
+.next/
+out/
+.expo/
+.turbo/
+coverage/
+
 # --- Editor / SO ---
 .vscode/*
 !.vscode/launch.json
