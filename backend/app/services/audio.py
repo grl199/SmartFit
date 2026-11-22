@@ -27,7 +27,7 @@ def audio_transcription_available() -> bool:
     if settings.gemini_api_key:
         return True
     provider = settings.ai_provider.strip().lower()
-    return provider == "openai" and bool(settings.openai_api_key or settings.vault_addr)
+    return bool(settings.openai_api_key or settings.vault_addr)
 
 
 def _normalise_mime(mime_type: str | None, filename: str | None) -> str:
@@ -75,7 +75,7 @@ def transcribe_audio(data: bytes, mime_type: str | None = None, filename: str | 
             config=types.GenerateContentConfig(temperature=0),
         )
         transcript = (response.text or "").strip()
-    elif provider == "openai" and (settings.openai_api_key or settings.vault_addr):
+    elif settings.openai_api_key or settings.vault_addr:
         if len(data) > 24 * 1024 * 1024:
             raise ValueError("La nota de voz supera el límite de 24 MB para la transcripción.")
         suffix = Path(filename or "").suffix or {
@@ -84,7 +84,7 @@ def transcribe_audio(data: bytes, mime_type: str | None = None, filename: str | 
             "audio/mp4": ".mp4", "audio/flac": ".flac", "audio/aac": ".aac",
         }.get(mime, ".wav")
         result = get_openai_client().audio.transcriptions.create(
-            model="gpt-transcribe",
+            model="gpt-4o-mini-transcribe",
             file=(filename or f"nota-de-voz{suffix}", BytesIO(data), mime),
             language="es",
             prompt=(
