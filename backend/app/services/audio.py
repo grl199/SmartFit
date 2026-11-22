@@ -86,7 +86,7 @@ def transcribe_audio(data: bytes, mime_type: str | None = None, filename: str | 
         result = get_openai_client().audio.transcriptions.create(
             model="gpt-transcribe",
             file=(filename or f"nota-de-voz{suffix}", BytesIO(data), mime),
-            languages=["es"],
+            language="es",
             prompt=(
                 "Transcripción en español de una nota de voz sobre recetas y alimentación. "
                 "Presta atención a ingredientes, cantidades, gramos, mililitros y pasos de preparación."
