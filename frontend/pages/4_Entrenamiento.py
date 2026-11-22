@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 from html import escape
+from pathlib import Path
 
 import pandas as pd
 import streamlit as st
@@ -32,8 +33,8 @@ if st.session_state.pop("reset_form", False):
     for k in [k for k in st.session_state if k.startswith(("sel_", "ed_", "df0_", "title_", "notes_", "dist_", "elev_", "steps_", "hr_", "mg_", "eq_", "q_", "w_sport", "plan_day_sel"))]:
         del st.session_state[k]
 
-tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan = st.tabs(
-    ["🏋️ Registrar sesión", "📅 Historial", "📈 Progresión", "🫀 Músculos", "📋 Plan y peso"])
+tab_reg, tab_hist, tab_prog, tab_muscles, tab_plan, tab_3d = st.tabs(
+    ["🏋️ Registrar sesión", "📅 Historial", "📈 Progresión", "🫀 Músculos", "📋 Plan y peso", "🎞️ Ejercicios 3D"])
 
 
 def muscle_chips(ex: dict) -> str:
