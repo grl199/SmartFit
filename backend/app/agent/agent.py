@@ -145,16 +145,17 @@ def run_agent(db: Session, user_id: int, message: str, image: bytes | None = Non
 
     elif provider == "gemini":
         # Gemini admite texto, imágenes y function calling en el endpoint compatible con OpenAI.
-        content = user_text
+        # `text` ya está normalizado y disponible antes de seleccionar proveedor.
+        content = text
         if image:
             jpg, mime = prepare_for_llm(image)
             encoded = base64.b64encode(jpg).decode("ascii")
             content = [
-                {"type": "text", "text": user_text},
+                {"type": "text", "text": text},
                 {"type": "image_url", "image_url": {"url": f"data:{mime};base64,{encoded}"}},
             ]
         reply = _run_chat_completions(
-            client, s.gemini_model, system, history, user_text, ctx, used,
+            client, s.gemini_model, system, history, text, ctx, used,
             user_content=content, service_tier=s.gemini_service_tier,
         )
     elif provider == "openai":
