@@ -166,7 +166,8 @@ mismo código).
 
 Cada conversación se guarda y tiene su propio historial: la barra lateral las agrupa por fecha (hoy, ayer, últimos 7 días…) y permite
 saltar de una a otra, renombrarlas y eliminarlas. La primera pregunta da título a la conversación. Los mensajes que había antes de esta
-versión quedan en «Conversación anterior».
+versión quedan en «Conversación anterior». El chat admite también notas de voz: se transcriben antes de enviar el texto al agente.
+La transcripción utiliza Gemini si hay `GEMINI_API_KEY`, o OpenAI si hay una clave directa/en Vault; el audio se procesa en memoria.
 
 ## Entrenamiento
 
