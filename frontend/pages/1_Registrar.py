@@ -99,6 +99,8 @@ with tab_scan:
 with tab_estimate:
     capabilities = api.get("/foods/estimate-capabilities") or {"description": True, "photo": False}
     modes = ["Descripción", "Solo kcal"] + (["Fotografía"] if capabilities.get("photo") else []) + (["Nota de voz"] if capabilities.get("audio") else [])
+    if not capabilities.get("audio"):
+        st.caption("Para activar la nota de voz, configura GEMINI_API_KEY o una clave de OpenAI directa/en Vault en el backend.")
     mode = st.radio("¿Cómo quieres registrar la comida?", modes, horizontal=True, key="ai_food_mode")
     description = ""
     if mode in ("Descripción", "Fotografía"):
