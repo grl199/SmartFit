@@ -207,11 +207,11 @@ def _exercise_animation_source() -> tuple[str, dict[str, int]]:
     if not path.is_file():
         return "", {}
     source = path.read_text(encoding="utf-8")
-    names = re.findall(r"\\{n:'([^']+)'", source)
+    names = re.findall(r"\{n:'([^']+)'", source)
     return source, {name.casefold(): i for i, name in enumerate(names)}
 
 
-def show_exercise_animation(name: str, key: str) -> bool:
+def show_exercise_animation(name: str) -> bool:
     """Muestra solo la animación del ejercicio seleccionado, con encuadre compacto."""
     source, index = _exercise_animation_source()
     if not source:
@@ -223,7 +223,7 @@ def show_exercise_animation(name: str, key: str) -> bool:
         "html,body{margin:0!important;padding:0!important;overflow:hidden!important}"
         "main{max-width:100%!important;margin:0!important;padding:0!important}"
         "h1,p.s,nav{display:none!important}"
-        "canvas{width:100%!important;max-height:390px!important;border-radius:10px}"
+        "canvas{width:100%!important;max-height:340px!important;border-radius:10px}"
         ".info{margin:5px 0 0!important;padding:7px 9px!important;gap:7px!important}"
         "#br{max-width:42%;font-size:11px!important}"
         "#tn{font-size:13px!important}#tm{font-size:11px!important}"
@@ -235,7 +235,7 @@ def show_exercise_animation(name: str, key: str) -> bool:
     source = source.replace("dist=5.1*z", "dist=6.0*z")
     source = source.replace("rs();pick(0);requestAnimationFrame(loop);",
                             f"rs();pick({selected});requestAnimationFrame(loop);")
-    st.components.v1.html(source, height=390, scrolling=False)
+    st.components.v1.html(source, height=420, scrolling=False)
     return True
 
 def exercise_block(ex: dict) -> pd.DataFrame:
@@ -244,7 +244,7 @@ def exercise_block(ex: dict) -> pd.DataFrame:
     card = last_card(ex["id"])
     with st.container(border=True):
         ui.html(f"<b>{escape(ex['name'])}</b><br>{muscle_chips(ex)}")
-        show_exercise_animation(ex["name"], f"exercise_animation_{ex['id']}")
+        show_exercise_animation(ex["name"])
         target = st.session_state.get("_plan_targets", {}).get(ex["id"])
         if target:
             st.caption(f"🎯 Objetivo del plan: {target[0]} series × {target[1]}-{target[2]} repeticiones")
@@ -414,7 +414,7 @@ with tab_reg:
                 for ex_id in selected:
                     with st.container(border=True):
                         st.markdown(f"**{cache[ex_id]['name']}**")
-                        if not show_exercise_animation(cache[ex_id]["name"], f"exercise_animation_{ex_id}"):
+                        if not show_exercise_animation(cache[ex_id]["name"]):
                             st.caption("Aún no hay una animación 3D para este estiramiento.")
         else:
             for ex_id in selected:
