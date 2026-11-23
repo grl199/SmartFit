@@ -28,8 +28,12 @@
       ],
       "@smartfit/api-client": [
         "../../packages/api-client/src/index.ts"
+      ],
+      "@smartfit/contracts": [
+        "../../packages/contracts/src/index.ts"
       ]
-    }
+    },
+    "baseUrl": "."
   },
   "include": [
     "next-env.d.ts",
