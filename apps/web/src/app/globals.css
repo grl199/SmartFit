@@ -1321,3 +1321,10 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .nutrition-browse-catalog>.list-heading{margin-bottom:10px}
 @media(max-width:640px){.nutrition-autocomplete{max-height:50vh;overflow:auto}.nutrition-off-search{padding:12px;font-size:11px}}
 
+.nutrition-catalog-item{justify-content:flex-start}
+.nutrition-catalog-item-icon{display:grid;place-items:center;width:27px;height:27px;flex:0 0 27px;border-radius:7px;background:#f0f5eb;font-size:16px}
+.nutrition-catalog-item-name{flex:1;min-width:0;overflow:hidden;color:#4b5a4d;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.nutrition-catalog-item small{margin-left:auto}
+.nutrition-browse-catalog .nutrition-catalog-section[open]>.nutrition-catalog-items{padding-top:2px}
+.nutrition-browse-catalog .nutrition-catalog-item{min-height:44px}
+
