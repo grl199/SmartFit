@@ -58,9 +58,12 @@ sustituyen el runtime nativo de React Native.
 
 ## Sesiones
 
-Los tokens de acceso y renovación se guardan mediante `expo-secure-store`.
-No se usan cookies del navegador ni `localStorage`. La API móvil usa los
-endpoints `/auth/session/*` de FastAPI y envía el token de acceso como Bearer.
+En iOS y Android, los tokens de acceso y renovación se guardan mediante
+`expo-secure-store` (Keychain/Keystore). En Expo Web se usa `localStorage`
+porque SecureStore no tiene implementación para navegador; ese almacenamiento
+no está cifrado y solo debe considerarse una solución de desarrollo. Para web
+en producción, usa la aplicación Next.js, que mantiene las sesiones en cookies
+HttpOnly. La API Expo usa los endpoints `/auth/session/*` de FastAPI.
 
 ## Validación
 
