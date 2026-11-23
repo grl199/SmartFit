@@ -1303,3 +1303,21 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 @media(max-width:1000px){.nutrition-catalog-workspace{grid-template-columns:1fr}}
 @media(max-width:640px){.nutrition-catalog-items{grid-template-columns:1fr}.nutrition-catalog-item{padding:11px}}
 .nutrition-search-sources button{border:1px solid var(--border,#d9dde3);background:var(--surface,#fff);color:inherit;border-radius:999px;padding:8px 12px;font:inherit;font-size:13px;cursor:pointer}.nutrition-search-sources button.active{background:var(--accent,#2563eb);border-color:var(--accent,#2563eb);color:white}.nutrition-food-title a{display:inline-block;margin-top:5px;font-size:13px;color:var(--accent,#2563eb);text-decoration:underline}.training-animation-frame{margin:18px 0;border:1px solid var(--border,#d9dde3);border-radius:14px;padding:12px;overflow:hidden}.training-animation-frame iframe{display:block;width:100%;height:760px;border:0;border-radius:10px;background:var(--surface,#fff);overflow:hidden}.training-muscle-map{display:grid;justify-items:center;margin:14px 0 22px;padding:12px;border:1px solid var(--border,#d9dde3);border-radius:14px;background:var(--surface,#fff)}.training-muscle-map-art{display:block;width:100%;max-width:900px;min-width:0}.training-muscle-map-art svg{display:block;width:100%;height:auto;max-height:620px}.training-muscle-legend{display:flex;flex-wrap:wrap;align-items:center;justify-content:center;gap:7px;margin-top:12px;font-size:12px;color:var(--muted,#64748b)}.training-muscle-legend i{display:inline-block;width:32px;height:9px;border-radius:99px;background:linear-gradient(90deg,#e8edf3,#fde047,#f97316,#991b1b)}.training-muscle-map img{display:block;width:min(100%,900px);height:auto}.training-muscle-map p{margin:5px 0 0;text-align:center;font-size:12px}@media(max-width:640px){.training-animation-frame iframe{height:540px}.nutrition-search-sources button{flex:1 1 calc(50% - 8px)}}
+
+.nutrition-search-form{position:relative}
+.nutrition-autocomplete{position:relative;z-index:3;display:flex;flex-direction:column;gap:4px;margin-top:-4px;margin-bottom:12px;padding:7px;border:1px solid #e4eadf;border-radius:10px;background:#fff;box-shadow:0 10px 28px rgba(36,55,38,.09)}
+.nutrition-autocomplete-label{padding:7px 8px 3px;color:#879285;font-size:9px;font-weight:800;letter-spacing:.06em;text-transform:uppercase}
+.nutrition-autocomplete>button{display:flex;width:100%;align-items:center;gap:9px;padding:8px;border:0;border-radius:7px;background:#fff;text-align:left}
+.nutrition-autocomplete>button:hover{background:#f6f9f3}
+.nutrition-autocomplete>button>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:3px;min-width:0}
+.nutrition-autocomplete>button strong{overflow:hidden;color:#405243;font-size:10px;text-overflow:ellipsis;white-space:nowrap}
+.nutrition-autocomplete>button small{color:#89948b;font-size:9px}
+.nutrition-autocomplete>button>b{color:#64804f;font-size:9px}
+.nutrition-autocomplete-empty{margin:4px 8px 8px;font-size:10px}
+.nutrition-off-search{display:flex;width:100%;justify-content:center;align-items:center;margin:13px 0 4px;padding:10px 12px;border:1px solid #e6eadd;border-radius:8px;background:#fafcf8;color:#63765b;font-size:10px;font-weight:700;cursor:pointer}
+.nutrition-off-search:hover{border-color:#cbdcbc;background:#f3f8ee}
+.nutrition-off-search:disabled{opacity:.45;cursor:not-allowed}
+.nutrition-browse-catalog{margin-top:22px;padding-top:17px;border-top:1px solid #edf0eb}
+.nutrition-browse-catalog>.list-heading{margin-bottom:10px}
+@media(max-width:640px){.nutrition-autocomplete{max-height:50vh;overflow:auto}.nutrition-off-search{padding:12px;font-size:11px}}
+
