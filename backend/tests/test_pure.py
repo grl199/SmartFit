@@ -107,3 +107,17 @@ def test_openrouter_embeddings_reject_dimension_mismatch(monkeypatch):
 
     with pytest.raises(RuntimeError, match="pgvector espera 3"):
         llm.embed_texts(["texto"])
+
+
+def test_mobile_access_token_remains_compatible_without_session_id():
+    from app.security import create_token, decode_token
+
+    token = create_token(123)
+    assert decode_token(token) == (123, None)
+
+
+def test_web_access_token_is_bound_to_a_session():
+    from app.security import create_token, decode_token
+
+    token = create_token(123, "session-abc")
+    assert decode_token(token) == (123, "session-abc")
