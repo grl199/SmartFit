@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,7 +17,7 @@ from ..models import (
 from ..schemas import Credentials, DeleteAccountIn, RefreshSessionIn, TokenOut, UserOut
 from ..security import (
     check_throttle, clear_failures, create_session, create_token, hash_password, register_failure,
-    revoke_session, rotate_session, verify_password,
+    decode_token, revoke_session, rotate_session, verify_password,
 )
 
 log = logging.getLogger(__name__)
@@ -110,7 +111,7 @@ def refresh_web_session(body: RefreshSessionIn, db: Session = Depends(get_db)):
 
 @router.post("/session/logout", status_code=204)
 def logout_web_session(
-    creds=Depends(__import__("fastapi").security.HTTPBearer(auto_error=False)),
+    creds: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     db: Session = Depends(get_db),
 ):
     decoded = decode_token(creds.credentials) if creds else None
