@@ -145,6 +145,10 @@ FOODS: dict[str, tuple] = {
     "Salsa de soja": (53, 8.1, 4.9, 0.4, 0.6, 0.1, 0.8, 5493, [("cucharadita", "cucharaditas", 5, "cucharadita")]),
 
 
+    "Café con leche (leche entera)": (31, 1.65, 2.4, 2.4, 1.65, 0.95, 0.0, 23, [("taza", "tazas", 200, "taza de 200 ml")]),
+    "Café con leche (leche semidesnatada)": (24, 1.7, 2.4, 2.4, 0.8, 0.5, 0.0, 23, [("taza", "tazas", 200, "taza de 200 ml")]),
+    "Café con leche (leche desnatada)": (18, 1.75, 2.45, 2.45, 0.05, 0.05, 0.0, 23, [("taza", "tazas", 200, "taza de 200 ml")]),
+
 }
 # receta: (descripción, raciones, [(alimento, gramos)])
 RECIPES: dict[str, tuple[str, float, list[tuple[str, float]]]] = {
