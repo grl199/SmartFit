@@ -53,3 +53,30 @@ def test_generic_search_scope_is_distinct_from_branded_products():
     assert 'if source == "catalog"' in source
     assert 'Food.source == "catalog"' in source
 
+def test_every_catalog_food_has_an_icon_and_coffee_lives_in_beverages():
+    from app.services.food_catalog import (
+        FOOD_CATALOG_SECTIONS,
+        FOOD_SECTION_BY_NAME,
+        FOODS,
+        RECIPES,
+        food_icon,
+    )
+
+    assert len(FOODS) >= 125
+    assert all(food_icon(name) for name in FOODS)
+    assert FOOD_SECTION_BY_NAME["Café con leche (leche entera)"] == "beverages"
+    assert FOOD_SECTION_BY_NAME["Café con leche (leche semidesnatada)"] == "beverages"
+    assert not any(name.startswith("Café con leche") for name in RECIPES)
+    beverage = next(section for section in FOOD_CATALOG_SECTIONS if section[0] == "beverages")
+    assert "Café con leche (leche entera)" in beverage[4]
+
+
+def test_system_recipes_include_preparation_steps():
+    from app.services.food_catalog import RECIPES, recipe_preparation_steps
+
+    assert "Pisto con huevo" in RECIPES
+    steps = recipe_preparation_steps("Pisto con huevo")
+    assert len(steps) >= 4
+    assert any("berenjena" in step.lower() for step in steps)
+    assert all(step.strip() for step in steps)
+
