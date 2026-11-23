@@ -14,6 +14,7 @@ type Tab = "search"|"mine"|"barcode"|"estimate"|"recipes";
 type SearchSource = "catalog"|"mine"|"openfoodfacts"|"recipes";
 const meals = [["auto","Automática"],["breakfast","Desayuno"],["lunch","Comida"],["snack","Tentempié"],["dinner","Cena"]];
 const fields = [["kcal","kcal"],["protein_g","Proteína (g)"],["carbs_g","Hidratos (g)"],["sugars_g","Azúcares (g)"],["fat_g","Grasa (g)"],["sat_fat_g","Saturadas (g)"],["fiber_g","Fibra (g)"],["sodium_mg","Sodio (mg)"]] as const;
+const todayLocal=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
 const fmt=(v:number|null|undefined,d=0)=>v==null?"—":v.toLocaleString("es-ES",{maximumFractionDigits:d});
 const err=(e:unknown)=>e instanceof Error?e.message:"No se pudo completar la operación.";
 
@@ -92,7 +93,7 @@ export function NutritionPanel({token,date,onDateChange}:Props){
   const currentUnit=servings.find(x=>String(x.id)===unit), grams=currentUnit?Number(quantity)*currentUnit.grams_per_unit:Number(quantity);
   const displayNutrients=[["kcal","kcal"],["protein_g","Proteína"],["carbs_g","Hidratos"],["fat_g","Grasas"],["sugars_g","Azúcares"],["sat_fat_g","Saturadas"],["fiber_g","Fibra"],["sodium_mg","Sodio"]] as const;
   return <div className="nutrition-workspace">
-    <div className="module-heading"><div><span className="eyebrow">NUTRICIÓN</span><h2>Diario de alimentación</h2><p className="muted">Registro completo, catálogo propio, captura y estimación inteligente</p></div><label className="date-control">Fecha<input type="date" value={date} max={new Date().toLocaleDateString("sv-SE")} onChange={e=>onDateChange(e.target.value)}/></label></div>
+    <div className="module-heading"><div><span className="eyebrow">NUTRICIÓN</span><h2>Diario de alimentación</h2><p className="muted">Registro completo, catálogo propio, captura y estimación inteligente</p></div><label className="date-control">Fecha<input type="date" value={date} max={todayLocal()} onChange={e=>onDateChange(e.target.value)}/></label></div>
     <section className="panel nutrition-daily-card"><div className="nutrition-daily-header"><div><span className="eyebrow">ENERGÍA · HOY</span><strong>{fmt(day?.totals.kcal)} <small>/ {fmt(day?.targets.kcal)} kcal</small></strong></div><label>Comida<select value={meal} onChange={e=>setMeal(e.target.value)}>{meals.map(([v,l])=><option key={v} value={v}>{l}</option>)}</select></label></div>
       <div className="nutrition-macro-grid">{[["Proteína",day?.totals.protein_g,day?.targets.protein_g],["Carbohidratos",day?.totals.carbs_g,day?.targets.carbs_g],["Grasas",day?.totals.fat_g,day?.targets.fat_g]].map(([label,value,goal])=><div key={String(label)}><span>{label}</span><strong>{fmt(value as number,1)} g</strong><small>Objetivo {fmt(goal as number)} g</small></div>)}</div>
       <div className="nutrition-entry-list">{day?.entries.map(x=><div className="nutrition-entry" key={x.id}><div><strong>{x.food}</strong><span>{x.meal} · {x.time} · {fmt(x.grams,1)} g</span></div><strong>{fmt(x.kcal)} kcal</strong><button type="button" className="danger-link" onClick={()=>void deleteLog(x.id)}>Eliminar</button></div>)}{!day?.entries.length&&<p className="muted">No hay comidas registradas para esta fecha.</p>}</div>
