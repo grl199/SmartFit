@@ -47,7 +47,9 @@ def _refresh_hash(token: str) -> str:
 
 def create_token(user_id: int, session_id: str | None = None) -> str:
     now = _utcnow()
-    payload = {"sub": str(user_id), "iat": now, "exp": now + timedelta(minutes=get_settings().access_token_ttl_minutes)}
+    lifetime = (timedelta(minutes=get_settings().access_token_ttl_minutes) if session_id
+                else timedelta(hours=get_settings().token_ttl_hours))
+    payload = {"sub": str(user_id), "iat": now, "exp": now + lifetime}
     if session_id:
         payload["sid"] = session_id
     return jwt.encode(payload, _secret, algorithm="HS256")
