@@ -421,6 +421,7 @@ class Recipe(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, comment="Propietario. NULL = receta del sistema.")
     name: Mapped[str] = mapped_column(String(200), comment="Nombre de la receta.")
     description: Mapped[str | None] = mapped_column(Text, comment="Descripción o notas.")
+    steps: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, comment="Pasos ordenados para preparar la receta.")
     serving_count: Mapped[float] = mapped_column(Float, default=1, comment="Raciones que salen de la cantidad total de ingredientes.")
     food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), comment="Alimento sombra (por 100 g de plato terminado).")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación.")
