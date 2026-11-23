@@ -56,7 +56,9 @@ def sync_recipe_food(db: Session, r: Recipe) -> Food:
 
 
 def visible_recipes(db: Session, uid: int, q: str | None = None, limit: int = 50) -> list[Recipe]:
-    stmt = select(Recipe).where(or_(Recipe.user_id.is_(None), Recipe.user_id == uid))
+    # Las variantes de café con leche son bebidas genéricas del catálogo, no recetas.
+    legacy_drink_recipes = ("Café con leche (leche entera)", "Café con leche (leche semidesnatada)", "Café con leche (leche desnatada)")
+    stmt = select(Recipe).where(or_(Recipe.user_id.is_(None), Recipe.user_id == uid), Recipe.name.not_in(legacy_drink_recipes))
     if q and q.strip():
         stmt = stmt.where(func.unaccent(func.lower(Recipe.name)).ilike(f"%{q.strip().lower()}%"))
     return list(db.scalars(stmt.order_by(Recipe.user_id.is_(None), Recipe.name).limit(limit)))
