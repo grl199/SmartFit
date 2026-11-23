@@ -159,7 +159,7 @@ def browse_catalog(
     ))
     sections.append({
         "id": "mine", "title": "Mis alimentos", "description": "Alimentos personalizados que has creado",
-        "icon": "👤", "count": len(own_foods),
+        "icon": "🍽️", "count": len(own_foods),
         "foods": [
             {**FoodOut.model_validate(food).model_dump(), "icon": "🍽️"}
             for food in own_foods
