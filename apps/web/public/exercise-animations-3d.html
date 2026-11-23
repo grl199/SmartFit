@@ -17,12 +17,12 @@ canvas{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--bd);bor
 .info{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
 #ph{font-weight:600;color:var(--ac)}#br,#tm{color:var(--mut);font-size:13px}
 
-/* Compacto y adaptable al panel de registro de sesión */
-html,body{width:100%;height:auto;min-height:0;margin:0;overflow:hidden}
-main{width:100%;max-width:860px;margin:0 auto;padding:6px;box-sizing:border-box}
+/* El visor ocupa toda la altura del iframe y elimina el scroll interno */
+html,body{width:100%;height:100%;min-height:0;margin:0;overflow:hidden}
+main{width:100%;height:100%;max-width:none;margin:0;padding:6px;box-sizing:border-box;display:flex;flex-direction:column;gap:0}
 h1,p.s,nav{display:none!important}
-canvas{width:100%;max-height:480px;aspect-ratio:16/9;object-fit:contain}
-.info{margin-top:7px;padding:8px 10px;gap:8px}
+canvas{display:block;flex:1 1 auto;min-height:0;width:100%;height:calc(100% - 64px);max-height:none;aspect-ratio:auto;object-fit:contain}
+.info{flex:0 0 auto;min-height:48px;margin-top:6px;padding:7px 10px;gap:7px;box-sizing:border-box}
 #tn{font-size:14px}
 </style></head><body><main>
 <h1>SmartFit · Animaciones 3D de ejercicios</h1>
