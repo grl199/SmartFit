@@ -22,3 +22,11 @@ def test_exercise_content_get_has_single_route():
     assert path in schema["paths"]
     assert "get" in schema["paths"][path]
     assert "put" in schema["paths"][path]
+
+
+def test_web_session_endpoints_are_registered():
+    schema = app.openapi()["paths"]
+    assert "/auth/session/login" in schema
+    assert "/auth/session/register" in schema
+    assert "/auth/session/refresh" in schema
+    assert "/auth/session/logout" in schema
