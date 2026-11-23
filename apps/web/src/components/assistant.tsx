@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useRef, useState } from "react";
 import { apiRequest, apiUpload } from "@/lib/api";
 
 type Props = { token: string };
@@ -136,6 +136,16 @@ export function AssistantPanel({ token }: Props) {
     }
   }
 
+  function handleComposerKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    // Enter envía el mensaje; Shift+Enter conserva el salto de línea nativo del textarea.
+    // No interceptar Enter mientras el usuario compone texto con un teclado IME.
+    if (event.key !== "Enter" || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (!busy && (draft.trim() || image || audio)) {
+      event.currentTarget.form?.requestSubmit();
+    }
+  }
+
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const text = draft.trim();
@@ -249,7 +259,7 @@ export function AssistantPanel({ token }: Props) {
                 {audio && <span>🎙 {audio.name} <button type="button" onClick={() => setAudio(null)} aria-label="Quitar audio">×</button></span>}
               </div>
             )}
-            <textarea rows={3} maxLength={12000} value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Escribe tu mensaje…" />
+            <textarea rows={3} maxLength={12000} value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={handleComposerKeyDown} placeholder="Escribe tu mensaje… (Enter para enviar, Shift+Enter para nueva línea)" aria-label="Escribe tu mensaje. Enter para enviar, Shift+Enter para nueva línea." />
             <div className="assistant-compose-actions">
               <div className="assistant-upload-actions">
                 <label className="assistant-attach">
