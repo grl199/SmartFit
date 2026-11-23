@@ -30,6 +30,21 @@ def test_every_table_and_column_is_documented():
 
 
 # ───────────── auth ─────────────
+def test_expo_web_cors_preflight(client):
+    origin = "http://localhost:8081"
+    response = client.options(
+        "/auth/session/login",
+        headers={
+            "Origin": origin,
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.headers.get("access-control-allow-origin") == origin
+    assert response.headers.get("access-control-allow-credentials") == "true"
+
+
 def test_register_login_and_validation(client):
     u = register(client)
     assert client.post("/auth/register", json={"name": u["name"].upper(), "password": "otra-contraseña-1"}).status_code == 409
