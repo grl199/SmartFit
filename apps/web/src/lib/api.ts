@@ -6,24 +6,39 @@ type OnboardingInput = components["schemas"]["OnboardingIn"];
 
 export { apiRequest, apiUpload, ApiError };
 
-export function authenticate(
+export async function authenticate(
   mode: "login" | "register",
   credentials: Credentials,
 ) {
-  return apiRequest<components["schemas"]["TokenOut"]>(`/auth/${mode}`, {
+  const response = await fetch(`/api/auth/${mode}`, {
     method: "POST",
-    body: credentials,
+    headers: { "Content-Type": "application/json" },
+    credentials: "same-origin",
+    cache: "no-store",
+    body: JSON.stringify(credentials),
   });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new ApiError(payload.detail ?? "No se pudo iniciar sesión.", response.status);
+  }
+  return response.json() as Promise<{ user: components["schemas"]["UserOut"] }>;
 }
 
-export function completeOnboarding(token: string, input: OnboardingInput) {
+export function completeOnboarding(input: OnboardingInput) {
   return apiRequest<components["schemas"]["OnboardingOut"]>("/onboarding", {
     method: "POST",
-    token,
     body: input,
   });
 }
 
-export function getCurrentUser(token: string) {
-  return apiRequest<components["schemas"]["UserOut"]>("/auth/me", { token });
+export function getCurrentUser() {
+  return apiRequest<components["schemas"]["UserOut"]>("/auth/me");
+}
+
+export async function logoutWebSession() {
+  await fetch("/api/auth/logout", {
+    method: "POST",
+    credentials: "same-origin",
+    cache: "no-store",
+  });
 }
