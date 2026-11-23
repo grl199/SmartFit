@@ -23,7 +23,6 @@ const initialProfile = {
 export default function Home() {
   const [mode, setMode] = useState<Mode>("login");
   const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<OnboardingResult | null>(null);
@@ -45,7 +44,6 @@ export default function Home() {
         name: String(form.get("name") ?? ""),
         password: String(form.get("password") ?? ""),
       });
-      setToken("");
       setUser(response.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
@@ -77,7 +75,6 @@ export default function Home() {
 
   async function logout() {
     try { await logoutWebSession(); } finally {
-      setToken("");
       setUser(null);
       setResult(null);
     }
@@ -86,7 +83,7 @@ export default function Home() {
   if (user?.onboarding_completed) {
     return (
       <Workspace
-        token={token}
+        token=""
         userName={user.name}
         onLogout={logout}
       />
