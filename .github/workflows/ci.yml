@@ -54,3 +54,6 @@ jobs:
 
       - name: Build web
         run: pnpm build:web
+
+      - name: Build production web container
+        run: docker build -f apps/web/Dockerfile -t smartfit-web:ci .
