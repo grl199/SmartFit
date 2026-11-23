@@ -456,11 +456,14 @@ def seed_food_catalog(db: Session) -> int:
     for name, (desc, servings, ings) in RECIPES.items():
         if name in have_recipes:
             continue
-        r = Recipe(user_id=None, name=name, description=desc, serving_count=servings)
+        r = Recipe(user_id=None, name=name, description=desc, serving_count=servings, steps=recipe_preparation_steps(name))
         r.ingredients = [RecipeIngredient(food_id=by_name[n].id, quantity_g=g) for n, g in ings]
         db.add(r)
         db.flush()
         sync_recipe_food(db, r)
+    for recipe in db.scalars(select(Recipe).where(Recipe.user_id.is_(None))):
+        if not recipe.steps:
+            recipe.steps = recipe_preparation_steps(recipe.name)
     db.commit()
     if added:
         log.info("Catálogo de alimentos: %s añadidos", added)
