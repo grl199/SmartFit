@@ -2,10 +2,13 @@
   "extends": "expo/tsconfig.base.json",
   "compilerOptions": {
     "strict": true,
-    "baseUrl": ".",
     "paths": {
-      "@smartfit/api-client": ["../../packages/api-client/src/index.ts"],
-      "@smartfit/contracts": ["../../packages/contracts/src/index.ts"]
+      "@smartfit/api-client": [
+        "../../packages/api-client/src/index.ts"
+      ],
+      "@smartfit/contracts": [
+        "../../packages/contracts/src/index.ts"
+      ]
     }
   },
   "include": [
