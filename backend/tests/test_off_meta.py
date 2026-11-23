@@ -76,3 +76,25 @@ def test_enrichment_failure_never_breaks_the_food_card(client, onboarded):
         f = client.get("/foods/search", params={"q": tag}, headers=h).json()[0]
         assert client.get(f"/foods/{f['id']}", headers=h).status_code == 200
     assert client.get("/foods/99999999", headers=h).status_code == 404
+
+def test_text_search_hit_includes_product_image_and_processing_metadata():
+    from app.services.openfoodfacts import SEARCH_FIELDS, parse_search_hit
+
+    hit = {
+        "code": "8412345678901",
+        "product_name": "Yogur proteico natural",
+        "brands": "Marca Ejemplo",
+        "quantity": "150 g",
+        "image_front_small_url": "https://images.openfoodfacts.org/images/products/x/front.200.jpg",
+        "nutriscore_grade": "a",
+        "nova_group": 4,
+        "nutriments": {"energy-kcal_100g": 63, "proteins_100g": 10, "carbohydrates_100g": 4, "fat_100g": 0.2},
+    }
+    parsed = parse_search_hit(hit)
+    assert parsed is not None
+    assert parsed["meta"]["image_url"].endswith("front.200.jpg")
+    assert parsed["meta"]["nutriscore_grade"] == "a"
+    assert parsed["meta"]["nova_group"] == 4
+    assert "image_front_small_url" in SEARCH_FIELDS
+    assert "nutriscore_grade" in SEARCH_FIELDS
+
