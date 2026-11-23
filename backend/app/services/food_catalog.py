@@ -144,12 +144,10 @@ FOODS: dict[str, tuple] = {
     "Dátiles": (282, 2.5, 75, 63, 0.4, 0.1, 8, 2, [("unidad", "unidades", 8, "dátil mediano")]),
     "Salsa de soja": (53, 8.1, 4.9, 0.4, 0.6, 0.1, 0.8, 5493, [("cucharadita", "cucharaditas", 5, "cucharadita")]),
 
+
 }
 # receta: (descripción, raciones, [(alimento, gramos)])
 RECIPES: dict[str, tuple[str, float, list[tuple[str, float]]]] = {
-    "Café con leche (leche entera)": ("Café con leche entera.", 1, [("Café (infusión, sin azúcar)", 100), ("Leche entera", 100)]),
-    "Café con leche (leche semidesnatada)": ("Café con leche semidesnatada.", 1, [("Café (infusión, sin azúcar)", 100), ("Leche semidesnatada", 100)]),
-    "Café con leche (leche desnatada)": ("Café con leche desnatada.", 1, [("Café (infusión, sin azúcar)", 100), ("Leche desnatada", 100)]),
     "Tostada con hummus": ("Dos rebanadas de pan con hummus.", 1, [("Pan de molde", 60), ("Hummus", 30)]),
     "Tostada con aceite y tomate": ("Dos rebanadas de pan con tomate y aceite de oliva.", 1,
                                     [("Pan de molde", 60), ("Tomate", 60), ("Aceite de oliva virgen extra", 10)]),
@@ -314,9 +312,13 @@ FOOD_CATALOG_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = 
         "Almendras", "Nueces", "Cacahuetes", "Crema de cacahuete 100%", "Semillas de chía",
         "Semillas de calabaza", "Tahini",
     )),
-    ("pantry", "Bebidas, aceites y otros", "Café, aceites, salsas, cacao y otros básicos", "🫒", (
-        "Café (infusión, sin azúcar)", "Aceite de oliva virgen extra", "Salsa de tomate casera",
-        "Tomate triturado natural", "Miel", "Chocolate negro 85%", "Cacao puro en polvo", "Dátiles", "Salsa de soja",
+    ("beverages", "Bebidas", "Café solo y café con leche preparado en casa", "☕", (
+        "Café (infusión, sin azúcar)", "Café con leche (leche entera)",
+        "Café con leche (leche semidesnatada)", "Café con leche (leche desnatada)",
+    )),
+    ("pantry", "Aceites, salsas y otros", "Aceites, salsas, cacao y otros básicos", "🫒", (
+        "Aceite de oliva virgen extra", "Salsa de tomate casera", "Tomate triturado natural",
+        "Miel", "Chocolate negro 85%", "Cacao puro en polvo", "Dátiles", "Salsa de soja",
     )),
 )
 FOOD_SECTION_BY_NAME = {name: section_id for section_id, _, _, _, names in FOOD_CATALOG_SECTIONS for name in names}
@@ -334,6 +336,95 @@ def list_food_catalog_sections(db: Session) -> list[dict]:
         "id": section_id, "title": title, "description": description, "icon": icon,
         "count": len(by_id.get(section_id, [])), "foods": by_id.get(section_id, []),
     } for section_id, title, description, icon, _ in FOOD_CATALOG_SECTIONS if by_id.get(section_id)]
+
+
+# Cada alimento obtiene un icono concreto cuando es reconocible y, en el resto,
+# hereda el icono de su sección. Así el catálogo nunca muestra elementos sin icono.
+FOOD_ICON_BY_NAME = {
+    "Café (infusión, sin azúcar)": "☕",
+    "Café con leche (leche entera)": "☕",
+    "Café con leche (leche semidesnatada)": "☕",
+    "Café con leche (leche desnatada)": "☕",
+    "Leche entera": "🥛", "Leche semidesnatada": "🥛", "Leche desnatada": "🥛",
+    "Bebida de soja sin azúcar": "🥛", "Bebida de avena sin azúcar": "🥛", "Bebida de almendras sin azúcar": "🥛",
+    "Tomate": "🍅", "Tomate triturado natural": "🍅", "Zanahoria": "🥕", "Manzana": "🍎",
+    "Naranja": "🍊", "Plátano": "🍌", "Fresas": "🍓", "Aguacate": "🥑", "Brócoli": "🥦",
+    "Pepino": "🥒", "Cebolla": "🧅", "Ajo": "🧄", "Champiñones": "🍄", "Patata cocida": "🥔",
+    "Boniato asado": "🍠", "Uvas": "🍇", "Sandía": "🍉", "Piña": "🍍", "Mango": "🥭",
+    "Limón": "🍋", "Pera": "🍐", "Kiwi": "🥝", "Cerezas": "🍒", "Pan de molde": "🍞",
+    "Pan integral": "🍞", "Pan de barra": "🥖", "Pan de centeno": "🍞", "Pan de pita integral": "🫓",
+    "Huevo entero": "🥚", "Claras de huevo": "🥚", "Pechuga de pollo cocinada": "🍗",
+    "Pavo cocinado": "🍗", "Pechuga de pavo cocinada": "🍗", "Ternera magra cocinada": "🥩",
+    "Lomo de cerdo cocinado": "🥩", "Salmón cocinado": "🐟", "Merluza cocinada": "🐟",
+    "Bacalao cocinado": "🐟", "Atún fresco cocinado": "🐟", "Atún al natural escurrido": "🐟",
+    "Caballa cocinada": "🐟", "Gambas cocidas": "🦐", "Sardinas en conserva escurridas": "🐟",
+    "Tofu firme": "🧈", "Tempeh": "🫘", "Edamame cocido": "🫛", "Garbanzos cocidos": "🫘",
+    "Lentejas cocidas": "🫘", "Alubias blancas cocidas": "🫘", "Alubias rojas cocidas": "🫘",
+    "Hummus": "🧆", "Arroz blanco cocido": "🍚", "Arroz integral cocido": "🍚",
+    "Quinoa cocida": "🌾", "Pasta cocida": "🍝", "Pasta integral cocida": "🍝",
+    "Copos de avena": "🥣", "Harina de avena": "🌾", "Yogur natural": "🥣",
+    "Yogur griego natural": "🥣", "Kéfir natural": "🥛", "Skyr natural": "🥣",
+    "Queso fresco": "🧀", "Queso cottage": "🧀", "Mozzarella": "🧀", "Queso feta": "🧀",
+    "Almendras": "🌰", "Nueces": "🌰", "Cacahuetes": "🥜", "Semillas de chía": "🌱",
+    "Semillas de calabaza": "🌱", "Crema de cacahuete 100%": "🥜",
+    "Aceite de oliva virgen extra": "🫒", "Miel": "🍯", "Chocolate negro 85%": "🍫",
+}
+
+
+def food_icon(name: str) -> str:
+    """Icono de alimento con fallback de la familia del catálogo; nunca devuelve cadena vacía."""
+    exact = FOOD_ICON_BY_NAME.get(name)
+    if exact:
+        return exact
+    section_id = FOOD_SECTION_BY_NAME.get(name, "pantry")
+    return next((icon for key, _, _, icon, _ in FOOD_CATALOG_SECTIONS if key == section_id), "🥗")
+
+
+def recipe_preparation_steps(name: str) -> list[str]:
+    """Instrucciones iniciales orientativas para recetas del sistema sin pasos previos."""
+    if name == "Pisto con huevo":
+        return [
+            "Lava y corta el calabacín, la berenjena y el pimiento en dados pequeños. Pica la cebolla y prepara el tomate.",
+            "Calienta el aceite en una sartén amplia. Pocha la cebolla y el pimiento a fuego medio durante 6–8 minutos.",
+            "Añade la berenjena y el calabacín. Cocina 8–10 minutos, removiendo para que las verduras se ablanden.",
+            "Incorpora el tomate triturado y una pizca de sal. Cocina a fuego suave 15–20 minutos, hasta que el pisto quede meloso.",
+            "Cocina el huevo a la plancha o escalfado y sírvelo encima del pisto caliente.",
+        ]
+    if name.startswith(("Ensalada", "Bowl")):
+        return ["Lava y prepara las verduras. Escurre y enjuaga las legumbres o conservas si las lleva.",
+                "Cuece los cereales o huevos indicados y deja que se templen.",
+                "Mezcla los ingredientes en un bol, añade el aliño y sirve."]
+    if name.startswith(("Tostada", "Bocadillo")):
+        return ["Prepara y corta los ingredientes del relleno.",
+                "Tuesta el pan si corresponde y distribuye los ingredientes de forma uniforme.",
+                "Añade el aliño o condimento indicado y sirve recién preparado."]
+    if name.startswith(("Tortilla", "Huevos")):
+        return ["Bate los huevos o claras y prepara el resto de ingredientes.",
+                "Cocina las verduras o el relleno en una sartén con el aceite indicado.",
+                "Añade el huevo y cocina a fuego medio hasta que cuaje. Sirve caliente."]
+    if "café con leche" in name.lower():
+        return ["Prepara el café y calienta la leche sin dejar que hierva.",
+                "Vierte la leche en la taza y añade el café al gusto. Sirve."]
+    if name.startswith(("Porridge", "Avena nocturna", "Bol de skyr", "Yogur")):
+        return ["Pesa los ingredientes y prepara la fruta o los acompañamientos.",
+                "Mezcla la avena o el yogur con la leche o base indicada.",
+                "Añade la fruta y los toppings. Sirve o deja reposar en frío según la preparación."]
+    if name.startswith(("Pasta", "Arroz", "Cuscús", "Lentejas", "Garbanzos", "Patata")):
+        return ["Prepara los ingredientes: lava, corta y escurre lo necesario.",
+                "Cuece el arroz, la pasta, las legumbres o la patata según corresponda.",
+                "Cocina la proteína y las verduras con el aceite indicado.",
+                "Mezcla todos los ingredientes, ajusta el punto de sal y sirve."]
+    if name.startswith(("Crema", "Pisto")):
+        return ["Lava, pela si hace falta y trocea las verduras.",
+                "Cocina las verduras en una cazuela con el aceite y el líquido indicados hasta que estén tiernas.",
+                "Tritura hasta conseguir la textura deseada y sirve."]
+    if name.startswith(("Batido",)):
+        return ["Prepara y trocea la fruta.",
+                "Añade todos los ingredientes al vaso de la batidora.",
+                "Tritura hasta obtener una mezcla homogénea y sirve frío."]
+    return ["Prepara y pesa todos los ingredientes.",
+            "Cocina los ingredientes que lo requieran con el método adecuado y las cantidades indicadas.",
+            "Combina la preparación, ajusta el punto y reparte en las raciones indicadas."]
 
 
 def slug(text: str) -> str:
