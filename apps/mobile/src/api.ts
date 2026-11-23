@@ -67,7 +67,7 @@ export async function mobileRequest<T>(
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
   let access = await SecureStore.getItemAsync(ACCESS_KEY);
-  if (!access) access = await refreshSession() ?? undefined;
+  if (!access) access = await refreshSession();
   const request = (token?: string) => apiRequest<T>(path, {
     baseUrl: API_URL,
     method: options.method,
