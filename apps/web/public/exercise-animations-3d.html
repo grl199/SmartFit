@@ -214,5 +214,5 @@ cv.addEventListener('pointerup',()=>dr=null);
 const nav=document.getElementById('nav'),tn=document.getElementById('tn'),tm=document.getElementById('tm'),br=document.getElementById('br'),ph=document.getElementById('ph'),pz=document.getElementById('pz');
 {const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s)}
 pz.onclick=()=>{paused=!paused;pz.textContent=paused?'▶ Reanudar':'⏸ Pausar'};
-rs();pick(0);requestAnimationFrame(loop);
+rs();{const requested=new URLSearchParams(window.location.search).get('exercise');if(requested){const norm=s=>s.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'');const target=norm(requested);let idx=E.findIndex(e=>norm(e.n)===target);if(idx<0)idx=E.findIndex(e=>target.includes(norm(e.n))||norm(e.n).includes(target));pick(idx>=0?idx:0);}else pick(0);}requestAnimationFrame(loop);
 </script></body></html>
