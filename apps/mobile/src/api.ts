@@ -54,9 +54,9 @@ async function refreshSession(): Promise<string | null> {
       const payload = await response.json() as SessionResponse;
       await saveSession(payload.access_token, payload.refresh_token);
       return payload.access_token;
-    } catch {
-      // Si hay un fallo de red no destruimos el refresh token; se podrá reintentar.
-      return null;
+    } catch (error) {
+      // Un fallo de red no equivale a una sesión revocada: conservamos el refresh token.
+      throw error;
     }
   })().finally(() => { refreshInFlight = null; });
   return refreshInFlight;
