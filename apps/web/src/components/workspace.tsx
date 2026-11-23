@@ -19,7 +19,7 @@ type Profile = { sex?: string | null; birth_date?: string | null; height_cm?: nu
 type Targets = { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g: number; workouts_per_week: number; water_ml?: number; steps_goal?: number; source?: string; rationale?: string };
 type Weight = { id: number; measured_on: string; weight_kg: number; body_fat_pct?: number | null };
 type Checkin = { date: string; mood: number; energy_level?: number; stress_level?: number; sleep_quality?: number; notes?: string };
-const today = () => new Date().toLocaleDateString("sv-SE");
+const today = () => { const d = new Date(); const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 10); };
 const fmt = (v: number | null | undefined) => v == null ? "—" : Math.round(v).toLocaleString("es-ES");
 const errText = (e: unknown) => e instanceof Error ? e.message : "No se pudo completar la operación.";
 const mealNames: Record<string,string> = { breakfast: "Desayuno", lunch: "Comida", snack: "Tentempié", dinner: "Cena" };
