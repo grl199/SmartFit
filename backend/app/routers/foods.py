@@ -161,7 +161,7 @@ def browse_catalog(
         "id": "mine", "title": "Mis alimentos", "description": "Alimentos personalizados que has creado",
         "icon": "👤", "count": len(own_foods),
         "foods": [
-            {**FoodOut.model_validate(food).model_dump(), "icon": food_icon(food.name) or "🍽️"}
+            {**FoodOut.model_validate(food).model_dump(), "icon": "🍽️"}
             for food in own_foods
         ],
     })
