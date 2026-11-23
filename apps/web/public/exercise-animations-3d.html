@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SmartFit · Animaciones 3D</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#14181f;--mut:#5b6472;--card:#fff;--bd:#d9dde3;--ac:#2f6fed;--floor:#c9ced6;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media(prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0f1319;--fg:#eef1f5;--mut:#9aa4b2;--card:#171c24;--bd:#2a313c;--ac:#6c9bff;--floor:#262c36}}
+:root[data-theme="dark"]{--bg:#0f1319;--fg:#eef1f5;--mut:#9aa4b2;--card:#171c24;--bd:#2a313c;--ac:#6c9bff;--floor:#262c36}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+main{max-width:960px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:0 0 4px}p.s{color:var(--mut);margin:0 0 12px;font-size:13px}
+nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+nav button,#pz{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+nav button.on{background:var(--ac);border-color:var(--ac);color:#fff}
+canvas{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--bd);border-radius:12px;background:var(--card);touch-action:none;cursor:grab}
+.info{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
+#ph{font-weight:600;color:var(--ac)}#br,#tm{color:var(--mut);font-size:13px}
+
+/* Compacto y adaptable al panel de registro de sesión */
+html,body{width:100%;height:auto;min-height:0;margin:0;overflow:hidden}
+main{width:100%;max-width:860px;margin:0 auto;padding:6px;box-sizing:border-box}
+h1,p.s,nav{display:none!important}
+canvas{width:100%;max-height:480px;aspect-ratio:16/9;object-fit:contain}
+.info{margin-top:7px;padding:8px 10px;gap:8px}
+#tn{font-size:14px}
+</style></head><body><main>
+<h1>SmartFit · Animaciones 3D de ejercicios</h1>
+<p class="s">Una repetición por ciclo (8 s) y bucle continuo. Arrastra sobre la escena para rotar la vista.</p>
+<nav id="nav"></nav>
+<canvas id="c"></canvas>
+<div class="info"><div><div id="tn" style="font-weight:700"></div><div id="tm"></div></div><div id="ph"></div><div id="br"></div><button id="pz">⏸ Pausar</button></div>
+</main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const V=(x=0,y=0,z=0)=>new THREE.Vector3(x,y,z),rad=Math.PI/180,dir=d=>V(Math.sin(d*rad),Math.cos(d*rad),0);
+const D={a:0,c:0,f:[0,.08],kp:[1,0,0],ep:[0,-1,.2],hz:.22,fz:.12,fr:0,tw:0,sr:0,hq:0,fl:0};
+const P=o=>{const p={...D,...o};p.f2=o.f2||p.f;p.kp2=o.kp2||p.kp;if(p.hd==null)p.hd=p.a-p.c;return p};
+const bn='#3b3f48',mat='#3a4a6b',st='#6b7280';
+const ST=['Excéntrica ↓','Concéntrica ↑'],CE=['Concéntrica ↑','Excéntrica ↓'],BR='Espira en la fase concéntrica · inspira en la excéntrica',BN=[[1.3,.1,.34,-.15,.4,0,0,bn],[.08,.36,.3,-.6,.18,0,0,bn],[.08,.36,.3,.3,.18,0,0,bn]],PU=[[.05,.05,1.3,0,2.1,0,0,'#9ca3af'],[.07,2.2,.07,0,1.1,.7,0,st],[.07,2.2,.07,0,1.1,-.7,0,st]],MC=[[.4,.08,.45,-.25,.42,0,0,bn],[.08,.8,.4,-.5,.85,0,12,bn]],RD='#ef4444',TX='#facc15',CB='#9ca3af';
+const E=[
+{n:'Press banca con barra',m:'Pectoral · tríceps · deltoides anterior',ph:['Excéntrica: baja la barra al pecho','Concéntrica: empuja hacia arriba'],br:'Inspira al bajar · espira al empujar',c:[-.1,.75,.9],bar:1,
+ pr:[[1.3,.1,.34,-.15,.4,0,0,bn],[.08,.36,.3,-.6,.18,0,0,bn],[.08,.36,.3,.3,.18,0,0,bn],[.08,1.3,.08,.05,.65,1.05,0,st],[.08,1.3,.08,.05,.65,-1.05,0,st]],
+ A:{h:[-.5,.55],a:90,f:[-.95,.08],fz:.22,kp:[-.5,1,0],ha:[.05,1.12],hz:.3,ep:[-.6,-1,.6]},B:{ha:[.07,.75]}},
+{n:'Sentadilla con barra',m:'Cuádriceps · glúteo mayor · core',ph:['Excéntrica: desciende hasta paralelo','Concéntrica: extiende cadera y rodillas'],br:'Inspira y bloquea el core · espira al subir',c:[0,.95,1],bar:1,
+ pr:[[.08,1.7,.08,-.35,.85,1.05,0,st],[.08,1.7,.08,-.35,.85,-1.05,0,st]],
+ A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[-.06,.05],hz:.32,ep:[-1,-.4,.5],hd:0},B:{h:[-.3,.5],a:40,hd:15}},
+{n:'Peso muerto convencional',m:'Glúteo · isquiotibiales · erectores espinales',ph:['Excéntrica: bisagra de cadera, barra al suelo','Concéntrica: empuja el suelo y extiende'],br:'Inspira y bloquea el core · espira arriba',c:[0,.8,1],bar:1,pr:[],
+ A:{h:[-.05,.98],f:[-.05,.08],fz:.1,hs:[.03,-.57],hz:.3,ep:[0,-1,.1],hd:0},B:{h:[-.45,.44],a:50,kp:[1,.3,0],hd:30}},
+{n:'Flexiones',m:'Pectoral · tríceps · deltoides anterior · core',ph:ST.map((s,i)=>s.split(' ')[0]+(i?': empuja hasta extender':': baja con el pecho')),br:'Inspira al bajar · espira al empujar',c:[-.25,.5,.85],
+ pr:[[3,.03,1.2,-.3,.015,0,0,mat]],
+ A:{h:[-.1,.42],a:68,f:[-.96,.17],fr:-70,kp:[0,1,0],ha:[.42,.04],hz:.3,ep:[-1,.3,.8],hd:60},B:{h:[-.08,.17],a:85,hd:82}},
+{n:'Dominadas',m:'Dorsal ancho · bíceps · romboides',ph:['Concéntrica: sube hasta pasar la barbilla','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,1.1,1.15],
+ pr:[[.05,.05,1.3,0,2.1,0,0,'#9ca3af'],[.07,2.2,.07,0,1.1,.7,0,st],[.07,2.2,.07,0,1.1,-.7,0,st]],
+ A:{h:[0,.98],a:-5,f:[-.25,.33],fz:.1,ha:[0,2.1],hz:.35,ep:[-.5,-1,.4],hd:0},B:{h:[-.03,1.46],a:-10,f:[-.3,.82],hd:15}},
+{n:'Plancha',m:'Recto abdominal · transverso · glúteos',ph:['Inspira · mantén la línea recta','Espira · mantén la línea recta'],br:'Respiración lenta y continua',c:[-.2,.4,.8],
+ pr:[[3,.03,1.2,-.3,.015,0,0,mat]],
+ A:{h:[-.14,.235],a:79,f:[-1,.17],fr:-70,kp:[0,1,0],ha:[.7,.04],hz:.2,ep:[0,-1,0],hd:70},B:{h:[-.14,.25],hd:68}},
+{n:'Crunch abdominal',m:'Recto abdominal · oblicuos',ph:['Concéntrica: enrolla el tronco','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[-.05,.35,.7],
+ pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],
+ A:{h:[-.3,.14],a:90,f:[-.78,.09],fz:.15,kp:[0,1,0],hs:[-.1,.13],hz:.08,ep:[0,1,.5]},B:{c:42}},
+{n:'Prensa de piernas',m:'Cuádriceps · glúteo mayor',ph:['Excéntrica: baja la plataforma','Concéntrica: empuja sin bloquear rodillas'],br:'Inspira al bajar · espira al empujar',c:[-.1,.7,.85],
+ pr:[[1.8,.05,.05,.3,.72,.45,45,st],[1.8,.05,.05,.3,.72,-.45,45,st],[.5,.08,.5,-.35,.34,0,0,bn],[.08,1,.5,-.78,.665,0,55,bn],[.06,.8,.8,0,0,0,45,'#9ca3af',[.09,.09]]],
+ A:{h:[-.3,.45],a:-55,f:[.43,.95],fz:.15,fr:135,kp:[0,1,0],ha:[-.25,.6],hz:.32,ep:[0,-1,.6],hd:-35},B:{f:[.11,.63]}},
+{n:'Zancadas con mancuernas',m:'Cuádriceps · glúteo mayor · isquiotibiales',ph:['Excéntrica: paso largo y desciende','Concéntrica: empuja y vuelve'],br:'Inspira al bajar · espira al subir',c:[0,.9,.95],db:1,lift:1,pr:[],
+ A:{h:[0,.98],f:[0,.08],hs:[0,-.57],hz:.27,ep:[0,-1,.2]},B:{h:[.02,.55],f:[.55,.08],f2:[-.55,.14],kp:[1,.5,0],kp2:[.5,-1,0]}},
+{n:'Hip thrust',m:'Glúteo mayor · isquiotibiales',ph:['Excéntrica: baja la cadera','Concéntrica: empuja y aprieta glúteos'],br:'Inspira al bajar · espira al subir',c:[.1,.5,.9],bar:1,
+ pr:[[.9,.1,.34,.7,.4,0,0,bn],[.08,.36,.3,.4,.18,0,0,bn],[.08,.36,.3,1,.18,0,0,bn]],
+ A:{h:[-.05,.52],a:90,f:[-.5,.08],fz:.2,kp:[-.5,1,0],hh:[.05,.12],hz:.3,ep:[0,-1,.5],hd:80},B:{h:[.09,.15],a:48}},
+{n:'Peso muerto rumano',m:'Isquiotibiales · glúteo mayor · erectores',ph:['Excéntrica: cadera atrás, barra pegada a las piernas','Concéntrica: extiende la cadera'],br:'Inspira al bajar · espira al subir',c:[0,.85,1],bar:1,pr:[],
+ A:{h:[-.05,.98],f:[-.05,.08],fz:.1,hs:[.03,-.57],hz:.3,ep:[0,-1,.1],hd:0},B:{h:[-.48,.8],a:75,hd:50}},
+{n:'Jalón al pecho',m:'Dorsal ancho · bíceps · romboides',ph:['Concéntrica: baja la barra al pecho','Excéntrica: sube controlado'],br:'Espira al bajar · inspira al subir',c:[.1,1.15,1.15],bar:2,cable:[.2,2.35],
+ pr:[[.4,.08,.45,-.05,.42,0,0,bn],[.14,.14,.5,.42,.65,0,0,bn],[.08,.08,1.3,.2,2.35,0,0,st],[.08,2.35,.08,.2,1.17,.65,0,st],[.08,2.35,.08,.2,1.17,-.65,0,st]],
+ A:{h:[0,.5],a:-8,f:[.35,.08],fz:.15,kp:[1,.5,0],hs:[.2,.5],hz:.45,ep:[-1,-.5,.6],hd:0},B:{a:-18,hs:[.15,-.12]}},
+{n:'Remo con barra',m:'Dorsal ancho · romboides · trapecio · bíceps',ph:['Concéntrica: lleva la barra al abdomen','Excéntrica: baja controlado'],br:'Espira al tirar · inspira al bajar',c:[0,.8,1],bar:1,pr:[],
+ A:{h:[-.4,.85],a:65,f:[-.05,.08],fz:.12,hs:[-.02,-.57],hz:.3,ep:[-1,.2,.4],hd:30},B:{hs:[-.06,-.27]}},
+{n:'Press militar con barra',m:'Deltoides · tríceps · trapecio · core',ph:['Concéntrica: empuja la barra sobre la cabeza','Excéntrica: baja a las clavículas'],br:'Espira al empujar · inspira al bajar',c:[0,1.15,1.25],bar:1,pr:[],
+ A:{h:[0,.98],f:[0,.08],hs:[.08,.04],hz:.27,ep:[.6,-1,.3],hd:0},B:{hs:[0,.57],ep:[0,-1,.5]}},
+{n:'Curl de bíceps con barra',m:'Bíceps braquial · braquial',ph:['Concéntrica: flexiona los codos','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,.95,1],bar:1,pr:[],
+ A:{h:[0,.98],f:[0,.08],hs:[.08,-.56],hz:.22,ep:[-.3,-1,.15],hd:0},B:{hs:[.15,-.08]}},
+{n:'Press banca inclinado con mancuernas',m:'Pectoral superior · deltoides anterior · tríceps',ph:['Excéntrica: baja las mancuernas al pecho','Concéntrica: empuja hacia arriba'],br:'Inspira al bajar · espira al empujar',c:[-.15,.8,.9],db:1,
+ pr:[[.4,.08,.45,-.5,.38,0,0,bn],[.1,1.1,.45,-.04,.75,0,-50,bn],[.08,.34,.3,-.5,.17,0,0,bn]],
+ A:{h:[-.5,.52],a:50,f:[-.95,.08],fz:.25,kp:[-.5,1,0],ha:[-.03,1.43],hz:.27,ep:[-.6,-1,.7],hd:55},B:{ha:[-.11,1]}},
+{n:'Elevaciones laterales',m:'Deltoides medio · supraespinoso',ph:['Concéntrica: eleva los brazos hasta el hombro','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,1,1.05],y:1.15,db:1,dbx:1,pr:[],
+ A:{h:[0,.98],f:[0,.08],fz:.12,hs:[.02,-.56],hz:.27,ep:[0,-1,.2],hd:0},B:{hs:[.03,-.04],hz:.72}},
+{n:'Curl martillo',m:'Braquial · braquiorradial · bíceps',ph:['Concéntrica: sube con agarre neutro','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,.95,1],db:1,dbx:1,pr:[],
+ A:{h:[0,.98],f:[0,.08],hs:[.02,-.56],hz:.27,ep:[-.3,-1,.15],hd:0},B:{hs:[.13,-.09],hz:.24}},
+{n:'Fondos en paralelas',m:'Pectoral inferior · tríceps · deltoides anterior',ph:['Excéntrica: baja hasta unos 90° de codo','Concéntrica: empuja hasta extender'],br:'Inspira al bajar · espira al subir',c:[0,1,1.1],
+ pr:[[1,.05,.05,0,1.17,.3,0,'#9ca3af'],[1,.05,.05,0,1.17,-.3,0,'#9ca3af'],[.06,1.17,.06,.45,.585,.3,0,st],[.06,1.17,.06,-.45,.585,.3,0,st],[.06,1.17,.06,.45,.585,-.3,0,st],[.06,1.17,.06,-.45,.585,-.3,0,st]],
+ A:{h:[-.142,1.24],a:15,f:[-.35,.5],fz:.12,kp:[1,-.3,0],ha:[0,1.2],hz:.3,ep:[-1,0,.3],hd:5},B:{h:[-.13,.95],a:25,f:[-.4,.22],hd:20}},
+{n:'Sentadilla con peso corporal',m:'Cuádriceps · glúteo mayor · core',ph:['Excéntrica: desciende hasta paralelo','Concéntrica: extiende y vuelve a subir'],br:'Inspira al bajar · espira al subir',c:[0,.95,1],pr:[],
+ A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[.52,-.02],hz:.14,ep:[0,-1,.2],hd:0},B:{h:[-.32,.5],a:35,hd:10}},
+{n:'Sentadilla goblet con pesa rusa',m:'Cuádriceps · glúteo mayor · core',ph:ST,br:BR,c:[0,.95,1],db:1,pr:[],A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[.15,-.22],hz:.08,ep:[0,-1,.3],hd:0},B:{h:[-.3,.5],a:30,hd:10}},
+{n:'Extensión de piernas (cuádriceps)',m:'Cuádriceps',ph:CE,br:BR,c:[.15,.7,.9],pr:MC,A:{h:[-.2,.5],a:-10,f:[.25,.1],fz:.12,kp:[0,1,0],hs:[.2,-.4],hz:.3,ep:[0,-1,.4],hd:-10},B:{f:[.69,.52]}},
+{n:'Curl femoral tumbado',m:'Isquiotibiales · gemelos',ph:CE,br:BR,c:[-.3,.5,.9],pr:[[1.5,.2,.4,-.4,.1,0,0,bn]],A:{h:[-.2,.3],a:90,f:[-1.08,.3],fz:.12,kp:[0,1,0],ha:[.45,.3],hz:.25,ep:[0,-1,.3],hd:90},B:{f:[-.65,.75],kp:[-1,-1,0]}},
+{n:'Elevación de gemelos de pie',m:'Gemelos · sóleo',ph:CE,br:BR,c:[0,.8,1],db:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[0,-.57],hz:.27,hd:0},B:{h:[0,1.1],f:[0,.2],fr:-55}},
+{n:'Puente de glúteo',m:'Glúteo mayor · isquiotibiales',ph:CE,br:BR,c:[-.2,.35,.75],pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[-.3,.14],a:90,f:[-.75,.08],fz:.15,kp:[-.3,1,0],ha:[-.05,.05],hz:.25,ep:[0,-1,0],hd:90},B:{h:[-.226,.415],a:120,hd:90}},
+{n:'Press de hombros con mancuernas',m:'Deltoides · tríceps · trapecio',ph:CE,br:BR,c:[0,1.15,1.25],db:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[0,.12],hz:.3,ep:[0,-1,.6],hd:0},B:{hs:[0,.57],hz:.22,ep:[0,-1,.3]}},
+{n:'Elevación de piernas colgado',m:'Recto abdominal · flexores de cadera',ph:CE,br:BR,c:[0,1.1,1.15],pr:PU,A:{h:[0,.98],a:-5,f:[0,.1],fz:.1,ha:[0,2.1],hz:.35,ep:[-.5,-1,.4],hd:0},B:{f:[.88,1],kp:[0,1,0],a:-8}},
+{n:'Aperturas con mancuernas',m:'Pectoral · deltoides anterior',ph:ST,br:BR,c:[0,.75,.9],y:1.25,db:1,pr:BN,A:{h:[-.5,.55],a:90,f:[-.95,.08],fz:.22,kp:[-.5,1,0],ha:[.05,1.1],hz:.12,ep:[0,-1,.2]},B:{ha:[.05,.65],hz:.72}},
+{n:'Press francés',m:'Tríceps braquial',ph:ST,br:BR,c:[-.1,.75,.9],bar:1,pr:BN,A:{h:[-.5,.55],a:90,f:[-.95,.08],fz:.22,kp:[-.5,1,0],ha:[.05,1.12],hz:.12,ep:[0,-1,.3]},B:{ha:[.31,.8],ep:[0,1,.1]}},
+{n:'Sentadilla búlgara',m:'Cuádriceps · glúteo mayor',ph:ST,br:BR,c:[-.2,.9,1],db:1,pr:[[.4,.45,.35,-.9,.225,0,0,bn]],A:{h:[-.05,.9],f:[.3,.08],f2:[-.75,.53],fz:.12,kp:[1,.2,0],kp2:[0,-1,0],hs:[0,-.57],hz:.27,ep:[0,-1,.2],hd:0},B:{h:[-.05,.55]}},
+{n:'Sentadilla frontal',m:'Cuádriceps · glúteo mayor · core',ph:ST,br:BR,c:[0,.95,1],bar:1,pr:[],A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[.1,.04],hz:.22,ep:[1,.3,.3],hd:0},B:{h:[-.28,.52],a:25,hd:5}},
+{n:'Curl femoral sentado',m:'Isquiotibiales · gemelos',ph:CE,br:BR,c:[.15,.7,.9],pr:MC,A:{h:[-.2,.5],a:-10,f:[.69,.52],fz:.12,kp:[0,1,0],hs:[.2,-.4],hz:.3,ep:[0,-1,.4],hd:-10},B:{f:[.15,.1]}},
+{n:'Step-up en cajón',m:'Cuádriceps · glúteo mayor',ph:CE,br:BR,c:[.15,.9,1.05],pr:[[.5,.4,.5,.4,.2,0,0,bn]],A:{h:[.2,.95],a:10,f:[.4,.48],f2:[-.05,.08],fz:.12,hs:[0,-.57],hz:.22,ep:[0,-1,.2],hd:0},B:{h:[.4,1.38],a:0,f2:[.42,.98]}},
+{n:'Peso muerto con pesa rusa',m:'Glúteo · isquiotibiales · erectores',ph:ST,br:BR,c:[0,.8,1],db:1,pr:[],A:{h:[-.05,.98],f:[-.05,.08],fz:.15,hs:[.03,-.57],hz:.1,ep:[0,-1,.1],hd:0},B:{h:[-.4,.5],a:45,kp:[1,.2,0],hd:25}},
+{n:'Elevación de gemelos sentado',m:'Sóleo · gemelos',ph:CE,br:BR,c:[.2,.6,.9],db:1,pr:[[.4,.08,.45,-.05,.42,0,0,bn]],A:{h:[0,.5],a:5,f:[.45,.08],fz:.15,kp:[0,1,0],ha:[.43,.62],hz:.15,ep:[0,-1,.3],hd:0},B:{f:[.45,.18],fr:-50}},
+{n:'Fondos en banco',m:'Tríceps · pectoral inferior · deltoides anterior',ph:ST,br:BR,c:[-.1,.8,1],pr:[[.4,.45,.35,-.65,.225,0,0,bn]],A:{h:[-.35,.52],a:-10,f:[.35,.08],fz:.12,kp:[0,1,0],ha:[-.5,.49],hz:.28,ep:[-1,.2,.2],hd:0},B:{h:[-.32,.25]}},
+{n:'Buenos días con barra',m:'Isquiotibiales · glúteo · erectores',ph:ST,br:BR,c:[0,.9,1],bar:1,pr:[],A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[-.06,.05],hz:.32,ep:[-1,-.4,.5],hd:0},B:{h:[-.4,.85],a:70,hd:35}},
+{n:'Zancadas con peso corporal',m:'Cuádriceps · glúteo mayor',ph:ST,br:BR,c:[0,.9,.95],lift:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[-.05,-.45],hz:.27,ep:[-1,0,.5],hd:0},B:{h:[.02,.55],f:[.55,.08],f2:[-.55,.14],kp:[1,.5,0],kp2:[.5,-1,0]}},
+{n:'Elevación frontal con disco',m:'Deltoides anterior',ph:CE,br:BR,c:[0,1.05,1.1],db:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[.05,-.56],hz:.1,ep:[0,-1,.1],hd:0},B:{hs:[.55,-.02]}},
+{n:'Pájaros (deltoide posterior)',m:'Deltoides posterior · romboides',ph:CE,br:BR,c:[-.05,.9,1.05],y:1.2,db:1,dbx:1,pr:[],A:{h:[-.48,.8],a:75,f:[-.05,.08],fz:.12,hs:[.03,-.57],hz:.15,ep:[0,-1,.1],hd:50},B:{hs:[0,-.05],hz:.7}},
+{n:'Elevación de gemelos con peso corporal',m:'Gemelos · sóleo',ph:CE,br:BR,c:[0,.8,1],pr:[],A:{h:[0,.98],f:[0,.08],hs:[-.05,-.45],hz:.27,ep:[-1,0,.5],hd:0},B:{h:[0,1.1],f:[0,.2],fr:-55}},
+{n:'Curl predicador',m:'Bíceps braquial',ph:CE,br:BR,c:[.05,.85,.95],bar:1,pr:[[.35,.08,.4,-.15,.42,0,0,bn],[.08,.6,.4,.01,.89,0,-135,bn],[.1,.6,.3,.2,.3,0,0,bn]],A:{h:[-.15,.5],a:10,f:[.1,.08],fz:.2,kp:[1,.3,0],ha:[.32,.6],hz:.15,ep:[.6,-1,.2],hd:10},B:{ha:[.05,1.1]}},
+{n:'Remo con mancuerna',m:'Dorsal ancho · romboides · bíceps',ph:CE,br:BR,c:[0,.8,1],db:2,pr:[[.5,.45,.3,.2,.225,.2,0,bn]],A:{h:[-.45,.85],a:75,f:[-.05,.08],f2:[-.55,.08],hz:.2,ha:[.15,.5],hb:[.08,.42],ep:[-1,.3,.2],hd:40},B:{hb:[-.2,.88]}},
+{n:'Face pull',m:'Deltoides posterior · trapecio · manguito rotador',ph:CE,br:BR,c:[.4,1.1,1.25],y:.7,pr:[[.12,2.1,.4,1.25,1.05,0,0,st]],ln:[1.2,1.65,0,.01,CB],A:{h:[0,.98],f:[.15,.08],f2:[-.15,.08],hs:[.5,.07],hz:.1,ep:[0,-1,.1],hd:0},B:{hs:[.12,.12],hz:.2,ep:[-.3,.4,1]}},
+{n:'Remo en polea baja',m:'Dorsal ancho · romboides · bíceps',ph:CE,br:BR,c:[.3,.75,1.1],pr:[[.4,.08,.4,-.35,.42,0,0,bn],[.06,.5,.5,.65,.38,0,0,st],[.12,.9,.4,1.35,.45,0,0,st]],ln:[1.3,.4,0,.01,CB],A:{h:[-.3,.5],a:5,f:[.55,.38],kp:[0,1,0],hs:[.5,-.3],hz:.1,ep:[-1,0,.4],hd:0},B:{a:-8,hs:[0,-.38]}},
+{n:'Cruces en polea',m:'Pectoral · deltoides anterior',ph:CE,br:BR,c:[0,1.1,1.25],y:1.15,pr:[[.1,2.2,.1,-.1,1.1,.9,0,st],[.1,2.2,.1,-.1,1.1,-.9,0,st]],ln:[-.1,2.1,.9,.01,CB],A:{h:[0,.98],a:10,f:[.2,.08],f2:[-.2,.08],hs:[.05,0],hz:.75,ep:[0,-.5,.5],hd:10},B:{hs:[.45,-.3],hz:.06}},
+{n:'Press de pecho en máquina',m:'Pectoral · tríceps · deltoides anterior',ph:CE,br:BR,c:[.1,.85,1],pr:[[.4,.08,.5,-.05,.42,0,0,bn],[.08,.9,.5,-.15,.95,0,0,bn]],A:{h:[0,.5],a:-5,f:[.3,.08],fz:.15,kp:[1,.3,0],ha:[.12,1],hz:.3,ep:[-.5,-.3,.5],hd:0},B:{ha:[.5,1.05],ep:[0,-1,.3]}},
+{n:'Extensión de tríceps en polea',m:'Tríceps braquial',ph:CE,br:BR,c:[.1,1.05,1.1],pr:[[.1,2.2,.3,.4,1.1,0,0,st]],ln:[.3,2.1,0,.01,CB],A:{h:[0,.98],f:[.1,.08],f2:[-.1,.08],hs:[.25,-.23],hz:.1,ep:[-.5,-1,.2],hd:0},B:{hs:[.12,-.55]}},
+{n:'Rueda abdominal',m:'Recto abdominal · transverso · dorsal',ph:ST,br:BR,c:[.3,.45,.9],db:1,pr:[[2.4,.03,.9,0,.015,0,0,mat]],A:{h:[-.4,.52],a:70,f:[-.85,.08],kp:[1,-1,0],ha:[.1,.1],hz:.12,ep:[0,-1,.1],hd:60},B:{h:[0,.2],a:88,ha:[1.1,.1],hd:80}},
+{n:'Crunch en polea',m:'Recto abdominal · oblicuos',ph:CE,br:BR,c:[.15,.85,1.05],pr:[[2,.03,.8,-.2,.015,0,0,mat],[.1,2.2,.3,.45,1.1,0,0,st]],ln:[.3,2,0,.01,CB],A:{h:[0,.52],a:5,f:[-.45,.08],kp:[1,-1,0],hs:[.1,.1],hz:.12,ep:[0,1,.4],hd:0},B:{a:15,c:-65,hd:100}},
+{n:'Patada de glúteo en polea',m:'Glúteo mayor · isquiotibiales',ph:CE,br:BR,c:[.1,.9,1],pr:[[.2,2.1,.4,.85,1.05,0,0,st]],ln:[.8,.25,0,.01,CB,'a1'],A:{h:[0,.98],a:12,f:[0,.08],f2:[0,.08],ha:[.45,1.1],hz:.2,ep:[0,-1,.3],hd:5},B:{a:20,f:[-.7,.62],f2:[0,.08],hd:10}},
+{n:'Máquina de aductores',m:'Aductores',ph:CE,br:BR,c:[.15,.8,1.1],y:1.2,pr:[[.4,.08,.5,-.05,.42,0,0,bn],[.08,.9,.5,-.15,.95,0,0,bn]],A:{h:[0,.5],a:0,f:[.35,.1],fz:.4,kp:[1,.3,.7],hs:[0,-.4],hz:.27,ep:[0,-1,.2],hd:0},B:{fz:.1}},
+{n:'Máquina de abductores',m:'Glúteo medio · abductores',ph:CE,br:BR,c:[.15,.8,1.1],y:1.2,pr:[[.4,.08,.5,-.05,.42,0,0,bn],[.08,.9,.5,-.15,.95,0,0,bn]],A:{h:[0,.5],a:0,f:[.35,.1],fz:.1,kp:[1,.3,.7],hs:[0,-.4],hz:.27,ep:[0,-1,.2],hd:0},B:{fz:.4}},
+{n:'Caminata lateral con banda',m:'Glúteo medio · abductores',ph:['Paso lateral: abre la pierna','Cierra controlado'],br:'Respiración continua',c:[0,.8,1.1],y:1.15,lk:'a',lc:RD,pr:[],A:{h:[0,.9],a:10,f:[0,.08],kp:[1,0,.3],hs:[-.05,-.45],hz:.27,ep:[-1,0,.5],hd:10},B:{fl:.3}},
+{n:'Sentadilla con banda de resistencia',m:'Cuádriceps · glúteo mayor',ph:ST,br:BR,c:[0,.95,1.05],ln:[0,.03,.2,.01,RD],pr:[],A:{h:[0,.98],f:[-.05,.08],fz:.2,hs:[.12,.02],hz:.22,ep:[0,-1,.3],hd:0},B:{h:[-.3,.5],a:35,hd:10}},
+{n:'Sentadilla en TRX',m:'Cuádriceps · glúteo mayor',ph:ST,br:BR,c:[.2,1.1,1.15],ln:[.85,2.2,.1,.01,TX],pr:[[.1,.1,.6,.85,2.2,0,0,st]],A:{h:[0,.98],f:[-.05,.08],fz:.15,hs:[.5,.2],hz:.12,ep:[0,-1,.2],hd:0},B:{h:[-.35,.52],a:30,hs:[.5,.35],hd:10}},
+{n:'Salto al cajón',m:'Cuádriceps · glúteo · gemelos (potencia)',ph:['Carga y salta al cajón','Baja controlado'],br:'Espira al saltar · inspira al bajar',c:[.15,.85,1.1],lift:1,pr:[[.5,.4,.5,.4,.2,0,0,bn]],A:{h:[0,.98],f:[0,.08],hs:[0,-.5],hz:.27,ep:[0,-1,.2],hd:0},M:{h:[-.25,.62],a:40,hs:[-.35,-.35],hd:15},B:{h:[.4,1.38],f:[.4,.48],hs:[.05,-.5],hd:0}},
+{n:'Flexiones en TRX',m:'Pectoral · tríceps · core',ph:ST,br:BR,c:[-.15,.9,1],ln:[.45,2.1,.2,.008,TX],pr:[[.1,.1,.6,.45,2.1,0,0,st]],A:{h:[0,.684],a:55,f:[-.75,.17],fr:-70,kp:[0,1,0],ha:[.45,.5],hz:.2,ep:[-1,.3,.6],hd:50},B:{h:[-.02,.45],a:72,hd:72}},
+{n:'Press de pecho con banda',m:'Pectoral · tríceps · deltoides anterior',ph:CE,br:BR,c:[0,1,1.2],ln:[-.9,1.3,0,.01,RD],pr:[],A:{h:[0,.98],a:5,f:[.25,.08],f2:[-.25,.08],hs:[.1,-.2],hz:.15,ep:[-1,-.3,.5],hd:0},B:{hs:[.5,-.15]}},
+{n:'Press de hombros con pesa rusa',m:'Deltoides · tríceps · core',ph:CE,br:BR,c:[0,1.15,1.25],db:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[0,.1],hz:.25,ep:[0,-1,.6],hd:0},B:{hs:[0,.57],hz:.22,ep:[0,-1,.3]}},
+{n:'Encogimientos de hombros',m:'Trapecio superior',ph:CE,br:BR,c:[0,1,1.05],db:1,pr:[],A:{h:[0,.98],f:[0,.08],hs:[0,-.56],hz:.27,ep:[0,-1,.2],hd:0},B:{sr:.09}},
+{n:'Extensión de tríceps con banda',m:'Tríceps braquial',ph:CE,br:BR,c:[.1,1.05,1.1],ln:[.3,2.1,0,.01,RD],pr:[],A:{h:[0,.98],f:[.1,.08],f2:[-.1,.08],hs:[.25,-.23],hz:.1,ep:[-.5,-1,.2],hd:0},B:{hs:[.12,-.55]}},
+{n:'Extensión de tríceps en TRX',m:'Tríceps braquial',ph:CE,br:BR,c:[-.1,.9,1.1],ln:[.9,2.1,.15,.008,TX],pr:[[.1,.1,.6,.9,2.1,0,0,st]],A:{h:[-.12,.68],a:60,f:[-.84,.17],fr:-70,kp:[0,1,0],hs:[.12,.22],hz:.12,ep:[0,1,.2],hd:55},B:{hs:[.55,.1],ep:[0,-1,.2]}},
+{n:'Curl de bíceps con banda',m:'Bíceps braquial',ph:CE,br:BR,c:[0,.95,1],ln:[0,.03,.2,.01,RD],pr:[],A:{h:[0,.98],f:[0,.08],fz:.2,hs:[.08,-.56],hz:.22,ep:[-.3,-1,.15],hd:0},B:{hs:[.15,-.08]}},
+{n:'Curl de bíceps en TRX',m:'Bíceps braquial',ph:CE,br:BR,c:[0,1.1,1.2],ln:[.7,2.1,.15,.008,TX],pr:[[.1,.1,.6,.7,2.1,0,0,st]],A:{h:[-.08,.97],a:-15,f:[0,.08],hs:[.45,.35],hz:.15,ep:[0,-1,.2],hd:-10},B:{hs:[.1,.15],ep:[0,.3,.6]}},
+{n:'Curl de muñeca',m:'Flexores del antebrazo',ph:CE,br:BR,c:[.2,.7,.9],db:1,pr:[[.4,.08,.45,-.05,.42,0,0,bn]],A:{h:[0,.5],a:40,f:[.4,.08],fz:.15,kp:[1,.3,0],ha:[.43,.52],hz:.12,ep:[-.3,-1,.2],hd:30},B:{ha:[.43,.68]}},
+{n:'Remo con pesa rusa',m:'Dorsal ancho · romboides · bíceps',ph:CE,br:BR,c:[0,.8,1],db:1,pr:[],A:{h:[-.4,.85],a:65,f:[-.05,.08],hs:[-.02,-.57],hz:.2,ep:[-1,.2,.4],hd:30},B:{hs:[-.08,-.3]}},
+{n:'Remo en TRX',m:'Dorsal ancho · romboides · bíceps',ph:CE,br:BR,c:[-.4,1.1,1.2],ln:[-.2,2.1,.15,.008,TX],pr:[[.1,.1,.6,-.2,2.1,0,0,st]],A:{h:[-.58,.77],a:-40,f:[0,.08],hs:[.55,.1],hz:.15,ep:[-1,-.3,.5],hd:-40},B:{hs:[.1,.05]}},
+{n:'Remo con banda',m:'Dorsal ancho · romboides · bíceps',ph:CE,br:BR,c:[.1,.55,.95],ln:[.6,.15,0,.01,RD],pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[-.3,.14],a:0,f:[.55,.1],kp:[0,1,0],hs:[.5,-.4],hz:.2,ep:[-1,0,.4],hd:0},B:{a:-8,hs:[0,-.3]}},
+{n:'Apertura con banda (pull apart)',m:'Deltoides posterior · romboides',ph:CE,br:BR,c:[0,1.1,1.2],y:1.1,lh:1,lc:RD,pr:[],A:{h:[0,.98],f:[0,.08],hs:[.4,-.02],hz:.1,ep:[0,-1,.1],hd:0},B:{hz:.5}},
+{n:'Puente de glúteo con banda',m:'Glúteo mayor · glúteo medio',ph:CE,br:BR,c:[-.2,.35,.75],y:1,lk:'k',lc:RD,pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[-.3,.14],a:90,f:[-.75,.08],fz:.2,kp:[-.3,1,0],ha:[-.05,.05],hz:.25,ep:[0,-1,0],hd:90},B:{h:[-.226,.415],a:120,hd:90}},
+{n:'Giros rusos',m:'Oblicuos · recto abdominal',ph:['Gira a un lado','Gira al otro lado'],br:'Espira al girar',c:[-.1,.6,.9],y:.9,pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[0,.14],a:-35,f:[.55,.45],kp:[0,1,0],hs:[.4,-.25],hz:.06,hq:.35,tw:-30,ep:[0,-1,.4],hd:-35},B:{hq:-.35,tw:30}},
+{n:'Giros rusos con disco',m:'Oblicuos · recto abdominal',ph:['Gira a un lado','Gira al otro lado'],br:'Espira al girar',c:[-.1,.6,.9],y:.9,db:1,pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[0,.14],a:-35,f:[.55,.45],kp:[0,1,0],hs:[.4,-.25],hz:.06,hq:.35,tw:-30,ep:[0,-1,.4],hd:-35},B:{hq:-.35,tw:30}},
+{n:'Giros rusos con balón medicinal',m:'Oblicuos · recto abdominal',ph:['Gira a un lado','Gira al otro lado'],br:'Espira al girar',c:[-.1,.6,.9],y:.9,db:1,pr:[[2.2,.04,.8,-.2,.02,0,0,mat]],A:{h:[0,.14],a:-35,f:[.55,.45],kp:[0,1,0],hs:[.4,-.25],hz:.06,hq:.35,tw:-30,ep:[0,-1,.4],hd:-35},B:{hq:-.35,tw:30}},
+{n:'Plancha en TRX',m:'Recto abdominal · transverso · deltoides',ph:['Inspira · mantén la línea','Espira · mantén la línea'],br:'Respiración lenta y continua',c:[-.25,.7,.95],ln:[-.95,2.1,.12,.008,TX,'a'],pr:[[.1,.1,.6,-.95,2.1,0,0,st],[3,.03,1.2,-.3,.015,0,0,mat]],A:{h:[-.1,.565],a:84,f:[-.95,.5],fr:-20,kp:[0,1,0],ha:[.45,.04],hz:.2,ep:[0,-1,0],hd:75},B:{h:[-.1,.575],hd:73}},
+{n:'Flexión de cuello con banda',m:'Flexores profundos del cuello',ph:['Flexiona: barbilla al pecho','Vuelve controlado'],br:'Respiración continua',c:[-.1,1.35,.6],ln:[-.8,1.75,0,.01,RD,'hd'],pr:[],A:{h:[0,.98],f:[0,.08],hs:[0,-.57],hz:.22,hd:0},B:{hd:45}},
+{n:'Extensión de cuello con disco',m:'Extensores del cuello',ph:CE,br:BR,c:[-.2,.6,.8],pl:[.3,.05,.3,0,.14],pr:[[1.5,.1,.34,-.65,.4,0,0,bn]],A:{h:[-.5,.55],a:90,f:[-1.3,.5],kp:[0,1,0],ha:[.2,.56],hz:.12,ep:[0,1,.5],hd:135},B:{ha:[.26,.75],hd:80}},
+{n:'Hiperextensiones lumbares',m:'Erectores espinales · glúteo · isquiotibiales',ph:CE,br:BR,c:[0,.8,1.1],pr:[[.5,.08,.4,.08,.87,0,45,bn],[.2,.08,.4,-.65,.3,0,0,bn]],A:{h:[0,.95],a:135,f:[-.63,.32],kp:[0,1,0],hs:[.04,-.04],hz:.1,ep:[0,-1,.3],hd:135},B:{a:45,hd:45}}
+];
+E.forEach(e=>{e.PA=P(e.A);e.PB=P({...e.A,...e.B});if(e.M)e.PM=P({...e.A,...e.M})});
+
+const cv=document.getElementById('c'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
+R.setPixelRatio(Math.min(devicePixelRatio,2));
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(42,16/9,.1,50);
+scene.add(new THREE.AmbientLight(0xffffff,.75));const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(2,4,3);scene.add(dl);
+const fl=new THREE.Mesh(new THREE.PlaneGeometry(14,14),new THREE.MeshStandardMaterial({color:getComputedStyle(document.documentElement).getPropertyValue('--floor').trim()||'#c9ced6'}));
+fl.rotation.x=-Math.PI/2;scene.add(fl);
+const CG=new THREE.CylinderGeometry(1,1,1,14),SG=new THREE.SphereGeometry(1,16,12),BG=new THREE.BoxGeometry(1,1,1);
+const mk=(g,c,r)=>{const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.55}));if(r)m.scale.setScalar(r);scene.add(m);return m};
+const SK='#e0ac86',SH='#2f6fed',SO='#1f2937',YY=V(0,1,0);
+const tl=mk(CG,SH),tu=mk(CG,SH),nk=mk(CG,SK),hd=mk(SG,SK,.1),sbar=mk(CG,SH),hbar=mk(CG,SO);
+const S=[0,1].map(()=>({th:mk(CG,SO),sn:mk(CG,SK),kj:mk(SG,SK,.065),sh:mk(BG,'#f3f4f6'),ua:mk(CG,SH),fa:mk(CG,SK),ej:mk(SG,SK,.05),hn:mk(SG,SK,.055),sj:mk(SG,SH,.07)}));
+S.forEach(o=>o.sh.scale.set(.24,.07,.1));
+const barG=new THREE.Group();scene.add(barG);
+{const b=new THREE.Mesh(CG,new THREE.MeshStandardMaterial({color:'#b8bcc4'}));b.rotation.x=Math.PI/2;b.scale.set(.02,2.1,.02);barG.add(b);
+[.85,-.85].forEach(z=>{const p=new THREE.Mesh(CG,new THREE.MeshStandardMaterial({color:'#20242b'}));p.rotation.x=Math.PI/2;p.scale.set(.22,.06,.22);p.position.z=z;barG.add(p)})}
+const dbs=[0,1].map(()=>{const m=mk(BG,'#20242b');m.scale.set(.12,.12,.2);return m});
+const cab=mk(CG,'#9ca3af'),lns=[0,1,2].map(()=>mk(CG,'#9ca3af')),plm=mk(BG,'#20242b');let pg=new THREE.Group();scene.add(pg);
+const setB=(m,a,b,r)=>{const d=b.clone().sub(a),l=d.length();m.position.copy(a).addScaledVector(d,.5);m.quaternion.setFromUnitVectors(YY,d.normalize());m.scale.set(r,l,r)};
+function ik(r,t,l1,l2,pole){const d=t.clone().sub(r);let L=Math.max(.05,Math.min(d.length(),l1+l2-1e-4));const u=d.normalize();
+ const a=(l1*l1-l2*l2+L*L)/(2*L),h=Math.sqrt(Math.max(l1*l1-a*a,0)),p=pole.clone().sub(u.clone().multiplyScalar(pole.dot(u)));
+ if(p.lengthSq()<1e-6)p.set(0,0,1);p.normalize();
+ return{mid:r.clone().addScaledVector(u,a).addScaledVector(p,h),end:r.clone().addScaledVector(u,L)}}
+const L=(a,b,e)=>Array.isArray(a)?a.map((v,i)=>v+(b[i]-v)*e):a+(b-a)*e;
+let cur,props=[];
+function pick(i){cur=E[i];t=0;yaw=cur.y??.5;barG.children[1].visible=barG.children[2].visible=cur.bar!==2;dbs.forEach(d=>d.scale.set(...(cur.dbx?[.2,.12,.12]:[.12,.12,.2])));scene.remove(pg);pg=new THREE.Group();scene.add(pg);props=[];
+ cur.pr.forEach(p=>{const m=new THREE.Mesh(BG,new THREE.MeshStandardMaterial({color:p[7]}));m.scale.set(p[0],p[1],p[2]);m.position.set(p[3],p[4],p[5]);m.rotation.z=p[6]*rad;pg.add(m);if(p[8])props.push([m,p[8]])});
+ barG.visible=!!cur.bar;dbs.forEach((d,i)=>d.visible=cur.db==1||(cur.db==2&&i==1));
+ if(nav.firstChild)nav.firstChild.value=i;
+ tn.textContent=cur.n;tm.textContent=cur.m;br.textContent=cur.br;lab=''}
+function solve(q){const hip=V(q.h[0],q.h[1]),mid=hip.clone().addScaledVector(dir(q.a),.275),sh=mid.clone().addScaledVector(dir(q.a-q.c),.275),head=sh.clone().addScaledVector(dir(q.hd),.21);
+ sh.y+=q.sr;setB(tl,hip,mid,.12);setB(tu,mid,sh,.14);setB(nk,sh,head,.045);hd.position.copy(head);
+ const tc=Math.cos(q.tw*rad)*.2,ts=Math.sin(q.tw*rad)*.2;setB(sbar,sh.clone().add(V(ts,0,tc)),sh.clone().add(V(-ts,0,-tc)),.07);setB(hbar,hip.clone().add(V(0,0,.1)),hip.clone().add(V(0,0,-.1)),.09);
+ const hs=[],ans=[],ks=[];
+ [1,-1].forEach((s,i)=>{const o=S[i],hj=hip.clone().add(V(0,0,.1*s)),sj=sh.clone().add(V(ts*s,0,tc*s)),af=s>0?q.f:q.f2,kv=s>0?q.kp:q.kp2,an=V(af[0],af[1],q.fz*s+(s>0?q.fl:0));
+  const k=ik(hj,an,.45,.45,V(kv[0],kv[1],(kv[2]||.15)*s));setB(o.th,hj,k.mid,.08);setB(o.sn,k.mid,k.end,.058);o.kj.position.copy(k.mid);
+  const fa=q.fr*rad;o.sh.position.set(an.x+Math.cos(fa)*.07,an.y-.03+Math.sin(fa)*.07,an.z);o.sh.rotation.z=fa;
+  const hz=q.hz*s+q.hq,ht=(s<0&&q.hb)?V(q.hb[0],q.hb[1],hz):q.hs?sh.clone().add(V(q.hs[0],q.hs[1],hz)):q.hh?hip.clone().add(V(q.hh[0],q.hh[1],hz)):V(q.ha[0],q.ha[1],hz);
+  const e=ik(sj,ht,.3,.28,V(q.ep[0],q.ep[1],q.ep[2]*s));setB(o.ua,sj,e.mid,.055);setB(o.fa,e.mid,e.end,.045);o.ej.position.copy(e.mid);o.hn.position.copy(e.end);o.sj.position.copy(sj);
+  hs.push(ht);ans.push(an);ks.push(k.mid);if(cur.db)dbs[i].position.copy(e.end)});
+ if(cur.bar)barG.position.copy(hs[0]).add(hs[1]).multiplyScalar(.5);
+ if(cab.visible=!!cur.cable)setB(cab,V(cur.cable[0],cur.cable[1],0),barG.position,.008);
+ lns.forEach(m=>m.visible=false);const LN=cur.ln;
+ if(LN){const T=LN[5]=='hd'?[head]:LN[5]=='a'?ans:LN[5]=='a1'?[ans[0]]:hs;T.forEach((p,i)=>{const m=lns[i];m.visible=true;m.material.color.set(LN[4]||'#9ca3af');setB(m,V(LN[0],LN[1],LN[2]*(i?-1:1)),p,LN[3]||.008)})}
+ if(cur.lh||cur.lk){const m=lns[2],P2=cur.lh?hs:cur.lk=='a'?ans:ks;m.visible=true;m.material.color.set(cur.lc||'#ef4444');setB(m,P2[0],P2[1],.01)}
+ if(plm.visible=!!cur.pl){plm.scale.set(cur.pl[0],cur.pl[1],cur.pl[2]);plm.position.copy(head).add(V(cur.pl[3],cur.pl[4],0))}
+ props.forEach(([m,off])=>m.position.set(q.f[0]+off[0],q.f[1]+off[1],0))}
+const sm=x=>x*x*(3-2*x);let t=0,lab='',paused=false,yaw=.5,last=performance.now();
+function loop(now){requestAnimationFrame(loop);if(!paused)t=(t+(now-last)/1000)%8;last=now;
+ let e=0,l='Posición inicial';
+ if(t>=.8&&t<4){e=sm((t-.8)/3.2);l=cur.ph[0]}else if(t>=4&&t<4.6){e=1;l='Pausa'}else if(t>=4.6&&t<7.4){e=1-sm((t-4.6)/2.8);l=cur.ph[1]}
+ const q={};{const X=cur.PM,[a,b,u]=X?(e<.5?[cur.PA,X,e*2]:[X,cur.PB,e*2-1]):[cur.PA,cur.PB,e];for(const k in a)q[k]=L(a[k],b[k],u)}
+ if(cur.lift)['f','f2'].forEach(k=>{const d=Math.hypot(cur.PB[k][0]-cur.PA[k][0],cur.PB[k][1]-cur.PA[k][1]);q[k][1]+=Math.min(d,.6)*.18*Math.sin(Math.PI*e)});
+ if(l!==lab){lab=l;ph.textContent=l}
+ solve(q);const z=cur.c[2],ctr=V(cur.c[0],cur.c[1],0),dist=5.1*z;
+ cam.position.set(ctr.x+dist*Math.sin(yaw),ctr.y+.5*z,ctr.z+dist*Math.cos(yaw));cam.lookAt(ctr);R.render(scene,cam)}
+function rs(){const w=cv.clientWidth;R.setSize(w,Math.round(w*9/16),false)}
+addEventListener('resize',rs);
+let dr=null;cv.addEventListener('pointerdown',e=>{dr=e.clientX;cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointermove',e=>{if(dr!==null){yaw=Math.max(-.4,Math.min(1.4,yaw+(e.clientX-dr)*.008));dr=e.clientX}});
+cv.addEventListener('pointerup',()=>dr=null);
+const nav=document.getElementById('nav'),tn=document.getElementById('tn'),tm=document.getElementById('tm'),br=document.getElementById('br'),ph=document.getElementById('ph'),pz=document.getElementById('pz');
+{const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s)}
+pz.onclick=()=>{paused=!paused;pz.textContent=paused?'▶ Reanudar':'⏸ Pausar'};
+rs();pick(0);requestAnimationFrame(loop);
+</script></body></html>
