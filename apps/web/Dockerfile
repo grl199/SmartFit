@@ -9,11 +9,13 @@ FROM base AS deps
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/web/package.json ./apps/web/package.json
 COPY packages/contracts/package.json ./packages/contracts/package.json
-RUN pnpm install --frozen-lockfile
+COPY packages/api-client/package.json ./packages/api-client/package.json
+RUN pnpm install --no-frozen-lockfile
 
 FROM base AS builder
 COPY --from=deps /workspace/node_modules ./node_modules
 COPY --from=deps /workspace/apps/web/node_modules ./apps/web/node_modules
+COPY --from=deps /workspace/packages/api-client/node_modules ./packages/api-client/node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN pnpm --filter @smartfit/web build
