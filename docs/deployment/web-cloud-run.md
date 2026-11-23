@@ -91,9 +91,15 @@ automáticamente cada commit experimental a la URL de producción.
   el JWT en FastAPI. Si se decide bloquear el backend con IAM de Cloud Run, hay
   que implementar primero autenticación servicio-a-servicio con ID tokens en
   el proxy.
-- La web actual mantiene el JWT en `localStorage`. Antes de abrir el producto
-  comercialmente, completar el trabajo pendiente de sesión con cookie
-  `HttpOnly; Secure; SameSite`, renovación y revocación de tokens.
+- La web usa cookies `HttpOnly`, `SameSite=Lax` y `Secure` en producción:
+  `smartfit_access` dura 15 minutos y `smartfit_refresh` dura 30 días. El refresh
+  token se rota en cada renovación y solo se almacena su hash en PostgreSQL.
+- El proxy Next.js convierte la cookie de acceso en un header Bearer para
+  FastAPI. Las peticiones de escritura con sesión exigen `Origin` del mismo
+  origen; el navegador no recibe los tokens en JavaScript.
+- En desarrollo local `Secure` se desactiva para permitir HTTP en localhost.
+  En producción Cloud Run debe servirse por HTTPS. La revocación se persiste en
+  `auth_sessions`; la tabla se crea automáticamente con el arranque de FastAPI.
 - El build usa Node.js 22 y pnpm 10.12.1, coherentes con las versiones fijadas
   en el monorepo.
 
