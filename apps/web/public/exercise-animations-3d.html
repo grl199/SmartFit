@@ -16,6 +16,17 @@ nav button.on{background:var(--ac);border-color:var(--ac);color:#fff}
 canvas{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--bd);border-radius:12px;background:var(--card);touch-action:none;cursor:grab}
 .info{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
 #ph{font-weight:600;color:var(--ac)}#br,#tm{color:var(--mut);font-size:13px}
+
+/* Embedded mode: fit the complete exercise scene to the iframe, with no nested scrolling. */
+html.embed-mode,html.embed-mode body{width:100%;height:100%;min-height:0;margin:0;overflow:hidden}
+html.embed-mode body{display:block}
+html.embed-mode main{width:100%;height:100%;max-width:none;margin:0;padding:5px;box-sizing:border-box;display:flex;flex-direction:column;gap:0}
+html.embed-mode h1,html.embed-mode p.s,html.embed-mode nav{display:none!important}
+html.embed-mode canvas{display:block;flex:1 1 auto;min-height:0;width:100%;height:1px;max-height:none;aspect-ratio:auto;object-fit:contain}
+html.embed-mode .info{flex:0 0 auto;margin-top:5px;padding:6px 8px;gap:6px;box-sizing:border-box}
+html.embed-mode #lg{font-size:12px;line-height:1.35}
+html.embed-mode #br{display:none}
+@media(max-width:640px){html.embed-mode main{padding:4px}html.embed-mode .info{padding:5px 7px;gap:5px}}
 </style></head><body><main>
 <h1>SmartFit · Animaciones 3D con mapa muscular</h1>
 <p class="s">Una repetición por ciclo (8 s) y bucle continuo. Arrastra sobre la escena para rotar la vista.</p>
@@ -260,7 +271,14 @@ let dr=null;cv.addEventListener('pointerdown',e=>{dr=e.clientX;cv.setPointerCapt
 cv.addEventListener('pointermove',e=>{if(dr!==null){yaw=Math.max(-.4,Math.min(1.4,yaw+(e.clientX-dr)*.008));dr=e.clientX}});
 cv.addEventListener('pointerup',()=>dr=null);
 const nav=document.getElementById('nav'),tn=document.getElementById('tn'),tm=document.getElementById('tm'),br=document.getElementById('br'),ph=document.getElementById('ph'),pz=document.getElementById('pz');
-{const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s)}
+const requestedExercise=new URLSearchParams(window.location.search).get('exercise')?.trim()||'';
+const embedded=Boolean(requestedExercise);
+if(embedded){document.documentElement.classList.add('embed-mode');nav.hidden=true;}
+else{const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s);}
 pz.onclick=()=>{paused=!paused;pz.textContent=paused?'▶ Reanudar':'⏸ Pausar'};
-rs();pick(0);requestAnimationFrame(loop);
+const normalizeExerciseName=value=>String(value||'').toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
+function findExerciseIndex(name){const target=normalizeExerciseName(name);if(!target)return -1;let index=E.findIndex(e=>normalizeExerciseName(e.n)===target);if(index<0)index=E.findIndex(e=>{const candidate=normalizeExerciseName(e.n);return target.includes(candidate)||candidate.includes(target);});return index;}
+rs();
+if(requestedExercise){const index=findExerciseIndex(requestedExercise);if(index>=0){pick(index);requestAnimationFrame(loop);}else{tn.textContent=requestedExercise;tm.textContent='Todavía no hay una animación específica para este ejercicio.';ph.textContent='Animación no disponible';pz.style.display='none';document.getElementById('mb').style.display='none';}}
+else{pick(0);requestAnimationFrame(loop);}
 </script></body></html>
