@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@smartfit/api-client": "workspace:*",
     "@smartfit/contracts": "workspace:*",
     "next": "15.3.3",
     "react": "19.1.0",
