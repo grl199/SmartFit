@@ -149,7 +149,10 @@ def browse_catalog(
     db: Session = Depends(get_db), uid: int = Depends(current_user_id),
 ):
     """Catálogo navegable: ingredientes genéricos por sección y preparaciones por separado."""
-    sections = list_food_catalog_sections(db)
+    sections = [
+        {**section, "foods": [FoodOut.model_validate(food) for food in section["foods"]]}
+        for section in list_food_catalog_sections(db)
+    ]
     recipes = []
     for recipe in visible_recipes(db, uid, limit=100):
         summary = summarize(recipe_items(recipe), recipe.serving_count)
