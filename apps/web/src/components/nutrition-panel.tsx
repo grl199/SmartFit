@@ -13,7 +13,7 @@ type Estimate = {name:string;items:EstimateItem[];assumptions:string[];method:st
 type Tab = "search"|"mine"|"barcode"|"estimate"|"recipes";
 type CatalogSection = {id:string;title:string;description:string;icon:string;count:number;foods:Food[]};
 type FoodCatalog = {sections:CatalogSection[];recipes:Recipe[]};
-const normalizeFoodQuery=(value:string)=>value.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g,"");
+const normalizeFoodQuery=(value:string)=>value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g,"");
 const meals = [["auto","Automática"],["breakfast","Desayuno"],["lunch","Comida"],["snack","Tentempié"],["dinner","Cena"]];
 const fields = [["kcal","kcal"],["protein_g","Proteína (g)"],["carbs_g","Hidratos (g)"],["sugars_g","Azúcares (g)"],["fat_g","Grasa (g)"],["sat_fat_g","Saturadas (g)"],["fiber_g","Fibra (g)"],["sodium_mg","Sodio (mg)"]] as const;
 const todayLocal=()=>{const d=new Date();return new Date(d.getTime()-d.getTimezoneOffset()*60000).toISOString().slice(0,10);};
