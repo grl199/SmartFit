@@ -13,9 +13,10 @@ from ..models import (
     FoodServing, HydrationLog, MemoryChunk, Recipe, RecipeIngredient, TrainingPlan, TrainingPlanDay, TrainingPlanExercise, User,
     UserProfile, UserTarget, Workout, WorkoutSet,
 )
-from ..schemas import Credentials, DeleteAccountIn, TokenOut, UserOut
+from ..schemas import Credentials, DeleteAccountIn, RefreshSessionIn, TokenOut, UserOut
 from ..security import (
-    check_throttle, clear_failures, create_token, hash_password, register_failure, verify_password,
+    check_throttle, clear_failures, create_session, create_token, hash_password, register_failure,
+    revoke_session, rotate_session, verify_password,
 )
 
 log = logging.getLogger(__name__)
@@ -55,6 +56,67 @@ def login(body: Credentials, db: Session = Depends(get_db)):
         raise HTTPException(401, "Usuario o contraseña incorrectos")  # mismo mensaje exista o no el usuario
     clear_failures(key)
     return TokenOut(access_token=create_token(user.id), user=user)
+
+
+@router.post("/session/register", status_code=201)
+def register_web_session(body: Credentials, db: Session = Depends(get_db)):
+    """Web-only session: refresh secret is returned to the Next.js server, never browser JS."""
+    if not get_settings().allow_registration:
+        raise HTTPException(403, "El registro de nuevos usuarios está desactivado")
+    if _find(db, body.name):
+        raise HTTPException(409, "Ese nombre de usuario ya existe")
+    user = User(name=body.name, password_hash=hash_password(body.password), onboarding_completed=False)
+    db.add(user)
+    try:
+        db.flush()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(409, "Ese nombre de usuario ya existe")
+    db.add_all([UserProfile(user_id=user.id), UserTarget(user_id=user.id)])
+    db.flush()
+    access, refresh = create_session(db, user.id)
+    db.commit()
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "user": UserOut.model_validate(user)}
+
+
+@router.post("/session/login")
+def login_web_session(body: Credentials, db: Session = Depends(get_db)):
+    key = body.name.strip().lower()
+    check_throttle(key)
+    user = _find(db, body.name)
+    if not verify_password(user.password_hash if user else None, body.password):
+        register_failure(key)
+        raise HTTPException(401, "Usuario o contraseña incorrectos")
+    clear_failures(key)
+    access, refresh = create_session(db, user.id)
+    db.commit()
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "user": UserOut.model_validate(user)}
+
+
+@router.post("/session/refresh")
+def refresh_web_session(body: RefreshSessionIn, db: Session = Depends(get_db)):
+    rotated = rotate_session(db, body.refresh_token)
+    if rotated is None:
+        db.commit()
+        raise HTTPException(401, "Sesión no válida o caducada")
+    access, refresh, user_id = rotated
+    user = db.get(User, user_id)
+    if user is None:
+        db.rollback()
+        raise HTTPException(401, "Sesión no válida o caducada")
+    db.commit()
+    return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "user": UserOut.model_validate(user)}
+
+
+@router.post("/session/logout", status_code=204)
+def logout_web_session(
+    creds=Depends(__import__("fastapi").security.HTTPBearer(auto_error=False)),
+    db: Session = Depends(get_db),
+):
+    decoded = decode_token(creds.credentials) if creds else None
+    if decoded and decoded[1]:
+        revoke_session(db, session_id=decoded[1])
+        db.commit()
 
 
 @router.get("/me", response_model=UserOut)
