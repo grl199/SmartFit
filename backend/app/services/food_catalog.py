@@ -116,6 +116,33 @@ FOODS: dict[str, tuple] = {
     "Miel": (304, 0.3, 82.4, 82.1, 0.0, 0.0, 0.2, 4, [("cucharadita", "cucharaditas", 7, "cucharadita")]),
     "Chocolate negro 85%": (598, 7.8, 19.0, 11.0, 52.0, 30.0, 11.0, 20, [("onza", "onzas", 10, "onza de tableta")]),
     "Cacao puro en polvo": (228, 19.6, 57.9, 1.8, 13.7, 8.1, 37.0, 21, [("cucharada", "cucharadas", 5, "cucharada sopera")]),
+    "Leche semidesnatada sin lactosa": (46, 3.3, 4.8, 4.8, 1.6, 1, 0, 44, [("vaso", "vasos", 200, "vaso de 200 ml")]),
+    "Bebida de avena sin azúcar": (40, 1, 6.7, 3, 1.5, 0.2, 0.8, 40, [("vaso", "vasos", 200, "vaso de 200 ml")]),
+    "Bebida de almendras sin azúcar": (15, 0.5, 0.3, 0, 1.2, 0.1, 0.3, 40, [("vaso", "vasos", 200, "vaso de 200 ml")]),
+    "Yogur natural desnatado": (46, 4.3, 6, 6, 0.2, 0.1, 0, 52, [("unidad", "unidades", 125, "tarrina de 125 g")]),
+    "Requesón": (98, 11, 3.4, 2.7, 4.3, 1.7, 0, 364, [("porción", "porciones", 100, "porción individual")]),
+    "Ricotta": (174, 11.3, 3, 0.3, 13, 8.3, 0, 84, [("cucharada", "cucharadas", 30, "cucharada colmada")]),
+    "Claras de huevo": (52, 10.9, 0.7, 0.7, 0.2, 0, 0, 166, [("unidad", "unidades", 33, "clara de huevo mediano")]),
+    "Pechuga de pavo cocinada": (135, 29, 0, 0, 1.6, 0.4, 0, 50, [("filete", "filetes", 110, "filete mediano")]),
+    "Atún fresco cocinado": (184, 30, 0, 0, 6.3, 1.6, 0, 50, [("filete", "filetes", 150, "filete mediano")]),
+    "Caballa cocinada": (262, 23.9, 0, 0, 17.8, 4.2, 0, 83, [("filete", "filetes", 120, "filete mediano")]),
+    "Seitán": (141, 24, 4, 0, 2, 0.3, 1, 30, [("porción", "porciones", 100, "porción individual")]),
+    "Soja texturizada hidratada": (112, 17.5, 8, 3, 1, 0.2, 4, 5, [("ración", "raciones", 100, "peso ya hidratado")]),
+    "Maíz dulce cocido": (96, 3.4, 21, 4.5, 1.5, 0.2, 2.4, 2, [("cucharada", "cucharadas", 15, "cucharada sopera")]),
+    "Pan de pita integral": (262, 9.8, 55, 2, 1.7, 0.3, 6, 450, [("unidad", "unidades", 60, "pan de pita mediano")]),
+    "Tortilla de trigo": (312, 8.3, 52, 2.5, 7.5, 2, 3, 650, [("unidad", "unidades", 40, "tortilla mediana")]),
+    "Harina de avena": (404, 14, 65, 1, 9, 1.5, 9, 5, [("cucharada", "cucharadas", 10, "cucharada sopera")]),
+    "Rúcula": (25, 2.6, 3.7, 2.1, 0.7, 0.1, 1.6, 27, [("puñado", "puñados", 20, "puñado pequeño")]),
+    "Col rizada (kale)": (49, 4.3, 8.8, 2.3, 0.9, 0.1, 3.6, 38, [("puñado", "puñados", 30, "hojas frescas")]),
+    "Coles de Bruselas": (43, 3.4, 9, 2.2, 0.3, 0.1, 3.8, 25, [("ración", "raciones", 150, "ración cocida")]),
+    "Ajo": (149, 6.4, 33.1, 1, 0.5, 0.1, 2.1, 17, [("diente", "dientes", 3, "diente mediano")]),
+    "Tomate triturado natural": (24, 1.2, 4.5, 3.5, 0.2, 0, 1.5, 10, [("cucharada", "cucharadas", 20, "cucharada sopera")]),
+    "Papaya": (43, 0.5, 10.8, 7.8, 0.3, 0.1, 1.7, 8, [("porción", "porciones", 150, "porción sin piel")]),
+    "Ciruela": (46, 0.7, 11.4, 9.9, 0.3, 0, 1.4, 0, [("unidad", "unidades", 65, "ciruela mediana")]),
+    "Cerezas": (63, 1.1, 16, 12.8, 0.2, 0, 2.1, 0, [("puñado", "puñados", 80, "puñado sin hueso")]),
+    "Pomelo": (42, 0.8, 10.7, 6.9, 0.1, 0, 1.6, 0, [("medio", "medios", 120, "medio pomelo")]),
+    "Dátiles": (282, 2.5, 75, 63, 0.4, 0.1, 8, 2, [("unidad", "unidades", 8, "dátil mediano")]),
+    "Salsa de soja": (53, 8.1, 4.9, 0.4, 0.6, 0.1, 0.8, 5493, [("cucharadita", "cucharaditas", 5, "cucharadita")]),
 
 }
 # receta: (descripción, raciones, [(alimento, gramos)])
@@ -214,8 +241,99 @@ RECIPES: dict[str, tuple[str, float, list[tuple[str, float]]]] = {
         [("Kéfir natural", 200), ("Arándanos", 50), ("Fresas", 50)]),
     "Bocadillo de ternera y pimiento": ("Pan de barra con ternera magra y pimiento asado.", 1,
         [("Pan de barra", 90), ("Ternera magra cocinada", 80), ("Pimiento rojo", 30)]),
+    "Tortitas de avena y plátano": ("Tortitas caseras de avena, plátano y huevo.", 1,
+        [("Harina de avena", 40), ("Plátano", 60), ("Huevo entero", 60), ("Leche semidesnatada", 30)]),
+    "Tostada de queso fresco y tomate": ("Pan integral con queso fresco y tomate.", 1,
+        [("Pan integral", 50), ("Queso fresco", 50), ("Tomate", 40)]),
+    "Porridge de cacao y plátano": ("Gachas de avena con leche, cacao puro y plátano.", 1,
+        [("Copos de avena", 40), ("Leche semidesnatada", 160), ("Cacao puro en polvo", 5), ("Plátano", 50)]),
+    "Pisto con huevo": ("Pisto casero de verduras con huevo.", 1,
+        [("Calabacín", 80), ("Berenjena", 60), ("Pimiento rojo", 50), ("Cebolla", 30), ("Tomate triturado natural", 80), ("Huevo entero", 60), ("Aceite de oliva virgen extra", 5)]),
+    "Fajitas de pollo y verduras": ("Tortilla de trigo rellena de pollo, pimiento y cebolla.", 1,
+        [("Tortilla de trigo", 40), ("Pechuga de pollo cocinada", 100), ("Pimiento rojo", 40), ("Cebolla", 20), ("Aguacate", 20)]),
+    "Cuscús con pavo y verduras": ("Cuscús con pavo cocinado, calabacín y zanahoria.", 1,
+        [("Cuscús cocido", 150), ("Pechuga de pavo cocinada", 110), ("Calabacín", 60), ("Zanahoria", 40), ("Aceite de oliva virgen extra", 5)]),
+    "Ensalada mediterránea de garbanzos": ("Garbanzos con tomate, pepino, rúcula y feta.", 1,
+        [("Garbanzos cocidos", 130), ("Tomate", 60), ("Pepino", 40), ("Rúcula", 20), ("Queso feta", 25), ("Aceite de oliva virgen extra", 5)]),
+    "Ensalada de arroz integral y atún": ("Arroz integral con atún, maíz, tomate y pepino.", 1,
+        [("Arroz integral cocido", 140), ("Atún al natural escurrido", 70), ("Maíz dulce cocido", 30), ("Tomate", 40), ("Pepino", 30)]),
+    "Bowl de tofu y edamame": ("Bowl vegetal de tofu, edamame, arroz integral y verduras.", 1,
+        [("Tofu firme", 90), ("Edamame cocido", 60), ("Arroz integral cocido", 100), ("Zanahoria", 30), ("Pepino", 30)]),
+    "Lentejas con boniato y verduras": ("Guiso de lentejas con boniato, zanahoria y espinacas.", 1,
+        [("Lentejas cocidas", 150), ("Boniato asado", 80), ("Zanahoria", 40), ("Espinacas", 30), ("Cebolla", 20), ("Aceite de oliva virgen extra", 5)]),
+    "Patata rellena de atún": ("Patata cocida rellena de atún y yogur natural.", 1,
+        [("Patata cocida", 180), ("Atún al natural escurrido", 70), ("Yogur natural", 30), ("Cebolla", 10)]),
+    "Crema de calabacín casera": ("Crema de calabacín, patata, cebolla y leche.", 1,
+        [("Calabacín", 140), ("Patata cocida", 80), ("Cebolla", 25), ("Leche semidesnatada", 50), ("Aceite de oliva virgen extra", 5)]),
+    "Salmón con arroz y espárragos": ("Salmón cocinado con arroz y espárragos.", 1,
+        [("Salmón cocinado", 130), ("Arroz blanco cocido", 120), ("Espárragos", 80), ("Aceite de oliva virgen extra", 5)]),
+    "Tortilla de claras y espinacas": ("Tortilla ligera de claras con huevo entero y espinacas.", 1,
+        [("Claras de huevo", 100), ("Huevo entero", 30), ("Espinacas", 50), ("Champiñones", 30), ("Aceite de oliva virgen extra", 3)]),
+    "Bocadillo integral de atún": ("Pan integral con atún, tomate y un poco de aceite.", 1,
+        [("Pan integral", 80), ("Atún al natural escurrido", 70), ("Tomate", 30), ("Aceite de oliva virgen extra", 4)]),
+    "Salteado de soja texturizada": ("Soja texturizada hidratada con verduras y arroz.", 1,
+        [("Soja texturizada hidratada", 120), ("Arroz blanco cocido", 100), ("Pimiento rojo", 40), ("Calabacín", 40), ("Salsa de soja", 5)]),
+    "Tostada de crema de cacahuete y plátano": ("Pan integral con crema de cacahuete y plátano.", 1,
+        [("Pan integral", 45), ("Crema de cacahuete 100%", 15), ("Plátano", 50)]),
 
 }
+
+
+# Secciones visibles del catálogo. Las preparaciones compuestas viven en RECIPES, nunca en FOODS.
+FOOD_CATALOG_SECTIONS: tuple[tuple[str, str, str, str, tuple[str, ...]], ...] = (
+    ("produce", "Frutas y verduras", "Fruta fresca, hortalizas y verduras", "🥦", (
+        "Tomate", "Lechuga", "Pepino", "Cebolla", "Zanahoria", "Aguacate", "Manzana", "Naranja", "Fresas", "Plátano",
+        "Espinacas", "Champiñones", "Brócoli", "Coliflor", "Calabacín", "Pimiento rojo", "Espárragos", "Judías verdes",
+        "Berenjena", "Calabaza", "Remolacha cocida", "Apio", "Col lombarda", "Pera", "Kiwi", "Piña", "Arándanos",
+        "Frambuesas", "Uvas", "Sandía", "Mango", "Melocotón", "Mandarina", "Rúcula", "Col rizada (kale)",
+        "Coles de Bruselas", "Ajo", "Papaya", "Ciruela", "Cerezas", "Pomelo",
+    )),
+    ("cereals", "Cereales, pan y tubérculos", "Pan, arroz, pasta, avena, cereales y patata", "🌾", (
+        "Pan de molde", "Pan integral", "Pan de barra", "Arroz blanco cocido", "Pasta cocida", "Patata cocida",
+        "Copos de avena", "Arroz integral cocido", "Pasta integral cocida", "Cuscús cocido", "Bulgur cocido",
+        "Avena cocida", "Pan de centeno", "Tortita de maíz", "Boniato asado", "Pan de pita integral",
+        "Tortilla de trigo", "Harina de avena", "Maíz dulce cocido", "Quinoa cocida",
+    )),
+    ("protein", "Carnes, pescados y huevos", "Fuentes de proteína animal y huevos", "🍳", (
+        "Huevo entero", "Claras de huevo", "Atún al natural escurrido", "Pechuga de pollo cocinada", "Pavo cocinado",
+        "Pavo fiambre", "Jamón cocido", "Pechuga de pavo cocinada", "Salmón cocinado", "Merluza cocinada",
+        "Bacalao cocinado", "Sardinas en conserva escurridas", "Gambas cocidas", "Ternera magra cocinada",
+        "Lomo de cerdo cocinado", "Atún fresco cocinado", "Caballa cocinada",
+    )),
+    ("plant", "Legumbres y proteínas vegetales", "Legumbres, tofu, soja y alternativas vegetales", "🫘", (
+        "Garbanzos cocidos", "Lentejas cocidas", "Guisantes cocidos", "Alubias blancas cocidas", "Alubias rojas cocidas",
+        "Tofu firme", "Tempeh", "Edamame cocido", "Seitán", "Soja texturizada hidratada", "Hummus",
+    )),
+    ("dairy", "Lácteos y bebidas vegetales", "Leche, yogures, quesos y bebidas vegetales", "🥛", (
+        "Leche entera", "Leche semidesnatada", "Leche desnatada", "Yogur natural", "Yogur griego natural",
+        "Queso fresco batido 0%", "Queso fresco", "Queso cottage", "Mozzarella", "Queso feta", "Skyr natural",
+        "Kéfir natural", "Bebida de soja sin azúcar", "Leche semidesnatada sin lactosa",
+        "Bebida de avena sin azúcar", "Bebida de almendras sin azúcar", "Yogur natural desnatado", "Requesón", "Ricotta",
+    )),
+    ("nuts", "Frutos secos y semillas", "Frutos secos, semillas y cremas", "🥜", (
+        "Almendras", "Nueces", "Cacahuetes", "Crema de cacahuete 100%", "Semillas de chía",
+        "Semillas de calabaza", "Tahini",
+    )),
+    ("pantry", "Bebidas, aceites y otros", "Café, aceites, salsas, cacao y otros básicos", "🫒", (
+        "Café (infusión, sin azúcar)", "Aceite de oliva virgen extra", "Salsa de tomate casera",
+        "Tomate triturado natural", "Miel", "Chocolate negro 85%", "Cacao puro en polvo", "Dátiles", "Salsa de soja",
+    )),
+)
+FOOD_SECTION_BY_NAME = {name: section_id for section_id, _, _, _, names in FOOD_CATALOG_SECTIONS for name in names}
+
+
+def list_food_catalog_sections(db: Session) -> list[dict]:
+    """Devuelve el catálogo genérico organizado por secciones, listo para navegar desde la app."""
+    foods = list(db.scalars(
+        select(Food).where(Food.user_id.is_(None), Food.source == "catalog").order_by(Food.name)
+    ))
+    by_id: dict[str, list[Food]] = {section_id: [] for section_id, *_ in FOOD_CATALOG_SECTIONS}
+    for food in foods:
+        by_id.setdefault(FOOD_SECTION_BY_NAME.get(food.name, "pantry"), []).append(food)
+    return [{
+        "id": section_id, "title": title, "description": description, "icon": icon,
+        "count": len(by_id.get(section_id, [])), "foods": by_id.get(section_id, []),
+    } for section_id, title, description, icon, _ in FOOD_CATALOG_SECTIONS if by_id.get(section_id)]
 
 
 def slug(text: str) -> str:
