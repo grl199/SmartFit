@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import Depends, HTTPException, UploadFile
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
@@ -23,7 +25,7 @@ def current_user(
         raise HTTPException(401, "Sesión no válida o caducada", headers={"WWW-Authenticate": "Bearer"})
     if session_id:
         session = db.get(AuthSession, session_id)
-        if session is None or session.user_id != user.id or session.revoked_at is not None or session.expires_at <= __import__("datetime").datetime.now(__import__("datetime").timezone.utc):
+        if session is None or session.user_id != user.id or session.revoked_at is not None or session.expires_at <= datetime.now(timezone.utc):
             raise HTTPException(401, "Sesión revocada o caducada", headers={"WWW-Authenticate": "Bearer"})
     return user
 
