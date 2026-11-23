@@ -38,3 +38,10 @@ docker compose up -d db
 Comprueba la API en http://localhost:8000/health. Debe devolver `{"ok":true}`.
 
 El onboarding puede requerir la configuración de IA del backend y una base de datos accesible. Registro y login no necesitan una clave de IA.
+
+## Producción en Cloud Run
+
+La web se empaqueta como una imagen Node.js standalone desde la raíz del
+monorepo. La guía de despliegue, los requisitos de Cloud Build y la configuración
+de `API_INTERNAL_URL` están en
+[`docs/deployment/web-cloud-run.md`](../../docs/deployment/web-cloud-run.md).
