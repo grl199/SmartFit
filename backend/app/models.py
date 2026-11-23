@@ -51,6 +51,19 @@ class User(Base):
         DateTime(timezone=True), server_default=func.now(), comment="Fecha de alta de la cuenta.")
 
 
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    __table_args__ = {
+        "comment": "Sesiones de autenticación con refresh token rotatorio. Revocar una sesión invalida también sus JWT de acceso.",
+    }
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, comment="Identificador aleatorio de la sesión (sid incluido en el JWT).")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario propietario de la sesión.")
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), comment="SHA-256 del refresh token vigente; el secreto en claro nunca se almacena.")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, comment="Caducidad absoluta de la sesión renovable.")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="Fecha de revocación; NULL mientras la sesión está activa.")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación de la sesión.")
+
+
 class UserProfile(Base):
     __tablename__ = "user_profiles"
     __table_args__ = {"comment": "Perfil del usuario (relación 1:1 con users). Se inyecta en el system prompt del asistente "
