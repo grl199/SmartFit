@@ -41,6 +41,28 @@ export async function apiRequest<T>(
   return response.json() as Promise<T>;
 }
 
+export async function apiUpload<T>(path: string, formData: FormData, token?: string): Promise<T> {
+  const response = await fetch(`${API_URL}${path}`, {
+    method: "POST",
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+    body: formData,
+    cache: "no-store",
+  });
+
+  if (!response.ok) {
+    let message = `Error de API (${response.status})`;
+    try {
+      const payload = await response.json();
+      message = typeof payload.detail === "string" ? payload.detail : message;
+    } catch {
+      // La respuesta puede no ser JSON.
+    }
+    throw new ApiError(message, response.status);
+  }
+
+  return response.json() as Promise<T>;
+}
+
 export function authenticate(
   mode: "login" | "register",
   credentials: Credentials,
