@@ -2,6 +2,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { components } from "@smartfit/contracts";
 import { apiRequest, authenticate, completeOnboarding, getCurrentUser } from "@/lib/api";
+import { Workspace } from "@/components/workspace";
 type User=components["schemas"]["UserOut"]; type Mode="login"|"register";
 type Day={totals:{kcal:number;protein_g:number;carbs_g:number;fat_g:number};targets:{kcal?:number;protein_g?:number;carbs_g?:number;fat_g?:number;water_ml?:number};entries:Array<{id:number;time:string;meal:string;food:string;grams:number;kcal:number}>;workouts:Array<{id:number;kind:string;duration_min?:number;exercises:string[]}>;water_ml:number};
 type Water={goal_ml:number;today_ml:number;today_pct:number}; type Activity={goal:number;today_steps:number|null;today_pct:number|null};
@@ -19,6 +20,7 @@ export default function Home(){
  function logout(){localStorage.removeItem("smartfit_token");setToken("");setUser(null);setDay(null);setWater(null);setActivity(null);}
  async function addWater(){setBusy(true);try{await apiRequest("/water",{method:"POST",token,body:{quantity_ml:Number(waterAmount),source:"quick"}});await refresh(token);}catch(e){setDashError(e instanceof Error?e.message:"No se pudo guardar el agua");}finally{setBusy(false);}}
  async function saveSteps(e:FormEvent<HTMLFormElement>){e.preventDefault();setBusy(true);try{await apiRequest("/activity",{method:"PUT",token,body:{steps:Number(steps)}});const a=await apiRequest<Activity>("/activity/summary?days=1",{token});setActivity(a);}catch(x){setDashError(x instanceof Error?x.message:"No se pudieron guardar los pasos");}finally{setBusy(false);}}
+ if(user?.onboarding_completed) return <Workspace token={token} userName={user.name} onLogout={()=>{localStorage.removeItem("smartfit_token");setToken("");setUser(null);}} />;
  if(user?.onboarding_completed){const t=day?.totals,go=day?.targets,calPct=go?.kcal?Math.min(100,Math.round((t?.kcal??0)/go.kcal*100)):0;return <main className="dashboard-shell">
  <aside className="sidebar"><a className="brand" href="#"><span className="brand-mark">S</span> SMARTFIT</a><div className="side-label">TU ESPACIO</div><a className="nav-link active" href="#overview">▦ <span>Resumen</span></a><a className="nav-link" href="#nutrition">◉ <span>Nutrición</span></a><a className="nav-link" href="#training">↗ <span>Entrenamiento</span></a><a className="nav-link" href="#habits">✳ <span>Hábitos</span></a><div className="sidebar-bottom"><div className="avatar">{user.name[0].toUpperCase()}</div><div className="user-label"><strong>{user.name}</strong><span>Cuenta personal</span></div><button className="logout-icon" onClick={logout}>↗</button></div></aside>
  <section className="dashboard-main" id="overview"><header className="dash-header"><div><div className="eyebrow">TU ESPACIO PERSONAL</div><h1>Hola, <em>{user.name}.</em></h1><p>Tu resumen de hoy. Pequeños pasos, progreso constante.</p></div><div className="today-pill">{new Date().toLocaleDateString("es-ES",{weekday:"long",day:"numeric",month:"long"})}</div></header>
