@@ -51,5 +51,5 @@ def test_generic_search_scope_is_distinct_from_branded_products():
     import inspect
     source = inspect.getsource(search_foods)
     assert 'if source == "catalog"' in source
-    assert 'Food.source.notin_(("openfoodfacts", "recipe"))' in source
+    assert 'Food.source == "catalog"' in source
 
