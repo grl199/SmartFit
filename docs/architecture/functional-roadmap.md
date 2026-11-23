@@ -26,7 +26,7 @@ La rama de trabajo conserva el backend FastAPI y la interfaz Streamlit original.
 | Móvil | No existe aplicación Expo en la rama de trabajo | Ausente | Expo Router, autenticación segura con SecureStore, pantallas y cliente compartido |
 | Funciones nativas | El backend admite actividad normalizada y archivos para IA | Ausente como producto móvil | Cámara/micrófono nativos, Health Connect, Apple Health, notificaciones push y modo offline |
 | Monetización | Existen límites de IA por plan en el diseño/servicios, pero no hay flujos de compra multiplataforma en los frontends | Pendiente | Entitlements en backend, Google Play Billing, StoreKit, verificación server-side y publicidad Free |
-| Producción | FastAPI, PostgreSQL/Neon y Cloud Run como base objetivo | Proxy Next.js y CI presentes | Cookies/sesiones seguras, separación dev/staging/prod, observabilidad, almacenamiento de objetos y despliegues por entorno |
+| Producción | FastAPI, PostgreSQL/Neon y Cloud Run para backend | Proxy Next.js, imagen Docker standalone y Cloud Build independiente añadidos; CI construye la imagen | Configurar trigger y URL real del backend en GCP; revisar cookies/sesiones seguras, separación dev/staging/prod, observabilidad y almacenamiento de objetos |
 
 ## Siguiente orden de implementación
 
@@ -46,3 +46,16 @@ La rama de trabajo conserva el backend FastAPI y la interfaz Streamlit original.
 - Aplicar idempotencia a sincronizaciones y registrar el consentimiento de integraciones de salud.
 - No guardar imágenes/audio grandes en PostgreSQL: usar almacenamiento de objetos o procesamiento temporal.
 - No confiar en flags de Premium enviados por el cliente: validar las compras y entitlements en el backend.
+
+## Despliegue web: decisión tomada
+
+La alternativa a Streamlit Cloud para la nueva interfaz Next.js es un segundo
+servicio de Cloud Run (`smartfit-web`) desplegado independientemente de FastAPI
+(`smartfit`). El contenedor se construye desde la raíz pnpm del monorepo; su
+proxy `/api/*` utiliza `API_INTERNAL_URL` configurada en el servidor. La
+configuración está en `apps/web/Dockerfile` y `apps/web/cloudbuild.yaml`.
+
+La configuración de código y CI está preparada, pero todavía falta conectar el
+trigger de Cloud Build al repositorio, establecer la URL real del backend en
+`_API_INTERNAL_URL` y ejecutar un despliegue real de verificación. No se debe
+considerar publicado el frontend hasta completar esos pasos.
