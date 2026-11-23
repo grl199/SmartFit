@@ -153,6 +153,18 @@ def browse_catalog(
         {**section, "foods": [{**FoodOut.model_validate(food).model_dump(), "icon": food_icon(food.name)} for food in section["foods"]]}
         for section in list_food_catalog_sections(db)
     ]
+    # Los alimentos propios aparecen también en el catálogo global, en una sección diferenciada.
+    own_foods = list(db.scalars(
+        select(Food).where(Food.user_id == uid, Food.source != "recipe").order_by(Food.name).limit(300)
+    ))
+    sections.append({
+        "id": "mine", "title": "Mis alimentos", "description": "Alimentos personalizados que has creado",
+        "icon": "👤", "count": len(own_foods),
+        "foods": [
+            {**FoodOut.model_validate(food).model_dump(), "icon": food_icon(food.name) or "🍽️"}
+            for food in own_foods
+        ],
+    })
     recipes = []
     for recipe in visible_recipes(db, uid, limit=100):
         summary = summarize(recipe_items(recipe), recipe.serving_count)
@@ -161,6 +173,11 @@ def browse_catalog(
             "is_system": recipe.user_id is None, "food_id": recipe.food_id,
             "serving_count": recipe.serving_count, "serving_g": summary["serving_g"],
             "per_serving": summary["per_serving"],
+            "ingredients": [
+                {"id": item.id, "food_id": item.food_id, "food": item.food.name, "quantity_g": item.quantity_g}
+                for item in recipe.ingredients
+            ],
+            "steps": recipe.steps or [],
         })
     return {"sections": sections, "recipes": recipes}
 
