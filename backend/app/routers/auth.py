@@ -111,13 +111,16 @@ def refresh_web_session(body: RefreshSessionIn, db: Session = Depends(get_db)):
 
 @router.post("/session/logout", status_code=204)
 def logout_web_session(
+    body: RefreshSessionIn | None = None,
     creds: HTTPAuthorizationCredentials | None = Depends(HTTPBearer(auto_error=False)),
     db: Session = Depends(get_db),
 ):
     decoded = decode_token(creds.credentials) if creds else None
-    if decoded and decoded[1]:
+    if body and body.refresh_token:
+        revoke_session(db, refresh_token=body.refresh_token)
+    elif decoded and decoded[1]:
         revoke_session(db, session_id=decoded[1])
-        db.commit()
+    db.commit()
 
 
 @router.get("/me", response_model=UserOut)
