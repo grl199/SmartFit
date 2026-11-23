@@ -1,6 +1,6 @@
-import * as SecureStore from "expo-secure-store";
 import type { components } from "@smartfit/contracts";
 import { apiRequest, ApiError } from "@smartfit/api-client";
+import { deleteSessionItem, getSessionItem, setSessionItem } from "./session-storage";
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 const ACCESS_KEY = "smartfit.mobile.access";
@@ -25,21 +25,21 @@ function apiUrl(path: string) {
 }
 
 async function saveSession(access: string, refresh: string) {
-  await SecureStore.setItemAsync(ACCESS_KEY, access);
-  await SecureStore.setItemAsync(REFRESH_KEY, refresh);
+  await setSessionItem(ACCESS_KEY, access);
+  await setSessionItem(REFRESH_KEY, refresh);
 }
 
 export async function clearSession() {
   await Promise.all([
-    SecureStore.deleteItemAsync(ACCESS_KEY),
-    SecureStore.deleteItemAsync(REFRESH_KEY),
+    deleteSessionItem(ACCESS_KEY),
+    deleteSessionItem(REFRESH_KEY),
   ]);
 }
 
 async function refreshSession(): Promise<string | null> {
   if (refreshInFlight) return refreshInFlight;
   refreshInFlight = (async () => {
-    const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
+    const refresh = await getSessionItem(REFRESH_KEY);
     if (!refresh) return null;
     try {
       const response = await fetch(apiUrl("/auth/session/refresh"), {
@@ -66,7 +66,7 @@ export async function mobileRequest<T>(
   path: string,
   options: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  let access = await SecureStore.getItemAsync(ACCESS_KEY);
+  let access = await getSessionItem(ACCESS_KEY);
   if (!access) access = await refreshSession();
   const request = (token?: string) => apiRequest<T>(path, {
     baseUrl: API_URL,
@@ -103,8 +103,8 @@ export async function authenticateMobile(mode: "login" | "register", credentials
 }
 
 export async function restoreMobileSession(): Promise<User | null> {
-  const access = await SecureStore.getItemAsync(ACCESS_KEY);
-  if (!access && !(await SecureStore.getItemAsync(REFRESH_KEY))) return null;
+  const access = await getSessionItem(ACCESS_KEY);
+  if (!access && !(await getSessionItem(REFRESH_KEY))) return null;
   try {
     return await mobileRequest<User>("/auth/me");
   } catch {
@@ -120,8 +120,8 @@ export async function completeMobileOnboarding(input: OnboardingIn) {
 }
 
 export async function logoutMobile() {
-  const refresh = await SecureStore.getItemAsync(REFRESH_KEY);
-  const access = await SecureStore.getItemAsync(ACCESS_KEY);
+  const refresh = await getSessionItem(REFRESH_KEY);
+  const access = await getSessionItem(ACCESS_KEY);
   try {
     if (refresh) {
       await apiRequest<void>("/auth/session/logout", {
