@@ -17,7 +17,7 @@ from ..services.audio import audio_transcription_available, transcribe_audio
 from ..services.nutrition import create_log
 from ..services import community
 from ..services.food_search import search_hybrid
-from ..services.food_catalog import list_food_catalog_sections
+from ..services.food_catalog import food_icon, list_food_catalog_sections
 from ..services.recipes import visible_recipes, summarize, recipe_items
 from ..services.names import pending_count, translate_pending_names
 from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
@@ -150,7 +150,7 @@ def browse_catalog(
 ):
     """Catálogo navegable: ingredientes genéricos por sección y preparaciones por separado."""
     sections = [
-        {**section, "foods": [FoodOut.model_validate(food) for food in section["foods"]]}
+        {**section, "foods": [{**FoodOut.model_validate(food).model_dump(), "icon": food_icon(food.name)} for food in section["foods"]]}
         for section in list_food_catalog_sections(db)
     ]
     recipes = []
