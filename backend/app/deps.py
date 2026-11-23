@@ -3,7 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import User
+from .models import AuthSession, User
 from .security import decode_token
 
 ALLOWED_IMAGES = {"image/jpeg", "image/png", "image/webp"}
@@ -11,14 +11,20 @@ MAX_IMAGE_MB = 10
 _bearer = HTTPBearer(auto_error=False)
 
 
-def current_user(creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
-                 db: Session = Depends(get_db)) -> User:
-    """Usuario autenticado por JWT. Se comprueba en BD en cada petición para que borrar una cuenta
-    invalide sus tokens al instante."""
-    uid = decode_token(creds.credentials) if creds else None
+def current_user(
+    creds: HTTPAuthorizationCredentials | None = Depends(_bearer),
+    db: Session = Depends(get_db),
+) -> User:
+    """Accept mobile bearer tokens and web JWTs bound to a revocable session."""
+    decoded = decode_token(creds.credentials) if creds else None
+    uid, session_id = decoded if decoded else (None, None)
     user = db.get(User, uid) if uid else None
     if user is None:
         raise HTTPException(401, "Sesión no válida o caducada", headers={"WWW-Authenticate": "Bearer"})
+    if session_id:
+        session = db.get(AuthSession, session_id)
+        if session is None or session.user_id != user.id or session.revoked_at is not None or session.expires_at <= __import__("datetime").datetime.now(__import__("datetime").timezone.utc):
+            raise HTTPException(401, "Sesión revocada o caducada", headers={"WWW-Authenticate": "Bearer"})
     return user
 
 
