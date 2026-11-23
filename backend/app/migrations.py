@@ -61,6 +61,7 @@ _COLUMNS = [
     # Objetivos de agua y pasos
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS water_ml INTEGER NOT NULL DEFAULT 2000",
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS steps_goal INTEGER NOT NULL DEFAULT 8000",
+    "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS steps JSONB NOT NULL DEFAULT '[]'::jsonb",
     # Taxonomía nueva: sin «oblicuos» (se funden con abdominales) y sesiones reagrupadas
     "UPDATE exercises SET primary_muscle = 'abs' WHERE primary_muscle = 'obliques'",
     """UPDATE exercises SET secondary_muscles = (
