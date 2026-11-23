@@ -81,7 +81,8 @@ export async function POST(request: NextRequest, context: { params: Promise<{ ac
 
   if (action === "logout") {
     const access = request.cookies.get(accessCookie)?.value;
-    if (access) await postBackend("/auth/session/logout", {}, access).catch(() => undefined);
+    const refresh = request.cookies.get(refreshCookie)?.value;
+    if (refresh) await postBackend("/auth/session/logout", { refresh_token: refresh }, access).catch(() => undefined);
     const response = NextResponse.json({ ok: true });
     clearSessionCookies(response);
     return response;
