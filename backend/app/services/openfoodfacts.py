@@ -6,7 +6,7 @@ from collections import deque
 from dataclasses import dataclass
 
 import httpx
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal_column, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -263,8 +263,8 @@ def _store(db: Session, item: dict) -> bool:
             "extra": Food.extra.op("||")(ins.excluded.extra),
             "source_updated_at": func.now(),
         },
-    ).returning(Food.id)
-    return db.execute(stmt).scalar() is not None
+    ).returning(literal_column("(xmax = 0)").label("inserted"))
+    return bool(db.execute(stmt).scalar())
 
 
 def search_off_and_store(db: Session, query: str, page_size: int = 10) -> int:
