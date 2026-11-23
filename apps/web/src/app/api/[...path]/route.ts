@@ -13,13 +13,22 @@ async function forward(request: NextRequest, context: RouteContext) {
   const pathname = path.map((segment) => encodeURIComponent(segment)).join("/");
   const target = `${API_TARGET}/${pathname}${request.nextUrl.search}`;
   const headers = new Headers();
+  const accessToken = request.cookies.get("smartfit_access")?.value;
 
-  for (const name of ["accept", "authorization", "content-type"]) {
+  const method = request.method.toUpperCase();
+  if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
+  if (accessToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
+    const origin = request.headers.get("origin");
+    if (!origin || origin !== request.nextUrl.origin) {
+      return NextResponse.json({ detail: "Origen no permitido" }, { status: 403 });
+    }
+  }
+
+  for (const name of ["accept", "content-type"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
 
-  const method = request.method.toUpperCase();
   const body = method === "GET" || method === "HEAD"
     ? undefined
     : await request.arrayBuffer();
