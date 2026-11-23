@@ -179,7 +179,9 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
 # ───────────────────────── Búsqueda por texto (search-a-licious) ─────────────────────────
 # OFF limita las búsquedas a 10/min/IP, así que: límite propio, caché de consultas recientes y
 # persistencia de todo lo encontrado en Postgres (la siguiente búsqueda ya es local).
-SEARCH_FIELDS = "code,product_name,brands,nutriments,serving_quantity"
+SEARCH_FIELDS = ("code,product_name,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
+                 "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,image_url,"
+                 "allergens_tags,ingredients_text_es,ingredients_text,categories,generic_name_es,generic_name")
 MAX_ENRICH = 6  # si un hit no trae nutrientes, se completa con la API de producto (100/min) como máximo para N hits
 
 
@@ -244,12 +246,25 @@ def parse_search_hit(hit: dict) -> dict | None:
 
 
 def _store(db: Session, item: dict) -> bool:
-    stmt = (pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
+    ins = pg_insert(Food).values(name=item["name"], brand=item["brand"], barcode=item["code"],
                                    source="openfoodfacts", serving_g=item["serving_g"], confidence="medium", license="ODbL",
                                    attribution="Open Food Facts contributors (ODbL)", source_updated_at=func.now(),
                                    **item["nutrients"], **item["meta"])
-            .on_conflict_do_nothing(index_elements=[func.coalesce(Food.user_id, 0), Food.barcode]).returning(Food.id))
-    return db.execute(stmt).scalar() is not None  # rowcount no es fiable con ON CONFLICT (-1 en psycopg)
+    # Si el producto ya estaba cacheado sin foto (búsquedas antiguas), completar metadatos sin borrar
+    # traducciones ni datos que la ficha local ya tuviera.
+    stmt = ins.on_conflict_do_update(
+        index_elements=[func.coalesce(Food.user_id, 0), Food.barcode],
+        set_={
+            "image_url": func.coalesce(ins.excluded.image_url, Food.image_url),
+            "nutriscore_grade": func.coalesce(ins.excluded.nutriscore_grade, Food.nutriscore_grade),
+            "nova_group": func.coalesce(ins.excluded.nova_group, Food.nova_group),
+            "ecoscore_grade": func.coalesce(ins.excluded.ecoscore_grade, Food.ecoscore_grade),
+            "quantity": func.coalesce(ins.excluded.quantity, Food.quantity),
+            "extra": Food.extra.op("||")(ins.excluded.extra),
+            "source_updated_at": func.now(),
+        },
+    ).returning(Food.id)
+    return db.execute(stmt).scalar() is not None
 
 
 def search_off_and_store(db: Session, query: str, page_size: int = 10) -> int:
