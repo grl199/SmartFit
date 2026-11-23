@@ -17,6 +17,8 @@ from ..services.audio import audio_transcription_available, transcribe_audio
 from ..services.nutrition import create_log
 from ..services import community
 from ..services.food_search import search_hybrid
+from ..services.food_catalog import list_food_catalog_sections
+from ..services.recipes import visible_recipes, summarize, recipe_items
 from ..services.names import pending_count, translate_pending_names
 from ..services.openfoodfacts import enrich_food_from_off, normalize_barcode, resolve_barcode
 
@@ -142,10 +144,28 @@ def confirm_estimated_food(
     return {"food": FoodOut.model_validate(food), "log": LogOut.model_validate(log)}
 
 
+@router.get("/catalog")
+def browse_catalog(
+    db: Session = Depends(get_db), uid: int = Depends(current_user_id),
+):
+    """Catálogo navegable: ingredientes genéricos por sección y preparaciones por separado."""
+    sections = list_food_catalog_sections(db)
+    recipes = []
+    for recipe in visible_recipes(db, uid, limit=100):
+        summary = summarize(recipe_items(recipe), recipe.serving_count)
+        recipes.append({
+            "id": recipe.id, "name": recipe.name, "description": recipe.description,
+            "is_system": recipe.user_id is None, "food_id": recipe.food_id,
+            "serving_count": recipe.serving_count, "serving_g": summary["serving_g"],
+            "per_serving": summary["per_serving"],
+        })
+    return {"sections": sections, "recipes": recipes}
+
+
 @router.get("/search", response_model=list[FoodOut])
 def search(
     q: str = Query(min_length=1), limit: int = Query(10, le=30), online: bool = True,
-    source: Literal["all", "catalog", "mine", "openfoodfacts"] = "all",
+    source: Literal["all", "catalog", "generic", "mine", "openfoodfacts"] = "all",
     db: Session = Depends(get_db), uid: int = Depends(current_user_id),
 ):
     """Busca alimentos por origen. Las recetas se consultan en /recipes."""
