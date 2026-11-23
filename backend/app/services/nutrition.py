@@ -61,7 +61,7 @@ def search_foods(
     if not tokens:
         return []
     if source == "catalog":
-        scope = (Food.user_id.is_(None), Food.source.notin_(("openfoodfacts", "recipe")))
+        scope = (Food.user_id.is_(None), Food.source == "catalog")
     elif source == "mine":
         scope = (Food.user_id == user_id, Food.source != "recipe")
     elif source == "openfoodfacts":
