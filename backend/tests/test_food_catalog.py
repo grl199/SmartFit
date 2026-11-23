@@ -80,3 +80,15 @@ def test_system_recipes_include_preparation_steps():
     assert any("berenjena" in step.lower() for step in steps)
     assert all(step.strip() for step in steps)
 
+def test_recipe_payload_accepts_preparation_steps():
+    from app.routers.recipes import RecipeIn
+
+    recipe = RecipeIn(
+        name="Mi pisto",
+        description="Pisto casero",
+        serving_count=2,
+        steps=["Cortar las verduras", "Pochar la cebolla", "Añadir el tomate y cocinar"],
+        ingredients=[{"food_id": 1, "quantity_g": 100}],
+    )
+    assert recipe.steps == ["Cortar las verduras", "Pochar la cebolla", "Añadir el tomate y cocinar"]
+
