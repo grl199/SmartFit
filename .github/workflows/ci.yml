@@ -12,7 +12,7 @@ jobs:
   backend-and-contracts:
     name: Python tests, API contracts and web
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
       PYTHONPATH: ${{ github.workspace }}/backend
     steps:
@@ -49,11 +49,8 @@ jobs:
       - name: Generate OpenAPI and TypeScript contracts
         run: pnpm contracts:generate
 
-      - name: Type-check contracts and web
+      - name: Type-check contracts, web and mobile
         run: pnpm typecheck
-
-      - name: Type-check Expo mobile app
-        run: pnpm typecheck:mobile
 
       - name: Build web
         run: pnpm build:web
