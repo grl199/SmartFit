@@ -5,7 +5,7 @@ en los habituales como cualquier alimento. Al REGISTRAR una receta se guarda una
 que cambiar la receta después no altera el histórico."""
 from __future__ import annotations
 
-from sqlalchemy import func, or_, select
+from sqlalchemy import and_, func, not_, or_, select
 from sqlalchemy.orm import Session
 
 from ..models import NUTRIENTS, Food, FoodLog, FoodServing, Recipe, RecipeIngredient
@@ -58,7 +58,10 @@ def sync_recipe_food(db: Session, r: Recipe) -> Food:
 def visible_recipes(db: Session, uid: int, q: str | None = None, limit: int = 50) -> list[Recipe]:
     # Las variantes de café con leche son bebidas genéricas del catálogo, no recetas.
     legacy_drink_recipes = ("Café con leche (leche entera)", "Café con leche (leche semidesnatada)", "Café con leche (leche desnatada)")
-    stmt = select(Recipe).where(or_(Recipe.user_id.is_(None), Recipe.user_id == uid), Recipe.name.not_in(legacy_drink_recipes))
+    stmt = select(Recipe).where(
+        or_(Recipe.user_id.is_(None), Recipe.user_id == uid),
+        not_(and_(Recipe.user_id.is_(None), Recipe.name.in_(legacy_drink_recipes))),
+    )
     if q and q.strip():
         stmt = stmt.where(func.unaccent(func.lower(Recipe.name)).ilike(f"%{q.strip().lower()}%"))
     return list(db.scalars(stmt.order_by(Recipe.user_id.is_(None), Recipe.name).limit(limit)))
