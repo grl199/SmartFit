@@ -28,6 +28,13 @@ Configura `EXPO_PUBLIC_API_URL` en función del dispositivo:
 - Dispositivo físico: IP local del ordenador que ejecuta FastAPI.
 - Producción: URL HTTPS del backend.
 
+Para usar **Expo Web** en desarrollo, FastAPI permite por defecto los orígenes
+locales `:3000` (Next.js), `:8081` (Expo actual) y `:19006` (Expo clásico).
+Si abres Expo Web desde otro equipo y aparece un error CORS, añade el origen
+exacto del navegador a `CORS_ORIGINS` en `backend/.env` (lista JSON) y
+reinicia FastAPI. Esto solo afecta al target web; React Native nativo no aplica
+CORS del navegador.
+
 FastAPI debe escuchar en una interfaz de red accesible desde el teléfono y el
 firewall debe permitir el puerto en desarrollo con dispositivo físico.
 
