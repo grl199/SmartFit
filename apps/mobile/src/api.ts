@@ -1,6 +1,6 @@
 import * as SecureStore from "expo-secure-store";
 import type { components } from "@smartfit/contracts";
-import { apiRequest } from "@smartfit/api-client";
+import { apiRequest, ApiError } from "@smartfit/api-client";
 
 const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? "").replace(/\/+$/, "");
 const ACCESS_KEY = "smartfit.mobile.access";
@@ -77,7 +77,7 @@ export async function mobileRequest<T>(
   try {
     return await request(access ?? undefined);
   } catch (error) {
-    if (!(error instanceof Error) || !("status" in error) || error.status !== 401) throw error;
+    if (!(error instanceof ApiError) || error.status !== 401) throw error;
     const nextAccess = await refreshSession();
     if (!nextAccess) {
       await clearSession();
