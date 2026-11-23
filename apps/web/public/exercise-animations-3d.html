@@ -206,7 +206,7 @@ function loop(now){requestAnimationFrame(loop);if(!paused)t=(t+(now-last)/1000)%
  if(l!==lab){lab=l;ph.textContent=l}
  solve(q);const z=cur.c[2],ctr=V(cur.c[0],cur.c[1],0),dist=5.1*z;
  cam.position.set(ctr.x+dist*Math.sin(yaw),ctr.y+.5*z,ctr.z+dist*Math.cos(yaw));cam.lookAt(ctr);R.render(scene,cam)}
-function rs(){const w=cv.clientWidth;R.setSize(w,Math.round(w*9/16),false)}
+function rs(){const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
 addEventListener('resize',rs);
 let dr=null;cv.addEventListener('pointerdown',e=>{dr=e.clientX;cv.setPointerCapture(e.pointerId)});
 cv.addEventListener('pointermove',e=>{if(dr!==null){yaw=Math.max(-.4,Math.min(1.4,yaw+(e.clientX-dr)*.008));dr=e.clientX}});
