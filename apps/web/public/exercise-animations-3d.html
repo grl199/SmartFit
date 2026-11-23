@@ -11,25 +11,17 @@ body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.4 system-ui,-appl
 main{max-width:960px;margin:0 auto;padding:16px}
 h1{font-size:20px;margin:0 0 4px}p.s{color:var(--mut);margin:0 0 12px;font-size:13px}
 nav{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
-nav button,#pz{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
+nav button,#pz,#mb{border:1px solid var(--bd);background:var(--card);color:var(--fg);border-radius:999px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer}
 nav button.on{background:var(--ac);border-color:var(--ac);color:#fff}
 canvas{display:block;width:100%;aspect-ratio:16/9;border:1px solid var(--bd);border-radius:12px;background:var(--card);touch-action:none;cursor:grab}
 .info{display:flex;flex-wrap:wrap;gap:12px;align-items:center;justify-content:space-between;margin-top:12px;background:var(--card);border:1px solid var(--bd);border-radius:12px;padding:12px 14px}
 #ph{font-weight:600;color:var(--ac)}#br,#tm{color:var(--mut);font-size:13px}
-
-/* Compacto y adaptable al panel de registro de sesión */
-html,body{width:100%;height:auto;min-height:0;margin:0;overflow:hidden}
-main{width:100%;max-width:860px;margin:0 auto;padding:6px;box-sizing:border-box}
-h1,p.s,nav{display:none!important}
-canvas{width:100%;max-height:480px;aspect-ratio:16/9;object-fit:contain}
-.info{margin-top:7px;padding:8px 10px;gap:8px}
-#tn{font-size:14px}
 </style></head><body><main>
-<h1>SmartFit · Animaciones 3D de ejercicios</h1>
+<h1>SmartFit · Animaciones 3D con mapa muscular</h1>
 <p class="s">Una repetición por ciclo (8 s) y bucle continuo. Arrastra sobre la escena para rotar la vista.</p>
 <nav id="nav"></nav>
 <canvas id="c"></canvas>
-<div class="info"><div><div id="tn" style="font-weight:700"></div><div id="tm"></div></div><div id="ph"></div><div id="br"></div><button id="pz">⏸ Pausar</button></div>
+<div class="info"><div><div id="tn" style="font-weight:700"></div><div id="tm"></div></div><div id="ph"></div><div id="br"></div><button id="pz">⏸ Pausar</button><button id="mb" style="display:none">🫀 Músculos</button></div><div id="lg" class="info" style="display:none;margin-top:8px"></div>
 </main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script>
@@ -50,7 +42,7 @@ const E=[
 {n:'Flexiones',m:'Pectoral · tríceps · deltoides anterior · core',ph:ST.map((s,i)=>s.split(' ')[0]+(i?': empuja hasta extender':': baja con el pecho')),br:'Inspira al bajar · espira al empujar',c:[-.25,.5,.85],
  pr:[[3,.03,1.2,-.3,.015,0,0,mat]],
  A:{h:[-.1,.42],a:68,f:[-.96,.17],fr:-70,kp:[0,1,0],ha:[.42,.04],hz:.3,ep:[-1,.3,.8],hd:60},B:{h:[-.08,.17],a:85,hd:82}},
-{n:'Dominadas',m:'Dorsal ancho · bíceps · romboides',ph:['Concéntrica: sube hasta pasar la barbilla','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,1.1,1.15],
+{n:'Dominadas',m:'Dorsal ancho · bíceps · romboides',mu:[['Dorsal ancho','tu',.4,.12,.1,.08,.2,1],['Dorsal ancho','tl',.75,.1,.08,.07,.11,1],['Bíceps braquial','ua',.5,0,0,.07,.13,1],['Romboides · trapecio inferior','tu',.85,.12,.05,.06,.1,2],['Braquial · antebrazo','fa',.5,0,0,.055,.12,2],['Core (recto abdominal)','tl',.5,-.13,.05,.06,.13,2]],ph:['Concéntrica: sube hasta pasar la barbilla','Excéntrica: baja controlado'],br:'Espira al subir · inspira al bajar',c:[0,1.1,1.15],
  pr:[[.05,.05,1.3,0,2.1,0,0,'#9ca3af'],[.07,2.2,.07,0,1.1,.7,0,st],[.07,2.2,.07,0,1.1,-.7,0,st]],
  A:{h:[0,.98],a:-5,f:[-.25,.33],fz:.1,ha:[0,2.1],hz:.35,ep:[-.5,-1,.4],hd:0},B:{h:[-.03,1.46],a:-10,f:[-.3,.82],hd:15}},
 {n:'Plancha',m:'Recto abdominal · transverso · glúteos',ph:['Inspira · mantén la línea recta','Espira · mantén la línea recta'],br:'Respiración lenta y continua',c:[-.2,.4,.8],
@@ -152,17 +144,54 @@ const E=[
 E.forEach(e=>{e.PA=P(e.A);e.PB=P({...e.A,...e.B});if(e.M)e.PM=P({...e.A,...e.M})});
 
 const cv=document.getElementById('c'),R=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
-R.setPixelRatio(Math.min(devicePixelRatio,2));
-const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(42,16/9,.1,50);
-scene.add(new THREE.AmbientLight(0xffffff,.75));const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(2,4,3);scene.add(dl);
+R.setPixelRatio(Math.min(devicePixelRatio,2));R.shadowMap.enabled=true;
+const scene=new THREE.Scene(),cam=new THREE.PerspectiveCamera(35,16/9,.1,50);
+scene.add(new THREE.AmbientLight(0xffffff,.75));const dl=new THREE.DirectionalLight(0xffffff,.8);dl.position.set(2,4,3);dl.castShadow=true;Object.assign(dl.shadow.camera,{left:-3,right:3,top:3,bottom:-3,near:.5,far:12});dl.shadow.mapSize.set(2048,2048);dl.shadow.bias=-.0005;scene.add(dl);
 const fl=new THREE.Mesh(new THREE.PlaneGeometry(14,14),new THREE.MeshStandardMaterial({color:getComputedStyle(document.documentElement).getPropertyValue('--floor').trim()||'#c9ced6'}));
-fl.rotation.x=-Math.PI/2;scene.add(fl);
-const CG=new THREE.CylinderGeometry(1,1,1,14),SG=new THREE.SphereGeometry(1,16,12),BG=new THREE.BoxGeometry(1,1,1);
-const mk=(g,c,r)=>{const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.55}));if(r)m.scale.setScalar(r);scene.add(m);return m};
+fl.rotation.x=-Math.PI/2;fl.receiveShadow=true;scene.add(fl);
+const CG=new THREE.CylinderGeometry(1,1,1,28),SG=new THREE.SphereGeometry(1,32,24),BG=new THREE.BoxGeometry(1,1,1);
+const mk=(g,c,r)=>{const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:c,roughness:.55}));if(r)m.scale.setScalar(r);m.castShadow=true;scene.add(m);return m};
 const SK='#e0ac86',SH='#2f6fed',SO='#1f2937',YY=V(0,1,0);
 const tl=mk(CG,SH),tu=mk(CG,SH),nk=mk(CG,SK),hd=mk(SG,SK,.1),sbar=mk(CG,SH),hbar=mk(CG,SO);
 const S=[0,1].map(()=>({th:mk(CG,SO),sn:mk(CG,SK),kj:mk(SG,SK,.065),sh:mk(BG,'#f3f4f6'),ua:mk(CG,SH),fa:mk(CG,SK),ej:mk(SG,SK,.05),hn:mk(SG,SK,.055),sj:mk(SG,SH,.07)}));
 S.forEach(o=>o.sh.scale.set(.24,.07,.1));
+[tl,tu,nk,hd,sbar,hbar,...S.flatMap(o=>Object.values(o))].forEach(m=>m.visible=false);
+const RG=new THREE.Group();RG.rotation.y=Math.PI/2;scene.add(RG);
+const SG2=new THREE.SphereGeometry(1,24,18),TG=(a,b)=>new THREE.CylinderGeometry(b,a,1,24,1),BM=new THREE.MeshStandardMaterial({color:'#a9a49d',roughness:.75}),UY=V(0,1,0);
+const GN={pec:'pectoral',del:'deltoides',bic:'bíceps',tri:'tríceps',fa:'antebrazo',abs:'abdominales',obl:'oblicuos',ser:'serrato',trap:'trapecio',lat:'dorsal ancho',rho:'romboides',erc:'erectores',glu:'glúteos',qua:'cuádriceps',ham:'isquiotibiales',add:'aductores',cal:'gemelos'},GM={},IT=[],MU=[];
+for(const id in GN)GM[id]=new THREE.MeshStandardMaterial({color:'#6b7078',roughness:.5});
+const reg=(sg,m,id)=>{m.castShadow=true;if(id){m.material=GM[id];m.userData.g=id;MU.push(m)}RG.add(m);IT.push([m,sg]);return m};
+const PYp=[.9,1,1.1,1.28,1.42,1.52],RWp=[.15,.14,.135,.17,.195,.14],RDp=[.1,.09,.085,.105,.105,.07],lp=(A,y)=>{y=Math.max(.9,Math.min(1.52,y));for(let i=0;i<5;i++)if(y<=PYp[i+1]){const t=(y-PYp[i])/(PYp[i+1]-PYp[i]);return A[i]+(A[i+1]-A[i])*t}return A[5]},rw=y=>lp(RWp,y),rd=y=>lp(RDp,y);
+const sgm=(sg,g,a,b,sx=1,sz=1)=>{const m=new THREE.Mesh(g,BM),d=b.clone().sub(a);m.position.copy(a).addScaledVector(d,.5);m.quaternion.setFromUnitVectors(UY,d.clone().normalize());m.scale.set(sx,d.length(),sz);return reg(sg,m)};
+const ball=(sg,p,x,y,z)=>{const m=new THREE.Mesh(SG2,BM);m.position.copy(p);m.scale.set(x,y,z);return reg(sg,m)};
+const ptc=(id,y,th,w,h,k)=>{const a=rw(y),b=rd(y),s=Math.sin(th),c=Math.cos(th),n=V(s/a,0,c/b).normalize(),t=V(a*c,0,-b*s).normalize(),m=new THREE.Mesh(SG2,BM);m.quaternion.setFromRotationMatrix(new THREE.Matrix4().makeBasis(t,UY,n));m.position.set(a*s,y,b*c).addScaledVector(n,-k*.35);m.scale.set(w,h,k);reg(y<1.21?'lt':'ut',m,id)};
+const lm=(sg,id,a,b,t,off,rx,ry,rz)=>{const m=new THREE.Mesh(SG2,BM),d=b.clone().sub(a);m.position.copy(a).addScaledVector(d,t).add(off);m.quaternion.setFromUnitVectors(UY,d.normalize());m.scale.set(rx,ry,rz);reg(sg,m,id)};
+const el=(sg,id,p,ax,rx,ry,rz)=>{const m=new THREE.Mesh(SG2,BM);m.position.copy(p);m.quaternion.setFromUnitVectors(UY,ax.clone().normalize());m.scale.set(rx,ry,rz);reg(sg,m,id)};
+[[.9,1.21,'lt'],[1.21,1.52,'ut']].forEach(([y0,y1,sg])=>{const g=new THREE.CylinderGeometry(1,1,1,48,15),p=g.attributes.position;for(let i=0;i<p.count;i++){const y=y0+(p.getY(i)+.5)*(y1-y0);p.setXYZ(i,p.getX(i)*rw(y),y,p.getZ(i)*rd(y))}g.computeVertexNormals();reg(sg,new THREE.Mesh(g,BM))});
+ball('lt',V(0,.93,0),.17,.12,.11);ball('hd',V(0,1.73,.005),.085,.11,.095);sgm('hd',TG(.05,.045),V(0,1.5,0),V(0,1.65,0));
+[1,-1].forEach(s=>{const S=(x,y,z)=>V(x*s,y,z),PI=Math.PI,sh=S(.2,1.46,0),eb=S(.3,1.18,0),wr=S(.37,.92,.04),hp=S(.09,.93,0),kn=S(.11,.5,.02),an=S(.12,.09,0),u='ua'+s,f='fa'+s,t='th'+s,n='sn'+s,o='ft'+s;
+ ball(u,sh,.065,.065,.065);sgm(u,TG(.05,.042),sh,eb);ball(f,eb,.042,.042,.042);sgm(f,TG(.042,.03),eb,wr);ball(f,wr.clone().add(V(.01*s,-.05,.01)),.03,.06,.022);
+ sgm(t,TG(.092,.065),hp,kn);ball(n,kn,.062,.062,.062);sgm(n,TG(.062,.04),kn,an);ball(o,an.clone().add(V(0,-.03,.05)),.045,.04,.1);
+ ptc('pec',1.38,s*.62,.09,.075,.035);ptc('pec',1.46,s*.42,.07,.04,.032);[1.06,1.14,1.22].forEach(y=>ptc('abs',y,s*.12,.036,.035,.03));
+ ptc('obl',1.12,s*1.15,.07,.11,.03);[1.27,1.34].forEach(y=>ptc('ser',y,s*1.35,.035,.03,.03));
+ ptc('lat',1.23,PI-s*.85,.1,.16,.035);ptc('erc',1.12,PI-s*.22,.03,.15,.03);ptc('rho',1.33,PI-s*.2,.05,.06,.036);ptc('trap',1.43,PI-s*.15,.065,.075,.034);
+ el('ut','trap',S(.1,1.52,-.01),S(1,-.25,0),.028,.1,.055);el('lt','glu',S(.085,.92,-.065),UY,.09,.085,.058);el(u,'del',S(.225,1.45,0),UY,.075,.09,.078);
+ lm(u,'bic',sh,eb,.5,V(0,0,.034),.04,.11,.04);lm(u,'tri',sh,eb,.5,V(0,0,-.034),.04,.12,.04);lm(f,'fa',eb,wr,.32,V(),.046,.11,.046);
+ lm(t,'qua',hp,kn,.5,V(0,0,.042),.068,.21,.055);lm(t,'ham',hp,kn,.5,V(0,0,-.042),.062,.2,.052);lm(t,'add',hp,kn,.42,V(-.05*s,0,0),.045,.17,.058);lm(n,'cal',kn,an,.27,V(0,0,-.034),.052,.12,.05)});
+const SGD={lt:[V(0,.93,0),V(0,1.21,0)],ut:[V(0,1.21,0),V(0,1.5,0)],hd:[V(0,1.5,0),V(0,1.73,0)]};
+[1,-1].forEach(s=>{const S=(x,y,z)=>V(x*s,y,z);SGD['ua'+s]=[S(.2,1.46,0),S(.3,1.18,0)];SGD['fa'+s]=[S(.3,1.18,0),S(.37,.92,.04)];SGD['th'+s]=[S(.09,.93,0),S(.11,.5,.02)];SGD['sn'+s]=[S(.11,.5,.02),S(.12,.09,0)];SGD['ft'+s]=[S(.12,.09,0),S(.12,.19,0)]});
+const bq=(Yv,Zv)=>{const z=Zv.clone().addScaledVector(Yv,-Zv.dot(Yv));if(z.lengthSq()<1e-6){z.set(0,0,1).addScaledVector(Yv,-Yv.z);if(z.lengthSq()<1e-6)z.set(1,0,0)}z.normalize();return new THREE.Quaternion().setFromRotationMatrix(new THREE.Matrix4().makeBasis(Yv.clone().cross(z),Yv,z))};
+const GP={};for(const n in SGD){const [o,e]=SGD[n],g=new THREE.Group(),Y0=e.clone().sub(o);g.userData.l=Y0.length();g.position.copy(o);g.quaternion.copy(bq(Y0.normalize(),V(0,0,1)));g.userData.q0=g.quaternion.clone();RG.add(g);GP[n]=g}
+RG.updateMatrixWorld(true);IT.forEach(([m,n])=>GP[n].attach(m));
+const M=v=>V(-v.z,v.y,v.x),FW=V(1,0,0);
+const prp=(v,d)=>{const r=v.clone().addScaledVector(d,-v.dot(d));return r.lengthSq()<1e-5?FW.clone().addScaledVector(d,-FW.dot(d)):r.normalize()};
+function fit(n,a,b,fr){const g=GP[n],d=M(b.clone().sub(a)),l=d.length();d.normalize();g.position.copy(M(a));g.quaternion.copy(bq(d,M(fr)));g.scale.set(1,l/g.userData.l,1)}
+function rigUp(hip,mid,sh,head,JT,q){const tw=q.tw*rad,fN=d=>V(d.y,-d.x,0).normalize(),u1=mid.clone().sub(hip).normalize(),u2=sh.clone().sub(mid).normalize(),h3=head.clone().sub(sh).normalize();
+ fit('lt',hip,mid,fN(u1).applyAxisAngle(u1,tw));fit('ut',mid,sh,fN(u2).applyAxisAngle(u2,tw));fit('hd',sh,head,fN(h3));
+ JT.forEach((j,i)=>{const sm=i?1:-1,a0=j.sj.clone().addScaledVector(u2,-.04),d1=j.em.clone().sub(a0).normalize(),w=Math.min(1,Math.max(0,(1-j.dl/.58)*6)),fr=prp(FW,d1).lerp(prp(j.pe.clone().negate(),d1),w).normalize();
+  fit('ua'+sm,a0,j.em,fr);fit('fa'+sm,j.em,j.wr,prp(fr,j.wr.clone().sub(j.em).normalize()));
+  const kp=prp(j.pk,j.km.clone().sub(j.hj).normalize());fit('th'+sm,j.hj,j.km,kp);fit('sn'+sm,j.km,j.an,prp(kp,j.an.clone().sub(j.km).normalize()));
+  const ft=GP['ft'+sm];ft.position.copy(M(j.an));ft.quaternion.setFromAxisAngle(V(-1,0,0),q.fr*rad).multiply(ft.userData.q0)})}
 const barG=new THREE.Group();scene.add(barG);
 {const b=new THREE.Mesh(CG,new THREE.MeshStandardMaterial({color:'#b8bcc4'}));b.rotation.x=Math.PI/2;b.scale.set(.02,2.1,.02);barG.add(b);
 [.85,-.85].forEach(z=>{const p=new THREE.Mesh(CG,new THREE.MeshStandardMaterial({color:'#20242b'}));p.rotation.x=Math.PI/2;p.scale.set(.22,.06,.22);p.position.z=z;barG.add(p)})}
@@ -174,28 +203,47 @@ function ik(r,t,l1,l2,pole){const d=t.clone().sub(r);let L=Math.max(.05,Math.min
  if(p.lengthSq()<1e-6)p.set(0,0,1);p.normalize();
  return{mid:r.clone().addScaledVector(u,a).addScaledVector(p,h),end:r.clone().addScaledVector(u,L)}}
 const L=(a,b,e)=>Array.isArray(a)?a.map((v,i)=>v+(b[i]-v)*e):a+(b-a)*e;
+const MB=document.getElementById('mb'),LG=document.getElementById('lg'),BODY=[tl,tu,sbar,hbar,...S.flatMap(o=>[o.th,o.ua,o.sj])],MC1='#ef4444',MC2='#f59e0b';let mus=[],mon=true;
+BODY.forEach(m=>m.userData.c=m.material.color.getHex());
+function setMus(){mus.forEach(r=>scene.remove(r.m));mus=[];BODY.forEach(m=>m.material.color.setHex(m.userData.c));
+ MB.style.display=cur.mu?'':'none';const on=cur.mu&&mon;LG.style.display=on?'':'none';if(!on)return;
+ BODY.forEach(m=>m.material.color.set('#cdb7a5'));
+ cur.mu.forEach(sp=>{(sp[4]||'ua fa th sn'.includes(sp[1])?[1,-1]:[0]).forEach(s=>{const m=new THREE.Mesh(SG,new THREE.MeshStandardMaterial({color:sp[7]==1?MC1:MC2,roughness:.45}));m.castShadow=true;scene.add(m);mus.push({m,sp,s})})});
+ const nm=l=>[...new Set(cur.mu.filter(s=>s[7]==l).map(s=>s[0]))].join(', ');
+ LG.innerHTML='<span style="color:'+MC1+'">●</span> <b>Principales:</b> '+nm(1)+' &nbsp; <span style="color:'+MC2+'">●</span> <b>Secundarios:</b> '+nm(2)}
+MB.onclick=()=>{mon=!mon;setMus()};
+const RULES=[[/cuello/,'trap','erc'],[/encogimientos/,'trap','fa del'],[/face pull|pájaros|pull apart/,'del rho','trap'],[/dominadas|jalón/,'lat bic','rho trap del fa'],[/remo/,'lat rho','trap bic erc del fa'],[/hombros|militar|elevaciones laterales|elevación frontal/,'del','tri trap ser'],[/aperturas|cruces|press de pecho|press banca|flexiones/,'pec','del tri ser'],[/tríceps|fondos|francés/,'tri pec','del ser'],[/curl de muñeca/,'fa','bic'],[/curl de bíceps|curl martillo|predicador/,'bic','fa del'],[/curl femoral/,'ham','cal glu'],[/extensión de piernas/,'qua',''],[/gemelos/,'cal',''],[/aductores/,'add',''],[/abductores|caminata lateral/,'glu','erc'],[/puente|hip thrust|patada/,'glu','ham qua add abs'],[/hiperextensiones/,'erc glu','ham'],[/peso muerto|buenos días/,'glu ham erc','trap lat qua fa abs'],[/sentadilla|zancadas|step-up|prensa|salto/,'qua glu','add ham erc abs cal'],[/rueda|crunch|elevación de piernas|plancha/,'abs','obl ser'],[/giros rusos/,'obl abs','erc']];
+setMus=function(){const r=RULES.find(x=>x[0].test(cur.n.toLowerCase()))||[0,'',''],P1=r[1].split(' '),S1=r[2].split(' '),nm=l=>l.filter(Boolean).map(i=>GN[i]).join(', ')||'—';
+ MB.style.display='';MB.textContent='Músculos: '+(mon?'sí':'no');LG.style.display=mon?'':'none';
+ for(const id in GM)GM[id].color.set(P1.includes(id)?'#e11d2e':S1.includes(id)?'#f59e0b':'#6b7078');
+ MU.forEach(m=>m.visible=mon);
+ LG.innerHTML='<span style="color:#e11d2e">●</span> <b>Principales:</b> '+nm(P1)+' &nbsp; <span style="color:#f59e0b">●</span> <b>Secundarios:</b> '+nm(S1)};
 let cur,props=[];
 function pick(i){cur=E[i];t=0;yaw=cur.y??.5;barG.children[1].visible=barG.children[2].visible=cur.bar!==2;dbs.forEach(d=>d.scale.set(...(cur.dbx?[.2,.12,.12]:[.12,.12,.2])));scene.remove(pg);pg=new THREE.Group();scene.add(pg);props=[];
- cur.pr.forEach(p=>{const m=new THREE.Mesh(BG,new THREE.MeshStandardMaterial({color:p[7]}));m.scale.set(p[0],p[1],p[2]);m.position.set(p[3],p[4],p[5]);m.rotation.z=p[6]*rad;pg.add(m);if(p[8])props.push([m,p[8]])});
+ cur.pr.forEach(p=>{const m=new THREE.Mesh(BG,new THREE.MeshStandardMaterial({color:p[7]}));m.scale.set(p[0],p[1],p[2]);m.position.set(p[3],p[4],p[5]);m.rotation.z=p[6]*rad;m.castShadow=m.receiveShadow=true;pg.add(m);if(p[8])props.push([m,p[8]])});
  barG.visible=!!cur.bar;dbs.forEach((d,i)=>d.visible=cur.db==1||(cur.db==2&&i==1));
  if(nav.firstChild)nav.firstChild.value=i;
- tn.textContent=cur.n;tm.textContent=cur.m;br.textContent=cur.br;lab=''}
+ tn.textContent=cur.n;tm.textContent=cur.m;br.textContent=cur.br;lab='';setMus()}
 function solve(q){const hip=V(q.h[0],q.h[1]),mid=hip.clone().addScaledVector(dir(q.a),.275),sh=mid.clone().addScaledVector(dir(q.a-q.c),.275),head=sh.clone().addScaledVector(dir(q.hd),.21);
  sh.y+=q.sr;setB(tl,hip,mid,.12);setB(tu,mid,sh,.14);setB(nk,sh,head,.045);hd.position.copy(head);
  const tc=Math.cos(q.tw*rad)*.2,ts=Math.sin(q.tw*rad)*.2;setB(sbar,sh.clone().add(V(ts,0,tc)),sh.clone().add(V(-ts,0,-tc)),.07);setB(hbar,hip.clone().add(V(0,0,.1)),hip.clone().add(V(0,0,-.1)),.09);
- const hs=[],ans=[],ks=[];
+ const hs=[],ans=[],ks=[],JT=[],sg={tu:[mid,sh],tl:[hip,mid],ua:[],fa:[],th:[],sn:[]};
  [1,-1].forEach((s,i)=>{const o=S[i],hj=hip.clone().add(V(0,0,.1*s)),sj=sh.clone().add(V(ts*s,0,tc*s)),af=s>0?q.f:q.f2,kv=s>0?q.kp:q.kp2,an=V(af[0],af[1],q.fz*s+(s>0?q.fl:0));
   const k=ik(hj,an,.45,.45,V(kv[0],kv[1],(kv[2]||.15)*s));setB(o.th,hj,k.mid,.08);setB(o.sn,k.mid,k.end,.058);o.kj.position.copy(k.mid);
   const fa=q.fr*rad;o.sh.position.set(an.x+Math.cos(fa)*.07,an.y-.03+Math.sin(fa)*.07,an.z);o.sh.rotation.z=fa;
   const hz=q.hz*s+q.hq,ht=(s<0&&q.hb)?V(q.hb[0],q.hb[1],hz):q.hs?sh.clone().add(V(q.hs[0],q.hs[1],hz)):q.hh?hip.clone().add(V(q.hh[0],q.hh[1],hz)):V(q.ha[0],q.ha[1],hz);
   const e=ik(sj,ht,.3,.28,V(q.ep[0],q.ep[1],q.ep[2]*s));setB(o.ua,sj,e.mid,.055);setB(o.fa,e.mid,e.end,.045);o.ej.position.copy(e.mid);o.hn.position.copy(e.end);o.sj.position.copy(sj);
-  hs.push(ht);ans.push(an);ks.push(k.mid);if(cur.db)dbs[i].position.copy(e.end)});
+  hs.push(ht);ans.push(an);ks.push(k.mid);sg.ua[i]=[sj,e.mid];sg.fa[i]=[e.mid,e.end];sg.th[i]=[hj,k.mid];sg.sn[i]=[k.mid,k.end];JT[i]={sj,em:e.mid,wr:e.end,dl:sj.distanceTo(e.end),pe:V(q.ep[0],q.ep[1],q.ep[2]*s),hj,km:k.mid,an:k.end,pk:V(kv[0],kv[1],(kv[2]||.15)*s)};if(cur.db)dbs[i].position.copy(e.end)});
  if(cur.bar)barG.position.copy(hs[0]).add(hs[1]).multiplyScalar(.5);
  if(cab.visible=!!cur.cable)setB(cab,V(cur.cable[0],cur.cable[1],0),barG.position,.008);
  lns.forEach(m=>m.visible=false);const LN=cur.ln;
  if(LN){const T=LN[5]=='hd'?[head]:LN[5]=='a'?ans:LN[5]=='a1'?[ans[0]]:hs;T.forEach((p,i)=>{const m=lns[i];m.visible=true;m.material.color.set(LN[4]||'#9ca3af');setB(m,V(LN[0],LN[1],LN[2]*(i?-1:1)),p,LN[3]||.008)})}
  if(cur.lh||cur.lk){const m=lns[2],P2=cur.lh?hs:cur.lk=='a'?ans:ks;m.visible=true;m.material.color.set(cur.lc||'#ef4444');setB(m,P2[0],P2[1],.01)}
  if(plm.visible=!!cur.pl){plm.scale.set(cur.pl[0],cur.pl[1],cur.pl[2]);plm.position.copy(head).add(V(cur.pl[3],cur.pl[4],0))}
+ rigUp(hip,mid,sh,head,JT,q);
+ mus.forEach(({m,sp,s})=>{const T=sp[1]=='tu'||sp[1]=='tl',[a,b]=T?sg[sp[1]]:sg[sp[1]][s>0?0:1],d=b.clone().sub(a),u=d.clone().normalize(),p=a.clone().addScaledVector(d,sp[2]);
+  if(T)p.add(V(-u.y*sp[3],u.x*sp[3],sp[4]*s));
+  m.position.copy(p);m.quaternion.setFromUnitVectors(YY,u);m.scale.set(T?sp[5]*.65:sp[5],sp[6],sp[5])});
  props.forEach(([m,off])=>m.position.set(q.f[0]+off[0],q.f[1]+off[1],0))}
 const sm=x=>x*x*(3-2*x);let t=0,lab='',paused=false,yaw=.5,last=performance.now();
 function loop(now){requestAnimationFrame(loop);if(!paused)t=(t+(now-last)/1000)%8;last=now;
@@ -204,7 +252,7 @@ function loop(now){requestAnimationFrame(loop);if(!paused)t=(t+(now-last)/1000)%
  const q={};{const X=cur.PM,[a,b,u]=X?(e<.5?[cur.PA,X,e*2]:[X,cur.PB,e*2-1]):[cur.PA,cur.PB,e];for(const k in a)q[k]=L(a[k],b[k],u)}
  if(cur.lift)['f','f2'].forEach(k=>{const d=Math.hypot(cur.PB[k][0]-cur.PA[k][0],cur.PB[k][1]-cur.PA[k][1]);q[k][1]+=Math.min(d,.6)*.18*Math.sin(Math.PI*e)});
  if(l!==lab){lab=l;ph.textContent=l}
- solve(q);const z=cur.c[2],ctr=V(cur.c[0],cur.c[1],0),dist=5.1*z;
+ solve(q);const z=cur.c[2],ctr=V(cur.c[0],cur.c[1],0),dist=4.3*z;
  cam.position.set(ctr.x+dist*Math.sin(yaw),ctr.y+.5*z,ctr.z+dist*Math.cos(yaw));cam.lookAt(ctr);R.render(scene,cam)}
 function rs(){const w=cv.clientWidth,h=cv.clientHeight;if(!w||!h)return;R.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix()}
 addEventListener('resize',rs);
@@ -214,5 +262,5 @@ cv.addEventListener('pointerup',()=>dr=null);
 const nav=document.getElementById('nav'),tn=document.getElementById('tn'),tm=document.getElementById('tm'),br=document.getElementById('br'),ph=document.getElementById('ph'),pz=document.getElementById('pz');
 {const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s)}
 pz.onclick=()=>{paused=!paused;pz.textContent=paused?'▶ Reanudar':'⏸ Pausar'};
-rs();{const requested=new URLSearchParams(window.location.search).get('exercise');if(requested){const norm=s=>s.toLocaleLowerCase('es').normalize('NFD').replace(/[\u0300-\u036f]/g,'');const target=norm(requested);let idx=E.findIndex(e=>norm(e.n)===target);if(idx<0)idx=E.findIndex(e=>target.includes(norm(e.n))||norm(e.n).includes(target));pick(idx>=0?idx:0);}else pick(0);}requestAnimationFrame(loop);
+rs();pick(0);requestAnimationFrame(loop);
 </script></body></html>
