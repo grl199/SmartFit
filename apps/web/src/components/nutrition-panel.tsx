@@ -20,7 +20,7 @@ const err=(e:unknown)=>e instanceof Error?e.message:"No se pudo completar la ope
 
 export function NutritionPanel({token,date,onDateChange}:Props){
   const [tab,setTab]=useState<Tab>("search"),[meal,setMeal]=useState("auto"),[day,setDay]=useState<Day|null>(null),[frequent,setFrequent]=useState<Frequent[]>([]);
-  const [query,setQuery]=useState(""),[online,setOnline]=useState(true),[searchSource,setSearchSource]=useState<SearchSource>("all"),[results,setResults]=useState<Food[]>([]),[food,setFood]=useState<Food|null>(null),[servings,setServings]=useState<Serving[]>([]),[unit,setUnit]=useState(""),[quantity,setQuantity]=useState("100");
+  const [query,setQuery]=useState(""),[searchSource,setSearchSource]=useState<SearchSource>("all"),[results,setResults]=useState<Food[]>([]),[food,setFood]=useState<Food|null>(null),[servings,setServings]=useState<Serving[]>([]),[unit,setUnit]=useState(""),[quantity,setQuantity]=useState("100");
   const [mine,setMine]=useState<Food[]>([]),[mineQuery,setMineQuery]=useState(""),[editing,setEditing]=useState<Food|null>(null),[draft,setDraft]=useState<Record<string,string>>({});
   const [unitName,setUnitName]=useState(""),[unitPlural,setUnitPlural]=useState(""),[unitGrams,setUnitGrams]=useState(""),[mineUnits,setMineUnits]=useState<Serving[]>([]);
   const [barcode,setBarcode]=useState(""),[barcodeResult,setBarcodeResult]=useState<any>(null);
