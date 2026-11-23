@@ -6,7 +6,7 @@ const appDir = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(appDir, "../..");
 
 const nextConfig: NextConfig = {
-  transpilePackages: ["@smartfit/contracts"],
+  transpilePackages: ["@smartfit/contracts", "@smartfit/api-client"],
   // Bundle Node server + runtime dependencies for Cloud Run (monorepo-aware).
   output: "standalone",
   outputFileTracingRoot: monorepoRoot,
