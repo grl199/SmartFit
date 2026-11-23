@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "SmartFit",
+    "slug": "smartfit",
+    "scheme": "smartfit",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartfit.mobile"
+    },
+    "android": {
+      "package": "com.smartfit.mobile"
+    },
+    "plugins": [
+      [
+        "expo-secure-store",
+        {
+          "faceIDPermission": "SmartFit usa Face ID para proteger el acceso seguro a tu sesión."
+        }
+      ]
+    ]
+  }
+}
