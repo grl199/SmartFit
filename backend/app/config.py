@@ -17,10 +17,6 @@ class Settings(BaseSettings):
     token_ttl_hours: int = 12  # compatibilidad con clientes anteriores
     access_token_ttl_minutes: int = 15
     refresh_token_ttl_days: int = 30
-    web_cookie_secure: bool = False  # activar en HTTPS; localhost permite HTTP
-    web_cookie_samesite: str = "lax"
-    web_cookie_domain: str | None = None
-    web_allowed_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
     allow_registration: bool = True
     # Credenciales para el usuario 1 ya existente (solo se aplican si aún no tiene contraseña).
     bootstrap_username: str | None = None
