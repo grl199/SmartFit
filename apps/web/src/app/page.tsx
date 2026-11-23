@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { components } from "@smartfit/contracts";
-import { apiRequest, authenticate, completeOnboarding, getCurrentUser } from "@/lib/api";
+import { authenticate, completeOnboarding, getCurrentUser, logoutWebSession } from "@/lib/api";
 import { Workspace } from "@/components/workspace";
 
 type User = components["schemas"]["UserOut"];
@@ -30,15 +30,9 @@ export default function Home() {
   const [profile, setProfile] = useState(initialProfile);
 
   useEffect(() => {
-    const saved = window.localStorage.getItem("smartfit_token");
-    if (!saved) return;
-    setToken(saved);
-    getCurrentUser(saved)
+    getCurrentUser()
       .then(setUser)
-      .catch(() => {
-        window.localStorage.removeItem("smartfit_token");
-        setToken("");
-      });
+      .catch(() => setUser(null));
   }, []);
 
   async function onAuth(event: FormEvent<HTMLFormElement>) {
@@ -51,8 +45,7 @@ export default function Home() {
         name: String(form.get("name") ?? ""),
         password: String(form.get("password") ?? ""),
       });
-      window.localStorage.setItem("smartfit_token", response.access_token);
-      setToken(response.access_token);
+      setToken("");
       setUser(response.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo iniciar sesión.");
@@ -63,7 +56,6 @@ export default function Home() {
 
   async function onOnboarding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!token) return;
     setBusy(true);
     setError("");
     try {
@@ -73,7 +65,7 @@ export default function Home() {
         weight_kg: Number(profile.weight_kg),
         available_training_days: Number(profile.available_training_days),
       } as unknown as components["schemas"]["OnboardingIn"];
-      const response = await completeOnboarding(token, input);
+      const response = await completeOnboarding(input);
       setResult(response);
       setUser((current) => current ? { ...current, onboarding_completed: true } : current);
     } catch (err) {
@@ -83,11 +75,12 @@ export default function Home() {
     }
   }
 
-  function logout() {
-    window.localStorage.removeItem("smartfit_token");
-    setToken("");
-    setUser(null);
-    setResult(null);
+  async function logout() {
+    try { await logoutWebSession(); } finally {
+      setToken("");
+      setUser(null);
+      setResult(null);
+    }
   }
 
   if (user?.onboarding_completed) {
