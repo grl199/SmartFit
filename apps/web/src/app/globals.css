@@ -1328,3 +1328,21 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .nutrition-browse-catalog .nutrition-catalog-section[open]>.nutrition-catalog-items{padding-top:2px}
 .nutrition-browse-catalog .nutrition-catalog-item{min-height:44px}
 
+/* El hilo ocupa el espacio flexible y se desplaza; el compositor permanece siempre visible. */
+.assistant-layout{height:min(760px,calc(100dvh - 250px));min-height:570px;max-height:none;grid-template-rows:minmax(0,1fr)}
+.assistant-chat{height:100%;min-height:0;overflow:hidden}
+.assistant-thread{flex:1 1 0%;min-height:0;overscroll-behavior:contain}
+.assistant-compose{position:relative;z-index:2;flex:0 0 auto;min-width:0}
+.assistant-compose textarea{display:block;resize:vertical;max-height:180px}
+.assistant-compose-actions{flex:0 0 auto;min-width:0}
+.assistant-compose-actions>button[type="submit"]{flex:0 0 auto;min-width:104px;white-space:nowrap}
+@media(max-width:640px){
+  .assistant-layout{height:auto;max-height:none;min-height:0;grid-template-rows:auto minmax(560px,calc(100dvh - 330px))}
+  .assistant-history{max-height:170px;min-height:0}
+  .assistant-chat{height:100%;min-height:560px}
+  .assistant-thread{min-height:0}
+  .assistant-compose{padding:12px}
+  .assistant-compose-actions{align-items:center;flex-wrap:wrap}
+  .assistant-upload-actions{min-width:0}
+}
+
