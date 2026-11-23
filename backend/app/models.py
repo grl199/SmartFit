@@ -177,6 +177,16 @@ class Food(Base):
         return (self.extra or {}).get("original_name")
 
     @property
+    def source_url(self) -> str | None:
+        """Enlace directo a la ficha de la fuente externa cuando existe."""
+        explicit = (self.extra or {}).get("source_url")
+        if explicit:
+            return str(explicit)
+        if self.source == "openfoodfacts" and self.barcode:
+            return f"https://world.openfoodfacts.org/product/{self.barcode}"
+        return None
+
+    @property
     def confirmed_by(self) -> int | None:
         return (self.extra or {}).get("confirmed_by")
 

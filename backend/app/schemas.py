@@ -33,6 +33,7 @@ class FoodOut(FoodBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     source: str
+    source_url: str | None = None
     # Metadatos de Open Food Facts (None / vacío si no constan)
     image_url: str | None = None
     nutriscore_grade: str | None = None

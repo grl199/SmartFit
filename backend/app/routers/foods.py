@@ -143,11 +143,13 @@ def confirm_estimated_food(
 
 
 @router.get("/search", response_model=list[FoodOut])
-def search(q: str = Query(min_length=1), limit: int = Query(10, le=30), online: bool = True,
-           db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    """Búsqueda mientras se escribe: BD local; si hay pocos resultados, completa con Open Food Facts
-    (limitado y cacheado) y persiste lo encontrado."""
-    return search_hybrid(db, uid, q, limit, online)
+def search(
+    q: str = Query(min_length=1), limit: int = Query(10, le=30), online: bool = True,
+    source: Literal["all", "catalog", "mine", "openfoodfacts"] = "all",
+    db: Session = Depends(get_db), uid: int = Depends(current_user_id),
+):
+    """Busca alimentos por origen. Las recetas se consultan en /recipes."""
+    return search_hybrid(db, uid, q, limit, online, source)
 
 
 @router.get("/barcode/{code}", response_model=BarcodeOut)
