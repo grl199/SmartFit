@@ -22,7 +22,7 @@ backend ni interrumpir Streamlit.
 ## Requisitos
 
 - Python 3.11 o superior (CI utiliza Python 3.12).
-- Node.js 20.19.0 o superior.
+- Node.js 22.13.0 o superior (requisito de Expo SDK 58).
 - pnpm 10.12.1, fijado mediante `packageManager` en el `package.json` raíz.
 
 ## Instalación y generación
@@ -35,6 +35,7 @@ corepack prepare pnpm@10.12.1 --activate
 pnpm install
 pnpm contracts:generate
 pnpm typecheck
+pnpm --filter @smartfit/mobile start
 ```
 
 **Importante:** vuelve a ejecutar `pnpm install` después de incorporar un
@@ -82,3 +83,36 @@ credenciales a los paquetes TypeScript ni al repositorio. Cada plataforma
 tendrá variables de configuración públicas y separadas para desarrollo,
 staging y producción; las claves privadas y las decisiones de autorización
 permanecerán siempre en el backend.
+
+
+## Aplicación móvil Expo
+
+La primera base nativa vive en `apps/mobile/` y comparte los contratos
+OpenAPI y el cliente HTTP de `packages/`. Los tokens móviles son Bearer y se
+guardan en `expo-secure-store`; no se usan cookies del navegador ni
+`localStorage`.
+
+Para desarrollo:
+
+```bash
+pnpm install
+pnpm contracts:generate
+cp apps/mobile/.env.example apps/mobile/.env
+# Ajusta EXPO_PUBLIC_API_URL según simulador o dispositivo.
+pnpm --filter @smartfit/mobile start
+```
+
+- iOS Simulator: `http://localhost:8000`.
+- Android Emulator: `http://10.0.2.2:8000`.
+- Dispositivo físico: IP LAN de la máquina que ejecuta FastAPI.
+- Producción: URL HTTPS del servicio FastAPI.
+
+La API móvil llama directamente a FastAPI. En un dispositivo físico, el
+servidor debe escuchar en una interfaz accesible por la LAN y el firewall debe
+permitir el puerto; para producción se requiere HTTPS. Expo SecureStore
+protege los tokens en Keychain (iOS) y Android Keystore. La app inicial cubre
+registro, login, restauración y renovación de sesión, logout y onboarding;
+las áreas de nutrición, entrenamiento, hábitos y progreso se integrarán
+después por módulos.
+
+El CI ejecuta el typecheck de la aplicación móvil junto al de web y contratos.
