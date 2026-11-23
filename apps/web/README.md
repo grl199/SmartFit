@@ -18,6 +18,8 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev:web
 ```
 
+**Importante para instalaciones existentes:** cuando cambie una dependencia `workspace:*` o se añada un paquete de `packages/*`, vuelve a ejecutar `pnpm install` desde la raíz antes de arrancar Next.js. Esto crea los enlaces locales de pnpm (incluido `@smartfit/api-client`); no instales dependencias desde `apps/web`.
+
 Abre http://localhost:3000. El frontend utiliza rutas del mismo origen (`/api/*`) y Next.js reenvía las peticiones al backend. Así el navegador no depende de CORS para login ni para el resto de llamadas.
 
 Si FastAPI escucha en otra dirección, cambia `API_INTERNAL_URL` en `apps/web/.env.local` y reinicia Next.js. Si ya tenías `NEXT_PUBLIC_API_URL` configurado, no es necesario mantenerlo: la nueva configuración usa `API_INTERNAL_URL`.
