@@ -24,6 +24,7 @@ class RecipeIn(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     description: str | None = Field(None, max_length=1000)
     serving_count: float = Field(1, gt=0, le=100)
+    steps: list[str] = Field(default_factory=list, max_length=30)
     ingredients: list[IngredientIn] = Field(min_length=1, max_length=40)
 
 
@@ -60,7 +61,8 @@ def _detail(r: Recipe, uid: int) -> dict:
     return {"id": r.id, "name": r.name, "description": r.description, "is_system": r.user_id is None, "editable": r.user_id == uid,
             "food_id": r.food_id, **svc.summarize(items, r.serving_count),
             "ingredients": [{"id": i.id, "food_id": i.food_id, "food": i.food.name, "brand": i.food.brand, "quantity_g": i.quantity_g,
-                             "kcal": round(i.food.kcal * i.quantity_g / 100, 1)} for i in r.ingredients]}
+                             "kcal": round(i.food.kcal * i.quantity_g / 100, 1)} for i in r.ingredients],
+            "steps": r.steps or []}
 
 
 def _fill(db: Session, r: Recipe, body: RecipeIn | PreviewIn, uid: int) -> None:
@@ -76,7 +78,7 @@ def list_recipes(q: str | None = None, limit: int = Query(50, le=100), db: Sessi
     for r in svc.visible_recipes(db, uid, q, limit):
         s = svc.summarize(svc.recipe_items(r), r.serving_count)
         out.append({"id": r.id, "name": r.name, "description": r.description, "is_system": r.user_id is None, "food_id": r.food_id,
-                    "serving_count": r.serving_count, "serving_g": s["serving_g"], "per_serving": s["per_serving"]})
+                    "serving_count": r.serving_count, "serving_g": s["serving_g"], "per_serving": s["per_serving"], "steps": r.steps or []})
     return out
 
 
@@ -89,7 +91,7 @@ def preview(body: PreviewIn, db: Session = Depends(get_db), uid: int = Depends(c
 
 @router.post("", status_code=201)
 def create_recipe(body: RecipeIn, db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
-    r = Recipe(user_id=uid, name=body.name.strip(), description=body.description, serving_count=body.serving_count)
+    r = Recipe(user_id=uid, name=body.name.strip(), description=body.description, serving_count=body.serving_count, steps=body.steps)
     _fill(db, r, body, uid)
     db.add(r)
     db.flush()
@@ -108,7 +110,7 @@ def update_recipe(rid: int, body: RecipeIn, db: Session = Depends(get_db), uid: 
     r = _own(db, rid, uid)
     if r.user_id != uid:
         raise HTTPException(403, "Las recetas del sistema no se editan: haz una copia con POST /recipes/{id}/copy")
-    r.name, r.description, r.serving_count = body.name.strip(), body.description, body.serving_count
+    r.name, r.description, r.serving_count, r.steps = body.name.strip(), body.description, body.serving_count, body.steps
     _fill(db, r, body, uid)
     db.flush()
     svc.sync_recipe_food(db, r)
@@ -121,7 +123,7 @@ def copy_recipe(rid: int, db: Session = Depends(get_db), uid: int = Depends(curr
     """Copia una receta (p. ej. del sistema) a las tuyas para poder cambiar ingredientes y cantidades."""
     src = _own(db, rid, uid)
     r = Recipe(user_id=uid, name=f"{src.name} (mi versión)" if src.user_id is None else f"{src.name} (copia)",
-               description=src.description, serving_count=src.serving_count)
+               description=src.description, serving_count=src.serving_count, steps=list(src.steps or []))
     r.ingredients = [RecipeIngredient(food_id=i.food_id, quantity_g=i.quantity_g) for i in src.ingredients]
     db.add(r)
     db.flush()
