@@ -3,7 +3,7 @@ import type { components } from "@smartfit/contracts";
 type Credentials = components["schemas"]["Credentials"];
 type OnboardingInput = components["schemas"]["OnboardingIn"];
 
-const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const API_URL = "/api";
 
 export class ApiError extends Error {
   constructor(message: string, public readonly status: number) {

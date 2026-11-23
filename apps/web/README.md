@@ -1,6 +1,6 @@
 # SmartFit Web
 
-Primera interfaz web de SmartFit: autenticación y onboarding conectados a FastAPI.
+Interfaz web de SmartFit: autenticación, onboarding y espacio personal conectado a FastAPI.
 
 ## Requisitos
 
@@ -18,7 +18,9 @@ cp apps/web/.env.example apps/web/.env.local
 pnpm dev:web
 ```
 
-Abre http://localhost:3000. Si FastAPI escucha en otra URL, cambia `NEXT_PUBLIC_API_URL` en `apps/web/.env.local`.
+Abre http://localhost:3000. El frontend utiliza rutas del mismo origen (`/api/*`) y Next.js reenvía las peticiones al backend. Así el navegador no depende de CORS para login ni para el resto de llamadas.
+
+Si FastAPI escucha en otra dirección, cambia `API_INTERNAL_URL` en `apps/web/.env.local` y reinicia Next.js. Si ya tenías `NEXT_PUBLIC_API_URL` configurado, no es necesario mantenerlo: la nueva configuración usa `API_INTERNAL_URL`.
 
 En otra terminal, desde la raíz:
 
@@ -27,4 +29,12 @@ cd backend
 uvicorn app.main:app --reload
 ```
 
-El onboarding genera objetivos con el proveedor de IA configurado en el backend; para completar ese paso se necesita su clave API y una base de datos accesible. Registro y login no necesitan una clave de IA.
+Para iniciar la base de datos local:
+
+```bash
+docker compose up -d db
+```
+
+Comprueba la API en http://localhost:8000/health. Debe devolver `{"ok":true}`.
+
+El onboarding puede requerir la configuración de IA del backend y una base de datos accesible. Registro y login no necesitan una clave de IA.
