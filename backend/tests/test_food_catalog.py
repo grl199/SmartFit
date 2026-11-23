@@ -31,3 +31,25 @@ def test_unified_search_mix_keeps_generic_and_branded_products_visible():
     assert [item.name for item in mixed] == [
         "Avena", "Plátano", "Yogur de marca", "Huevo", "Pan de molde de marca"
     ]
+
+def test_every_generic_food_belongs_to_a_catalog_section():
+    from app.services.food_catalog import FOOD_CATALOG_SECTIONS, FOOD_SECTION_BY_NAME, FOODS
+
+    assert len(FOODS) >= 120
+    assert len(FOOD_CATALOG_SECTIONS) >= 7
+    assert set(FOOD_SECTION_BY_NAME) == set(FOODS)
+    sectioned = [name for _, _, _, _, names in FOOD_CATALOG_SECTIONS for name in names]
+    assert set(sectioned) == set(FOODS)
+    assert len(sectioned) == len(set(sectioned))
+
+
+def test_generic_search_scope_is_distinct_from_branded_products():
+    from app.services.nutrition import search_foods
+
+    # La búsqueda "catalog" se limita a alimentos genéricos compartidos,
+    # mientras que "openfoodfacts" es la fuente de productos envasados.
+    import inspect
+    source = inspect.getsource(search_foods)
+    assert 'if source == "catalog"' in source
+    assert 'Food.source.notin_(("openfoodfacts", "recipe"))' in source
+
