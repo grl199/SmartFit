@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import type { components } from "@smartfit/contracts";
 import { apiRequest, authenticate, completeOnboarding, getCurrentUser } from "@/lib/api";
+import { Workspace } from "@/components/workspace";
 
 type User = components["schemas"]["UserOut"];
 type OnboardingResult = components["schemas"]["OnboardingOut"];
@@ -91,17 +92,11 @@ export default function Home() {
 
   if (user?.onboarding_completed) {
     return (
-      <main className="shell">
-        <header className="topbar"><a className="brand" href="#"><span className="brand-mark">S</span> SMARTFIT</a><button className="quiet-button" onClick={logout}>Cerrar sesión</button></header>
-        <section className="welcome-card">
-          <div className="eyebrow">TU ESPACIO PERSONAL</div>
-          <h1>Vamos paso a paso, <em>{user.name}.</em></h1>
-          <p>Tu cuenta está conectada con SmartFit API. Esta es la primera entrega de la nueva experiencia web.</p>
-          {result && <div className="metrics"><div><span>Metabolismo basal</span><strong>{Math.round(result.bmr)} <small>kcal</small></strong></div><div><span>Gasto diario estimado</span><strong>{Math.round(result.tdee)} <small>kcal</small></strong></div><div><span>Objetivo diario</span><strong>{Math.round(result.targets.kcal)} <small>kcal</small></strong></div></div>}
-          <div className="notice"><span className="status-dot" /> Sesión autenticada · API conectada</div>
-          <p className="muted">El siguiente incremento incorporará el dashboard con nutrición, entrenamiento y hábitos reales.</p>
-        </section>
-      </main>
+      <Workspace
+        token={token}
+        userName={user.name}
+        onLogout={logout}
+      />
     );
   }
 
