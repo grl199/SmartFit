@@ -16,20 +16,21 @@ ENOUGH_LOCAL = 5  # con tantos resultados locales no se consulta OFF
 def search_hybrid(
     db: Session, user_id: int, query: str, limit: int = 10, online: bool = True, source: str = "all",
 ) -> list[Food]:
-    local = search_foods(db, user_id, query, limit * 2 if source == "all" else limit, source=source)
+    effective_source = "catalog" if source == "generic" else source
+    local = search_foods(db, user_id, query, limit * 2 if source == "all" else limit, source=effective_source)
     q = query.strip()
     # Los filtros explícitos se respetan. En "all" mezclamos ingredientes y productos comerciales;
     # en el filtro exclusivo de OFF seguimos evitando consultas si ya hay suficientes coincidencias.
     if source not in ("all", "openfoodfacts") or not online or len(q) < MIN_ONLINE_CHARS:
-        return _limit(local, limit, source)
+        return _limit(local, limit, effective_source)
     if (source == "openfoodfacts" and len(local) >= ENOUGH_LOCAL) or not online_search_allowed(q):
-        return _limit(_mix(local, limit) if source == "all" else local, limit, source)
+        return _limit(_mix(local, limit) if source == "all" else local, limit, effective_source)
     try:
         added = search_off_and_store(db, q)
         if added:
             schedule_translation()
         refreshed = search_foods(db, user_id, query, limit * 2 if source == "all" else limit, source=source)
-        return _limit(_mix(refreshed, limit) if source == "all" else refreshed, limit, source)
+        return _limit(_mix(refreshed, limit) if source == "all" else refreshed, limit, effective_source)
     except Exception as e:  # OFF caído, 503, JSON inesperado... nunca rompe la búsqueda local
         db.rollback()
         log.warning("Búsqueda online en OFF fallida: %s", e)
