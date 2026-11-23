@@ -25,8 +25,9 @@ def search_hybrid(
     if (source == "openfoodfacts" and len(local) >= ENOUGH_LOCAL) or not online_search_allowed(q):
         return _limit(_mix(local, limit) if source == "all" else local, limit, source)
     try:
-        search_off_and_store(db, q)
-        schedule_translation()
+        added = search_off_and_store(db, q)
+        if added:
+            schedule_translation()
         refreshed = search_foods(db, user_id, query, limit * 2 if source == "all" else limit, source=source)
         return _limit(_mix(refreshed, limit) if source == "all" else refreshed, limit, source)
     except Exception as e:  # OFF caído, 503, JSON inesperado... nunca rompe la búsqueda local
