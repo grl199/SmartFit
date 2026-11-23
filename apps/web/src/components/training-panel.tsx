@@ -25,7 +25,7 @@ export function TrainingPanel({token}:Props){
  const [date,setDate]=useState(new Date().toLocaleDateString("sv-SE")),[name,setName]=useState("Entrenamiento"),[category,setCategory]=useState("strength"),[duration,setDuration]=useState("60"),[distance,setDistance]=useState(""),[elevation,setElevation]=useState(""),[steps,setSteps]=useState(""),[hr,setHr]=useState(""),[notes,setNotes]=useState(""),[drafts,setDrafts]=useState<ExerciseDraft[]>([]);
  const [newName,setNewName]=useState(""),[newKind,setNewKind]=useState("strength"),[primary,setPrimary]=useState("chest"),[newEquipment,setNewEquipment]=useState(["none"]);
  const [editingDay,setEditingDay]=useState<PlanDay|null>(null),[planDraft,setPlanDraft]=useState<any[]>([]),[planSearch,setPlanSearch]=useState(""),[planResults,setPlanResults]=useState<Exercise[]>([]);
- const [busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]="";
+ const [busy,setBusy]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
 
  async function loadCatalog(){const p=new URLSearchParams();if(query.trim())p.set("q",query.trim());if(kind)p.set("kind",kind);if(muscle)p.set("muscles",muscle);if(equipment)p.set("equipment",equipment);if(secondary)p.set("include_secondary","true");setCatalog(await apiRequest<Exercise[]>("/exercises?"+p.toString(),{token}));}
  async function loadWorkouts(){const [w,p]=await Promise.all([apiRequest<Workout[]>("/workouts?days=365",{token}),apiRequest<Plan>("/plan",{token})]);setWorkouts(w);setPlan(p);}
