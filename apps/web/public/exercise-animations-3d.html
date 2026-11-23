@@ -277,7 +277,7 @@ if(embedded){document.documentElement.classList.add('embed-mode');nav.hidden=tru
 else{const s=document.createElement('select');s.style.cssText='width:100%;padding:8px 10px;font:inherit;border:1px solid var(--bd);border-radius:10px;background:var(--card);color:var(--fg)';E.forEach((e,i)=>{const o=document.createElement('option');o.value=i;o.textContent=(i+1)+'. '+e.n;s.appendChild(o)});s.onchange=()=>pick(+s.value);nav.appendChild(s);}
 pz.onclick=()=>{paused=!paused;pz.textContent=paused?'▶ Reanudar':'⏸ Pausar'};
 const normalizeExerciseName=value=>String(value||'').toLocaleLowerCase('es').normalize('NFD').replace(/[\\u0300-\\u036f]/g,'').replace(/[^a-z0-9]+/g,' ').trim();
-function findExerciseIndex(name){const target=normalizeExerciseName(name);if(!target)return -1;let index=E.findIndex(e=>normalizeExerciseName(e.n)===target);if(index<0)index=E.findIndex(e=>{const candidate=normalizeExerciseName(e.n);return target.includes(candidate)||candidate.includes(target);});return index;}
+function findExerciseIndex(name){const target=normalizeExerciseName(name);if(!target)return -1;return E.findIndex(e=>normalizeExerciseName(e.n)===target);}
 rs();
 if(requestedExercise){const index=findExerciseIndex(requestedExercise);if(index>=0){pick(index);requestAnimationFrame(loop);}else{tn.textContent=requestedExercise;tm.textContent='Todavía no hay una animación específica para este ejercicio.';ph.textContent='Animación no disponible';pz.style.display='none';document.getElementById('mb').style.display='none';}}
 else{pick(0);requestAnimationFrame(loop);}
