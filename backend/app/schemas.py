@@ -217,6 +217,17 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+class RefreshSessionIn(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+
+
+class WebSessionOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
 class DeleteAccountIn(BaseModel):
     password: str
 
