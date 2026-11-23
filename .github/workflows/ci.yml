@@ -52,6 +52,9 @@ jobs:
       - name: Type-check contracts, web and mobile
         run: pnpm typecheck
 
+      - name: Export Expo web preview
+        run: pnpm --filter @smartfit/mobile export:web
+
       - name: Build web
         run: pnpm build:web
 
