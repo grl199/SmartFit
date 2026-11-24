@@ -30,7 +30,7 @@ consume `packages/contracts`.
 
 Requisitos:
 
-- Proyecto de Google Cloud seleccionado con `gcloud config set project PROJECT_ID`.
+- Proyecto seleccionado: `woven-passkey-515111-t5` (`gcloud config set project woven-passkey-515111-t5`).
 - Cloud Run, Cloud Build y Artifact Registry habilitados.
 - El repositorio Artifact Registry `cloud-run-source-deploy` ya creado (el
   pipeline del backend utiliza ese nombre).
