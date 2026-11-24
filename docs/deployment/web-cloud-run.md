@@ -136,3 +136,91 @@ Alternativas válidas:
 Cloud Run es la elección inicial porque la infraestructura backend ya reside
 en Google Cloud y el monorepo puede construirse desde su raíz sin trasladar
 paquetes compartidos ni adoptar otro proveedor.
+
+
+## Checklist previo a producción
+
+No publiques la web hasta verificar estos puntos en el proyecto de Google Cloud:
+
+### 1. Backend y base de datos
+
+- [ ] El servicio Cloud Run `smartfit` está desplegado y responde en
+  `/health`.
+- [ ] La URL HTTPS del backend está disponible y se configurará como
+  `_API_INTERNAL_URL` en Cloud Build.
+- [ ] La base PostgreSQL/Neon tiene copia de seguridad reciente y el usuario
+  de conexión puede crear las extensiones PostgreSQL requeridas:
+  `vector`, `unaccent` y `pg_trgm`.
+- [ ] Se ha comprobado que el esquema actual puede ejecutar
+  `Base.metadata.create_all` y las migraciones idempotentes de
+  `backend/app/migrations.py`. El backend ejecuta este trabajo al arrancar;
+  no despliegues varias revisiones simultáneas durante una migración.
+- [ ] `DATABASE_URL` se configura en el servicio backend desde Secret Manager,
+  nunca en el repositorio ni en la imagen.
+
+### 2. Secretos y configuración del backend
+
+Configura como secretos de Secret Manager y enlázalos al servicio `smartfit`:
+
+- [ ] `DATABASE_URL`: cadena de conexión PostgreSQL con SSL según el proveedor.
+- [ ] `SECRET_KEY`: valor aleatorio estable (por ejemplo,
+  `python -c "import secrets; print(secrets.token_urlsafe(48))"`). No generes
+  una clave nueva en cada revisión: invalidaría las sesiones existentes.
+- [ ] La clave del proveedor de IA elegido: `GEMINI_API_KEY`,
+  `OPENROUTER_API_KEY` o `OPENAI_API_KEY`, según `AI_PROVIDER`.
+
+Variables de configuración a revisar en el backend:
+
+- `ALLOW_REGISTRATION=false` cuando no quieras altas públicas.
+- `AI_PROVIDER` y el modelo correspondiente.
+- `OFF_USER_AGENT` con un identificador de contacto real.
+- `TIMEZONE=Europe/Madrid` si esa sigue siendo la zona horaria deseada.
+
+No guardes secretos en `--set-env-vars`, archivos YAML, GitHub ni en
+variables `NEXT_PUBLIC_*`. Usa Secret Manager y concede a la cuenta de
+ejecución del backend únicamente `roles/secretmanager.secretAccessor` sobre
+los secretos que necesita.
+
+### 3. Acceso entre servicios
+
+En la configuración actual el proxy Next.js no genera Google ID tokens para
+invocar un backend privado. Por tanto, el backend debe aceptar invocaciones
+HTTP sin autenticación IAM de Cloud Run mientras la aplicación valida cada
+usuario mediante JWT.
+
+Esto significa que las rutas de login y las rutas protegidas son accesibles a
+nivel de red pública; las protegidas deben seguir exigiendo autenticación de
+SmartFit. Antes de producción, comprueba los límites de intentos de login y
+evita considerar el endpoint público `/health` como prueba de disponibilidad
+de la base de datos. Para cerrar el backend con IAM habrá que implementar
+autenticación servicio-a-servicio desde el proxy y probarla antes de cambiar
+`--no-allow-unauthenticated`.
+
+### 4. Cloud Build y Cloud Run web
+
+- [ ] Habilita Cloud Run, Cloud Build y Artifact Registry en el proyecto.
+- [ ] Crea el repositorio Docker `cloud-run-source-deploy` en
+  `europe-west1` si todavía no existe.
+- [ ] Concede a la cuenta de Cloud Build permisos mínimos para publicar en
+  Artifact Registry, desplegar Cloud Run y actuar sobre la cuenta de ejecución
+  del servicio.
+- [ ] Configura `_API_INTERNAL_URL` con la URL HTTPS real del backend. El
+  pipeline ahora falla antes de construir si conserva el valor de ejemplo.
+- [ ] Configura alertas de presupuesto y revisa límites de instancias, memoria
+  y CPU antes de habilitar tráfico real.
+- [ ] Tras desplegar, verifica login, refresh, logout, onboarding, carga del
+  panel y una operación de escritura desde el dominio HTTPS final.
+
+### 5. Dominio y cookies
+
+La cookie de sesión es `Secure` en producción. Prueba la aplicación bajo HTTPS
+y en el dominio definitivo; no pruebes el login de producción desde una URL
+HTTP. Si se cambia el dominio después de probar sesiones, inicia sesión de
+nuevo porque las cookies están vinculadas al host.
+
+### 6. Qué falta confirmar antes de ejecutar el despliegue
+
+Este repositorio no contiene ni debe contener el ID del proyecto de Google
+Cloud, las credenciales, los secretos ni el dominio final. Antes de ejecutar
+`gcloud builds submit` o crear un trigger, confirma esos datos y verifica
+que tienes seleccionado el proyecto correcto con `gcloud config get-value project`.
