@@ -1,6 +1,6 @@
 # Cloud Build trigger path: apps/web/cloudbuild.yaml
 # Build context: repository root (required by pnpm workspace packages).
-# Set _API_INTERNAL_URL in the trigger to the URL of the existing FastAPI Cloud Run service.
+# Set _API_INTERNAL_URL in the trigger to the real HTTPS URL of FastAPI.
 substitutions:
   _REGION: europe-west1
   _SERVICE: smartfit-web
@@ -8,6 +8,21 @@ substitutions:
   _API_INTERNAL_URL: https://REPLACE_WITH_BACKEND_CLOUD_RUN_URL
 
 steps:
+  # Fail early rather than deploying a frontend pointing to the placeholder URL.
+  - name: gcr.io/google.com/cloudsdktool/google-cloud-cli:stable
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        case "${_API_INTERNAL_URL}" in
+          https://*.*) ;;
+          *) echo "Set _API_INTERNAL_URL to the real HTTPS URL of the FastAPI Cloud Run service." >&2; exit 1 ;;
+        esac
+        if [[ "${_API_INTERNAL_URL}" == *REPLACE_WITH_BACKEND_CLOUD_RUN_URL* ]]; then
+          echo "_API_INTERNAL_URL still contains the example placeholder." >&2
+          exit 1
+        fi
+
   - name: gcr.io/cloud-builders/docker
     args:
       - build
