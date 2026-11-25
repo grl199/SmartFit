@@ -99,6 +99,20 @@ def test_text_search_hit_includes_product_image_and_processing_metadata():
     assert "nutriscore_grade" in SEARCH_FIELDS
 
 
+def test_parse_search_hit_uses_front_image_variants_when_small_url_missing():
+    from app.services.openfoodfacts import parse_search_hit
+
+    hit = {
+        "code": "8412345678901",
+        "product_name": "Leche semidesnatada",
+        "images": {"front": {"display": {"url": "https://images.openfoodfacts.org/front.jpg"}}},
+        "nutriments": {"energy-kcal_100g": 45},
+    }
+    parsed = parse_search_hit(hit)
+    assert parsed is not None
+    assert parsed["meta"]["image_url"] == "https://images.openfoodfacts.org/front.jpg"
+
+
 
 
 def test_parse_off_serving_unit_requires_explicit_count_and_uses_hacendado_piece_name():
