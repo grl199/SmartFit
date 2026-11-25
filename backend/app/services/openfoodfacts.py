@@ -15,7 +15,7 @@ from ..models import Food, FoodServing
 from .names import clean_name, schedule_translation
 
 log = logging.getLogger(__name__)
-OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
+OFF_URL = "https://world.openfoodfacts.org/api/v3/product/{code}"
 OFF_FIELDS = ("code,product_name,product_name_es,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
               "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,allergens_tags,"
               "ingredients_text_es,ingredients_text,categories,labels,labels_tags,generic_name_es,generic_name,serving_size")
@@ -51,6 +51,15 @@ def _num(n: dict, key: str) -> float | None:
         return float(n[key])
     except (KeyError, TypeError, ValueError):
         return None
+
+
+def _extract_off_product(payload: dict) -> dict | None:
+    """Normaliza la envoltura v3 actual y la v2 antigua de Open Food Facts."""
+    status = payload.get("status")
+    if status not in (1, "success", "success_with_warnings", "success_with_errors"):
+        return None
+    product = payload.get("product")
+    return product if isinstance(product, dict) else None
 
 
 def parse_off_product(product: dict) -> dict | None:
@@ -205,16 +214,17 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
     try:
         r = httpx.get(OFF_URL.format(code=food.barcode), params={"fields": OFF_FIELDS}, timeout=6,
                       headers={"User-Agent": get_settings().off_user_agent}, follow_redirects=True)
-        if not r.is_success or r.json().get("status") != 1:
+        payload = r.json()
+        product = _extract_off_product(payload)
+        if not r.is_success or product is None:
             return False
-        meta = parse_off_meta(r.json()["product"])
+        meta = parse_off_meta(product)
     except Exception as e:  # noqa: BLE001
         log.warning("No se pudo completar %s desde OFF: %s", food.barcode, e)
         return False
     for col in ("nutriscore_grade", "nova_group", "ecoscore_grade", "image_url", "quantity"):
         if meta[col] is not None:
             setattr(food, col, meta[col])
-    product = r.json()["product"]
     if not food.serving_g:
         food.serving_g = _num(product, "serving_quantity")
     food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
@@ -247,12 +257,13 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
     except httpx.HTTPError as e:
         log.warning("OFF no disponible: %s", e)
         return BarcodeResult("error")
-    if r.status_code == 404 or (r.is_success and r.json().get("status") != 1):
+    payload = r.json()
+    p = _extract_off_product(payload)
+    if r.status_code == 404 or (r.is_success and p is None):
         return BarcodeResult("not_found")
-    if not r.is_success:
+    if not r.is_success or p is None:
         return BarcodeResult("error")
 
-    p = r.json()["product"]
     raw_name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
     brand = (p.get("brands") or "").split(",")[0].strip() or None
     name = clean_name(raw_name, brand, p.get("quantity"))
