@@ -87,7 +87,7 @@ def parse_off_product(product: dict) -> dict | None:
         kcal=round(kcal or 0, 1), protein_g=protein or 0, carbs_g=carbs or 0,
         sugars_g=_num(n, "sugars_100g") or 0, fat_g=fat or 0,
         sat_fat_g=_num(n, "saturated-fat_100g") or 0, fiber_g=_num(n, "fiber_100g") or 0,
-        sodium_mg=round(sodium_mg, 1),
+        sodium_mg=round(sodium_mg, 3),
     )
 
 
