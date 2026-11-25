@@ -1435,3 +1435,58 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .training-history-route-toggle{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:9px;border:1px solid #e9eee5;border-radius:9px;background:#f8faf6}
 .training-history-route-toggle>button{align-self:flex-start;border:0;background:transparent;color:#58764d;font-size:9px;font-weight:700;cursor:pointer}
 .training-history-route-toggle .geo-route-map.compact{max-width:520px}
+
+/* Diario de nutrición: comidas plegables, nutrientes por ingesta y gráfico */
+.nutrition-entry-groups{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.nutrition-meal-group{border:1px solid #e8eee4;border-radius:12px;background:#fff;overflow:hidden}
+.nutrition-meal-group>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:13px 14px;cursor:pointer;list-style:none;color:#405a41}
+.nutrition-meal-group>summary::-webkit-details-marker{display:none}
+.nutrition-meal-group>summary strong{font-size:12px}
+.nutrition-meal-group>summary span{color:#778675;font-size:10px;font-weight:700}
+.nutrition-meal-entries{display:flex;flex-direction:column;padding:0 12px}
+.nutrition-entry-rich{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:12px 2px;border-top:1px solid #eef1eb}
+.nutrition-entry-main{display:flex;flex:1;min-width:0;flex-direction:column;gap:4px}
+.nutrition-entry-main strong{color:#354a38;font-size:11px}
+.nutrition-entry-main span{color:#687968;font-size:10px}
+.nutrition-entry-main small{color:#829083;font-size:9px;line-height:1.5}
+.nutrition-entry-actions{display:flex;align-items:center;gap:8px;flex-shrink:0}
+.nutrition-meal-subtotal{padding:9px 14px;border-top:1px solid #edf1e9;background:#f7faf5;color:#526a50;font-size:10px;font-weight:700;text-align:right}
+.nutrition-entry-edit{display:flex;flex-wrap:wrap;align-items:flex-end;gap:8px;width:100%}
+.nutrition-entry-edit label{display:flex;flex:1;min-width:105px;flex-direction:column;gap:4px;color:#728172;font-size:9px}
+.nutrition-entry-edit input,.nutrition-entry-edit select{min-width:0;width:100%;padding:8px;border:1px solid #dfe7da;border-radius:7px;background:#fff;color:#354a38;font:inherit}
+.nutrition-meal-contribution{margin-top:15px;padding:15px;border:1px solid #e7eee1;border-radius:12px;background:#fbfdf9}
+.nutrition-meal-contribution h3{margin:0 0 4px;color:#405a41;font:700 13px Manrope,sans-serif}
+.nutrition-meal-contribution>p{margin:0 0 14px;font-size:9px}
+.nutrition-contribution-row{display:flex;flex-direction:column;gap:6px;margin:11px 0}
+.nutrition-contribution-heading{display:flex;justify-content:space-between;gap:10px;color:#536952;font-size:10px}
+.nutrition-contribution-heading span{font-variant-numeric:tabular-nums}
+.nutrition-contribution-track{display:flex;height:11px;overflow:hidden;border-radius:999px;background:#edf1e9}
+.nutrition-contribution-track span{display:block;min-width:0;transition:width .2s ease}
+.nutrition-contribution-track [data-meal="breakfast"]{background:#dfb75d}
+.nutrition-contribution-track [data-meal="mid_morning"]{background:#8dbb7d}
+.nutrition-contribution-track [data-meal="lunch"]{background:#6f9b70}
+.nutrition-contribution-track [data-meal="snack"]{background:#d69a70}
+.nutrition-contribution-track [data-meal="dinner"]{background:#8292b0}
+.nutrition-contribution-row>small{color:#8a9688;font-size:8px;line-height:1.5}
+.nutrition-facts-label{margin:13px 0;padding:13px;border:1px solid #dfe7da;border-radius:9px;background:#fff}
+.nutrition-facts-heading{display:flex;align-items:center;justify-content:space-between;padding-bottom:8px;border-bottom:2px solid #536b4f}
+.nutrition-facts-heading h4{margin:0;color:#354a38;font:800 13px Manrope,sans-serif}
+.nutrition-facts-heading small{color:#7c8978;font-size:9px}
+.nutrition-facts-label .nutrition-nutrients{margin-top:8px}
+.nutrition-barcode-shortcut{width:100%;margin:8px 0 12px}
+.recipe-ai-estimate{display:flex;flex-direction:column;gap:8px;margin:12px 0;padding:12px;border:1px solid #e2eadb;border-radius:10px;background:#f9fcf6}
+.recipe-ai-estimate h4{margin:0;color:#405a41;font:700 12px Manrope,sans-serif}
+.recipe-ai-estimate>p{margin:0;font-size:9px}
+.recipe-ai-estimate .nutrition-recipe-ingredients{padding:8px 0;border-bottom:1px solid #e9efe5}
+.recipe-unit-factor{display:flex;flex-direction:column;gap:4px;color:#728172;font-size:9px}
+.recipe-unit-factor input{width:90px;min-width:0}
+.nutrition-recipe-ingredients select{min-width:112px;padding:8px;border:1px solid #dfe7da;border-radius:7px;background:#fff;color:#405a41;font:inherit}
+.nutrition-recipe-ingredients>small{flex-basis:100%;color:#819080;font-size:9px}
+@media(max-width:640px){
+ .nutrition-entry-rich{flex-direction:column}
+ .nutrition-entry-actions{width:100%;justify-content:flex-end}
+ .nutrition-meal-group>summary{padding:11px}
+ .nutrition-meal-contribution{padding:11px}
+ .nutrition-recipe-ingredients{flex-wrap:wrap}
+ .nutrition-recipe-ingredients>strong{flex-basis:100%}
+}
