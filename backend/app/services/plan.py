@@ -138,6 +138,48 @@ def _structure_plan(db: Session, user_id: int) -> None:
         log.exception("No se pudo estructurar el plan de entrenamiento")
 
 
+def generate_fallback_targets(db: Session, user_id: int) -> dict:
+    """Creates safe provisional targets with deterministic rules when the LLM is unavailable."""
+    i = _inputs(db, user_id)
+    profile = i["profile"]
+    factors = {
+        "lose_fat": 0.85,
+        "definition": 0.90,
+        "gain_muscle": 1.05,
+        "recomposition": 0.975,
+        "maintain": 1.0,
+    }
+    kcal = max(MIN_KCAL[profile.sex], round(i["tdee"] * factors[profile.goal]))
+    # Keep the distribution coherent and predictable until an AI-generated plan is available.
+    protein_g = round(kcal * 0.22 / 4)
+    fat_g = round(kcal * 0.28 / 9)
+    carbs_g = max(0, round((kcal - 4 * protein_g - 9 * fat_g) / 4))
+    workouts = min(profile.available_training_days, 2 if profile.experience_level == "beginner" else 3)
+    rationale = (
+        "Objetivos provisionales calculados por SmartFit a partir del gasto energético estimado "
+        "y del objetivo seleccionado. La IA no estaba disponible; puedes regenerar el plan más adelante."
+    )
+    training_plan = (
+        "Plan provisional: empieza con sesiones de cuerpo completo, deja al menos un día de recuperación "
+        "entre sesiones y prioriza la técnica. Ajusta ejercicios y cargas a tu experiencia. "
+        "Este plan no sustituye la planificación personalizada de la IA."
+    )
+    target = db.get(UserTarget, user_id) or UserTarget(user_id=user_id)
+    target.kcal = kcal
+    target.protein_g = protein_g
+    target.carbs_g = carbs_g
+    target.fat_g = fat_g
+    target.fiber_g = 30
+    target.workouts_per_week = workouts
+    target.training_plan = training_plan
+    target.rationale = rationale
+    target.source = "fallback"
+    db.add(target)
+    db.commit()
+    db.refresh(target)
+    return {"targets": target, "bmr": i["bmr"], "tdee": i["tdee"], "profile": profile}
+
+
 def generate_targets(db: Session, user_id: int) -> dict:
     """Genera con el LLM, valida y guarda los objetivos. Devuelve {targets, bmr, tdee}.
     Lanza PlanRejected (perfil) o PlanGenerationError (el modelo no acierta)."""
