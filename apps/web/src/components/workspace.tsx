@@ -80,8 +80,8 @@ export function Workspace({ token, userName, onLogout }: Props) {
   {key:"dinner",label:"Cena",icon:"🌙"},
  ].map(group=>{
   const entries=(day?.entries||[]).filter(entry=>entry.meal===group.key);
-  const totals={kcal:0,protein_g:0,carbs_g:0,fat_g:0};
-  entries.forEach(entry=>{totals.kcal+=Number(entry.kcal||0);totals.protein_g+=Number(entry.protein_g||0);totals.carbs_g+=Number(entry.carbs_g||0);totals.fat_g+=Number(entry.fat_g||0);});
+  const totals={kcal:0,protein_g:0,carbs_g:0,sugars_g:0,fat_g:0,sat_fat_g:0,fiber_g:0,sodium_mg:0};
+  entries.forEach(entry=>{(Object.keys(totals) as Array<keyof typeof totals>).forEach(key=>{totals[key]+=Number(entry[key]||0);});});
   return {...group,entries,totals};
  });
  function nav(label:Section,title:string,icon:string){return <button className={"nav-link"+(section===label?" active":"")} onClick={()=>setSection(label)}><span className="nav-glyph">{icon}</span><span>{title}</span></button>;}
