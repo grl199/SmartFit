@@ -115,7 +115,7 @@ def parse_off_meta(product: dict) -> dict:
     )
 
 
-def parse_serving_unit(serving_size: str | None, serving_quantity, product_name: str = "") -> dict | None:
+def parse_serving_unit(serving_size: str | None, serving_quantity, product_name: str = "", package_quantity: str | None = None) -> dict | None:
     """Interpreta solo unidades declaradas explícitamente por OFF; nunca inventa gramos por pieza."""
     text = str(serving_size or "").strip().lower()
     if not text:
@@ -149,6 +149,21 @@ def parse_serving_unit(serving_size: str | None, serving_quantity, product_name:
             except (TypeError, ValueError):
                 continue
     if not count or count <= 0 or not raw_unit or total is None or total <= 0:
+        # Backup: the package quantity can explicitly contain "3 x 150 g".
+        # It does not let us infer "6 eggs" or a single net weight like "250 g".
+        package = str(package_quantity or "").lower().strip()
+        packed = re.search(r"(\d+(?:[.,]\d+)?)\s*[x×]\s*(\d+(?:[.,]\d+)?)\s*(kg|g|gr|l|cl|ml)\b", package)
+        if packed:
+            amount = float(packed.group(2).replace(",", "."))
+            unit = packed.group(3)
+            factor = {"kg": 1000, "g": 1, "gr": 1, "l": 1000, "cl": 10, "ml": 1}[unit]
+            grams = amount * factor
+            if grams > 0 and grams <= 5000:
+                return {
+                    "unit_name": "unidad", "unit_name_plural": "unidades",
+                    "grams_per_unit": round(grams, 3),
+                    "description": f"Unidad deducida del formato de envase de Open Food Facts: {package_quantity}. Para ml/cl/l se usa una densidad aproximada de 1 g/ml.",
+                }
         return None
     name = re.sub(r"[^a-záéíóúüñ]", "", raw_unit)
     if "rega" in str(product_name or "").lower():
@@ -173,8 +188,8 @@ def parse_serving_unit(serving_size: str | None, serving_quantity, product_name:
             "description": f"Derivado de serving_size de Open Food Facts: {serving_size}"[:200]}
 
 
-def _add_off_serving(db: Session, food: Food, serving_size: str | None, serving_quantity, product_name: str = "") -> None:
-    unit = parse_serving_unit(serving_size, serving_quantity, product_name or food.name)
+def _add_off_serving(db: Session, food: Food, serving_size: str | None, serving_quantity, product_name: str = "", package_quantity: str | None = None) -> None:
+    unit = parse_serving_unit(serving_size, serving_quantity, product_name or food.name, package_quantity)
     if not unit:
         return
     exists = db.scalar(select(FoodServing.id).where(
@@ -207,7 +222,7 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
     food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
     db.add(food)
     db.flush()
-    _add_off_serving(db, food, product.get("serving_size"), product.get("serving_quantity"), product.get("product_name_es") or product.get("product_name") or food.name)
+    _add_off_serving(db, food, product.get("serving_size"), product.get("serving_quantity"), product.get("product_name_es") or product.get("product_name") or food.name, product.get("quantity"))
     db.commit()
     return True
 
@@ -255,7 +270,7 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
     food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients, **meta)
     db.add(food)
     db.flush()
-    _add_off_serving(db, food, p.get("serving_size"), p.get("serving_quantity"), raw_name)
+    _add_off_serving(db, food, p.get("serving_size"), p.get("serving_quantity"), raw_name, p.get("quantity"))
     db.commit()
     schedule_translation()
     return BarcodeResult("openfoodfacts", food, name, brand)
@@ -327,7 +342,7 @@ def parse_search_hit(hit: dict) -> dict | None:
     if clean != raw_name:
         meta["extra"]["original_name"] = raw_name
     return {"code": norm, "name": clean, "brand": brand, "serving_g": _num(hit, "serving_quantity"),
-            "serving_unit": parse_serving_unit(hit.get("serving_size"), hit.get("serving_quantity"), raw_name),
+            "serving_unit": parse_serving_unit(hit.get("serving_size"), hit.get("serving_quantity"), raw_name, hit.get("quantity")),
             "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}), "meta": meta}
 
 
