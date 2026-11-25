@@ -1,6 +1,7 @@
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..db import get_db
@@ -9,7 +10,7 @@ from ..models import BodyMetric, User, UserProfile, UserTarget
 from ..clock import age_on
 from ..schemas import EnergyOut, OnboardingIn, OnboardingOut, ProfileIO, TargetIO, TargetOut
 from ..services.nutrition import latest_weight, today_local
-from ..services.plan import PlanGenerationError, PlanRejected, energy, generate_targets
+from ..services.plan import PlanGenerationError, PlanRejected, energy, generate_fallback_targets, generate_targets
 
 log = logging.getLogger(__name__)
 # Este router solo exige estar autenticado (no onboarded): contiene el propio onboarding.
@@ -38,10 +39,26 @@ def onboarding(body: OnboardingIn, user: User = Depends(current_user), db: Sessi
     for k, v in data.items():
         setattr(profile, k, v)
     db.add(profile)
-    db.add(BodyMetric(user_id=user.id, measured_on=today_local(), weight_kg=body.weight_kg))
+    # Onboarding can be retried safely: update today's weight instead of creating duplicates.
+    metric = db.scalar(select(BodyMetric).where(
+        BodyMetric.user_id == user.id, BodyMetric.measured_on == today_local(),
+    ).order_by(BodyMetric.id.desc()))
+    if metric is None:
+        metric = BodyMetric(user_id=user.id, measured_on=today_local(), weight_kg=body.weight_kg)
+    else:
+        metric.weight_kg = body.weight_kg
+    db.add(metric)
     db.commit()
 
-    result = _generate_or_http(db, user.id)
+    try:
+        result = generate_targets(db, user.id)
+    except PlanRejected as e:
+        raise HTTPException(422, str(e))
+    except (PlanGenerationError, Exception):
+        # A provider outage or unusable model response must not trap the account in onboarding.
+        log.exception("La IA no pudo generar el plan inicial; se aplican objetivos provisionales.")
+        result = generate_fallback_targets(db, user.id)
+
     user.onboarding_completed = True
     db.add(user)
     db.commit()
