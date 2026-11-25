@@ -1515,3 +1515,11 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
  .nutrition-contribution-legend{gap:8px 10px}
  .nutrition-contribution-status{font-size:8px}
 }
+
+
+/* Scanner de código: botón de cámara visible también en móvil */
+.nutrition-barcode-camera{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:48px;margin-top:12px;padding:12px;border:1px solid #cbdcbc;border-radius:10px;background:#f5f9f1;color:#496440;font-size:12px;font-weight:800;cursor:pointer}
+.nutrition-barcode-camera:hover{background:#edf5e7;border-color:#a9c394}
+.nutrition-barcode-camera input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)}
+.nutrition-barcode-camera:focus-within{outline:2px solid #789c64;outline-offset:2px}
+.nutrition-food-result img{width:42px;height:42px;flex:0 0 42px;object-fit:contain;background:#fff;border:1px solid #eef1eb}
