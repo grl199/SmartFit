@@ -45,7 +45,7 @@ class User(Base):
         String(255), comment="Hash argon2id de la contraseña. NULL = cuenta sin credenciales (no puede iniciar sesión).")
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"),
-        comment="TRUE cuando el usuario completó el perfil inicial y la IA generó sus objetivos. "
+        comment="TRUE cuando se completó el perfil inicial y se generaron objetivos personalizados o provisionales. "
                 "Mientras sea FALSE la API bloquea el resto de funciones.")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="Fecha de alta de la cuenta.")
