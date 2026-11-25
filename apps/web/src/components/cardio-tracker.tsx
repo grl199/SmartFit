@@ -64,6 +64,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onTra
   const startedAt = useRef<number | null>(null);
 
   const distance = useMemo(() => points.slice(1).reduce((total, point, index) => total + distanceKm(points[index], point), 0), [points]);
+  const hasAltitude = useMemo(() => points.some(point => point.altitude_m != null), [points]);
   const elevation = useMemo(() => points.slice(1).reduce((total, point, index) => {
     const previous = points[index];
     return total + (point.altitude_m != null && previous.altitude_m != null ? Math.max(0, point.altitude_m - previous.altitude_m) : 0);
@@ -204,7 +205,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onTra
           category,
           duration_min: durationMin,
           distance_km: manual ? (manualDistance ? Number(manualDistance) : null) : distance,
-          elevation_gain_m: manual ? (manualElevation ? Number(manualElevation) : null) : Math.round(elevation),
+          elevation_gain_m: manual ? (manualElevation ? Number(manualElevation) : null) : (hasAltitude ? Math.round(elevation) : null),
           steps: steps ? Number(steps) : null,
           avg_hr_bpm: heartRate ? Number(heartRate) : null,
           notes: notes || null,
@@ -276,7 +277,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onTra
             <div className="cardio-final-metrics">
               <div><span>Distancia</span><strong>{distance.toLocaleString("es-ES", { maximumFractionDigits: 2 })} km</strong></div>
               <div><span>Ritmo medio</span><strong>{paceText(elapsed, distance)}</strong></div>
-              <div><span>Desnivel GPS</span><strong>{Math.round(elevation).toLocaleString("es-ES")} m</strong></div>
+              <div><span>Desnivel GPS</span><strong>{hasAltitude ? Math.round(elevation).toLocaleString("es-ES") : "—"} m</strong></div>
             </div>
           )}
           <div className="training-form-row">
