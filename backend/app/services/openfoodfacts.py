@@ -11,7 +11,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Food, FoodServing
+from ..models import Food, FoodLog, FoodServing
 from .names import clean_name, schedule_translation
 
 log = logging.getLogger(__name__)
@@ -238,7 +238,14 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
         if meta[col] is not None:
             setattr(food, col, meta[col])
     if nutrients is not None:
-        food.sodium_mg = nutrients["sodium_mg"]
+        corrected_sodium = float(nutrients["sodium_mg"])
+        old_sodium = float(food.sodium_mg or 0)
+        food.sodium_mg = corrected_sodium
+        if old_sodium > 10000 and corrected_sodium <= 10000:
+            # Food logs are nutrient snapshots. Repair only the impossible sodium values
+            # associated with this corrected OFF product, keeping all other snapshot fields intact.
+            for entry in db.scalars(select(FoodLog).where(FoodLog.food_id == food.id)):
+                entry.sodium_mg = round(corrected_sodium * float(entry.grams) / 100, 2)
     if not food.serving_g:
         food.serving_g = _num(product, "serving_quantity")
     food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
