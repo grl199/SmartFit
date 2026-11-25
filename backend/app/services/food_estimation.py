@@ -162,15 +162,15 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
             image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
             response = create_chat_completion(client, {
                 "model": settings.food_vision_model,
-                messages=[
+                "messages": [
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": [
                         {"type": "text", "text": user_text},
                         {"type": "image_url", "image_url": {"url": image_url}},
                     ]},
                 ],
-                response_format={"type": "json_object"},
-                temperature=0.2,
+                "response_format": {"type": "json_object"},
+                "temperature": 0.2,
             })
         else:
             raise VisionEstimationDisabled(
