@@ -12,7 +12,7 @@ import re
 from typing import Any
 
 from ..config import get_settings
-from ..llm import get_chat_client
+from ..llm import create_chat_completion, get_chat_client
 from .images import prepare_for_llm
 
 
@@ -156,11 +156,11 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
                 "response_format": {"type": "json_object"},
                 "temperature": 0.2,
             }
-            response = client.chat.completions.create(**kwargs)
+            response = create_chat_completion(client, kwargs, service_tier=kwargs.get("service_tier"))
         elif provider == "openai" and settings.food_vision_enabled:
             jpg, mime = prepare_for_llm(image)
             image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
-            response = client.chat.completions.create(
+            response = create_chat_completion(client, {
                 model=settings.food_vision_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
@@ -171,7 +171,7 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
                 ],
                 response_format={"type": "json_object"},
                 temperature=0.2,
-            )
+            })
         else:
             raise VisionEstimationDisabled(
                 "La estimación por fotografía requiere AI_PROVIDER=gemini o AI_PROVIDER=openai con FOOD_VISION_ENABLED=true."
