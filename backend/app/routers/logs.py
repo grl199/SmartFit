@@ -7,8 +7,8 @@ from sqlalchemy.orm import Session
 from ..db import get_db
 from ..deps import current_user_id
 from ..models import Food, FoodLog, FoodServing
-from ..schemas import FrequentFood, LogCreate, LogOut
-from ..services.nutrition import create_log, frequent_foods, today_local
+from ..schemas import FrequentFood, LogCreate, LogOut, LogUpdate
+from ..services.nutrition import create_log, frequent_foods, scale, today_local
 from ..services.rag import index_day_task
 
 router = APIRouter(prefix="/logs", tags=["logs"])
@@ -45,6 +45,24 @@ def frequent(limit: int = Query(12, le=30), days: int = Query(60, le=365),
              db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
     return frequent_foods(db, uid, days, limit)
 
+
+
+@router.put("/{log_id}", response_model=LogOut)
+def update_log(log_id: int, body: LogUpdate, bg: BackgroundTasks,
+               db: Session = Depends(get_db), uid: int = Depends(current_user_id)):
+    """Edita cantidad y comida de una ingesta sin perder su identidad ni rehacerla."""
+    log = db.get(FoodLog, log_id)
+    if not log or log.user_id != uid:
+        raise HTTPException(404, "Registro no encontrado")
+    log.grams = body.grams
+    log.meal = body.meal
+    for key, value in scale(log.food, body.grams).items():
+        setattr(log, key, value)
+    db.add(log)
+    db.commit()
+    db.refresh(log)
+    bg.add_task(index_day_task, uid, log.log_date)
+    return log
 
 @router.delete("/{log_id}", status_code=204)
 def delete_log(log_id: int, bg: BackgroundTasks, db: Session = Depends(get_db),

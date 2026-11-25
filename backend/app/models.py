@@ -215,6 +215,14 @@ class Food(Base):
     def categories(self) -> list[str]:
         return list((self.extra or {}).get("categories") or [])
 
+    @property
+    def labels(self) -> list[str]:
+        return list((self.extra or {}).get("labels") or [])
+
+    @property
+    def serving_size(self) -> str | None:
+        return (self.extra or {}).get("serving_size")
+
 
 class FoodLog(Base):
     __tablename__ = "food_logs"
@@ -226,7 +234,7 @@ class FoodLog(Base):
     logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="Instante en que se registró la ingesta.")
     log_date: Mapped[date] = mapped_column(Date, index=True, comment="Día local del usuario al que se imputa la ingesta (zona horaria de la app).")
     grams: Mapped[float] = mapped_column(Float, comment="Cantidad consumida, en gramos.")
-    meal: Mapped[str] = mapped_column(String(20), comment="Comida del día: 'breakfast' | 'lunch' | 'snack' | 'dinner'.")
+    meal: Mapped[str] = mapped_column(String(20), comment="Comida del día: desayuno | almuerzo | comida | merienda | cena.")
     kcal: Mapped[float] = _nutr("Energía", "kcal", False)
     protein_g: Mapped[float] = _nutr("Proteínas", "g", False)
     carbs_g: Mapped[float] = _nutr("Hidratos de carbono totales", "g", False)
@@ -455,6 +463,9 @@ class RecipeIngredient(Base):
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), index=True, comment="Receta.")
     food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), comment="Alimento ingrediente.")
     quantity_g: Mapped[float] = mapped_column(Float, comment="Gramos del ingrediente en la receta completa.")
+    unit_name: Mapped[str] = mapped_column(String(40), default="g", server_default=text("'g'"), comment="Unidad elegida al introducir el ingrediente; cálculo interno siempre en gramos.")
+    quantity: Mapped[float | None] = mapped_column(Float, comment="Cantidad en la unidad mostrada (p. ej. 2 cucharadas).")
+    grams_per_unit: Mapped[float | None] = mapped_column(Float, comment="Equivalencia editable en gramos por unidad.")
     food: Mapped[Food] = relationship(lazy="joined")
 
 

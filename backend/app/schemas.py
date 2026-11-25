@@ -7,7 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from .clock import age_on
 
-Meal = Literal["breakfast", "lunch", "snack", "dinner"]
+Meal = Literal["breakfast", "mid_morning", "lunch", "snack", "dinner"]
 
 
 class FoodBase(BaseModel):
@@ -104,6 +104,12 @@ class LogCreate(BaseModel):
         return self
 
 
+class LogUpdate(BaseModel):
+    """Edición de una ingesta: recalcula su instantánea nutricional desde el alimento."""
+    grams: float = Field(gt=0, le=5000)
+    meal: Meal
+
+
 class LogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -115,8 +121,11 @@ class LogOut(BaseModel):
     kcal: float
     protein_g: float
     carbs_g: float
+    sugars_g: float
     fat_g: float
+    sat_fat_g: float
     fiber_g: float
+    sodium_mg: float
 
 
 class FrequentFood(BaseModel):

@@ -20,7 +20,14 @@ def scale(food, grams: float) -> dict[str, float]:
 
 
 def guess_meal(hour: int) -> str:
-    return "breakfast" if hour < 11 else "lunch" if hour < 16 else "snack" if hour < 19 else "dinner"
+    """Clasifica automáticamente en las cinco comidas del día."""
+    return (
+        "breakfast" if hour < 10
+        else "mid_morning" if hour < 12
+        else "lunch" if hour < 16
+        else "snack" if hour < 19
+        else "dinner"
+    )
 
 
 def create_log(db: Session, user_id: int, food: Food, grams: float,
@@ -170,7 +177,8 @@ def day_overview(db: Session, user_id: int, day: date) -> dict:
         "entries": [{
             "id": l.id, "time": l.logged_at.astimezone(ZoneInfo(get_settings().timezone)).strftime("%H:%M"),
             "meal": l.meal, "food": l.food.name, "brand": l.food.brand, "grams": l.grams,
-            "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "fat_g": l.fat_g,
+            "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "sugars_g": l.sugars_g,
+            "fat_g": l.fat_g, "sat_fat_g": l.sat_fat_g, "fiber_g": l.fiber_g, "sodium_mg": l.sodium_mg,
         } for l in logs],
         "workouts": _workouts_with_exercises(db, user_id, day),
         "water_ml": water_ml_on(db, user_id, day),
