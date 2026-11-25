@@ -196,7 +196,7 @@ def test_off_product_response_accepts_v3_and_legacy_v2_envelopes():
 
 def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboarded):
     from app.db import SessionLocal
-    from app.models import Food
+    from app.models import Food, FoodLog
     from app.services.openfoodfacts import enrich_food_from_off
 
     code = "8412345678901"
@@ -234,5 +234,5 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboar
             assert enrich_food_from_off(db, cached) is True
             db.refresh(cached)
             assert cached.sodium_mg == 146.5
-            repaired_log = db.get(__import__("app.models", fromlist=["FoodLog"]).FoodLog, entry_id)
+            repaired_log = db.get(FoodLog, entry_id)
             assert repaired_log.sodium_mg == 293
