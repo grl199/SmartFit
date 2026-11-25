@@ -12,8 +12,23 @@ const accessCookie = "smartfit_access";
 const refreshCookie = "smartfit_refresh";
 
 function assertSameOrigin(request: NextRequest) {
-  const origin = request.headers.get("origin");
-  if (!origin || origin !== request.nextUrl.origin) {
+  const originHeader = request.headers.get("origin");
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const hostHeader = request.headers.get("host")?.split(",")[0]?.trim();
+  const requestHost = forwardedHost || hostHeader || request.nextUrl.host;
+  const expectedProtocol = secure ? "https:" : request.nextUrl.protocol;
+
+  let origin: URL;
+  let expectedHost: string;
+  try {
+    if (!originHeader) throw new Error("Missing Origin");
+    origin = new URL(originHeader);
+    expectedHost = new URL(`${expectedProtocol}//${requestHost}`).host;
+  } catch {
+    return NextResponse.json({ detail: "Origen no permitido" }, { status: 403 });
+  }
+
+  if (origin.protocol !== expectedProtocol || origin.host !== expectedHost) {
     return NextResponse.json({ detail: "Origen no permitido" }, { status: 403 });
   }
   return null;
