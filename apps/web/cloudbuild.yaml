@@ -5,7 +5,7 @@ substitutions:
   _REGION: europe-west1
   _SERVICE: smartfit-web
   _AR_REPOSITORY: cloud-run-source-deploy
-  _API_INTERNAL_URL: https://smartfit-276316729948.europe-west1.run.app
+  _API_INTERNAL_URL: https://smartfit-367317612865.europe-west1.run.app
 
 steps:
   # Fail early rather than deploying a frontend pointing to an invalid URL.
@@ -18,8 +18,8 @@ steps:
           https://*.*) ;;
           *) echo "Set _API_INTERNAL_URL to the real HTTPS URL of the FastAPI Cloud Run service." >&2; exit 1 ;;
         esac
-        if [[ "${_API_INTERNAL_URL}" == "https://smartfit-367317612865.europe-west1.run.app" ]]; then
-          echo "_API_INTERNAL_URL still points to the previous Google Cloud project." >&2
+        if [[ "${_API_INTERNAL_URL}" == "https://smartfit-276316729948.europe-west1.run.app" ]]; then
+          echo "_API_INTERNAL_URL points to the other Google Cloud project, not the deployed smartfit service." >&2
           exit 1
         fi
         if [[ "${_API_INTERNAL_URL}" == *REPLACE_WITH_BACKEND_CLOUD_RUN_URL* ]]; then
