@@ -110,10 +110,26 @@ def test_exercise_durations_are_saved_and_summed(client, onboarded):
 def test_exercise_durations_must_cover_every_exercise(client, onboarded):
     h = onboarded["headers"]
     squat_id = ex_id(client, h, "Sentadilla con barra")
-    extension_id = ex_id(client, h, "Extensión de piernas")
     payload = legs_payload(client, h, exercise_durations_min={str(squat_id): 15}, estimate_calories=False)
     response = client.post("/workouts", headers=h, json=payload)
     assert response.status_code == 422
+
+
+def test_steps_are_kept_only_for_walking_and_running(client, onboarded):
+    h = onboarded["headers"]
+    for category in ("strength", "sport", "full_body", "stretching"):
+        response = client.post("/workouts", headers=h, json={
+            "kind": "Sesión", "category": category, "duration_min": 20, "steps": 5000,
+            "estimate_calories": False,
+        })
+        assert response.status_code == 201, response.text
+        assert response.json()["steps"] is None
+    walking = client.post("/workouts", headers=h, json={
+        "kind": "Paseo", "category": "walking", "duration_min": 20, "steps": 5000,
+        "estimate_calories": False,
+    })
+    assert walking.status_code == 201, walking.text
+    assert walking.json()["steps"] == 5000
 
 
 def test_calories_scale_with_weight_and_duration_in_code(client, onboarded):
