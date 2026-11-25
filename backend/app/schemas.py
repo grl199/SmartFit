@@ -1,11 +1,11 @@
 import datetime as dt
-import math
 from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from .clock import age_on
+from .services.route import route_metrics
 
 Meal = Literal["breakfast", "mid_morning", "lunch", "snack", "dinner"]
 
@@ -300,6 +300,27 @@ class RoutePointIn(BaseModel):
     recorded_at: datetime
 
 
+class ActivityDraftIn(BaseModel):
+    """Metadatos y lote de puntos de un recorrido GPS en curso."""
+    kind: str = Field(min_length=1, max_length=100)
+    category: Literal["walking", "running"]
+    performed_on: date | None = None
+    started_at: datetime
+    points: list[RoutePointIn] = Field(default_factory=list, max_length=1000)
+
+
+class ActivityDraftOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    client_id: str
+    kind: str
+    category: Literal["walking", "running"]
+    performed_on: date | None = None
+    started_at: datetime
+    updated_at: datetime
+    points: list[RoutePointIn] = Field(default_factory=list)
+    point_count: int = 0
+
+
 class WorkoutIn(BaseModel):
     performed_on: date | None = None
     kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
@@ -315,28 +336,18 @@ class WorkoutIn(BaseModel):
     notes: str | None = Field(None, max_length=1000)
     sets: list[SetIn] = Field(default=[], max_length=300)
     estimate_calories: bool = True
+    draft_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_-]{8,64}$", description="Borrador GPS que se convierte en esta sesión.")
 
     @model_validator(mode="after")
     def total_duration_from_exercises(self):
         if self.route_points and self.category not in {"walking", "running"}:
             raise ValueError("La ruta GPS solo se puede guardar en sesiones de andar o correr.")
         if len(self.route_points) > 1:
-            route_distance = 0.0
-            for previous, current in zip(self.route_points, self.route_points[1:]):
-                lat1, lat2 = math.radians(previous.lat), math.radians(current.lat)
-                dlat = lat2 - lat1
-                dlng = math.radians(current.lng - previous.lng)
-                a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
-                route_distance += 6371.0088 * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
-            if route_distance > 0:
-                self.distance_km = round(route_distance, 3)
-            elevation_gain = sum(
-                max(0.0, current.altitude_m - previous.altitude_m)
-                for previous, current in zip(self.route_points, self.route_points[1:])
-                if previous.altitude_m is not None and current.altitude_m is not None
-            )
-            if elevation_gain > 0:
-                self.elevation_gain_m = round(elevation_gain)
+            metrics = route_metrics(self.route_points)
+            if metrics["distance_km"] > 0:
+                self.distance_km = round(metrics["distance_km"], 3)
+            if metrics["elevation_gain_m"] > 0:
+                self.elevation_gain_m = round(metrics["elevation_gain_m"])
         if not self.exercise_durations_min:
             return self
         exercise_ids = {item.exercise_id for item in self.sets}

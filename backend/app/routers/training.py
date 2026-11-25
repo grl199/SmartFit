@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user_id
-from ..models import BodyMetric, Exercise, Workout, WorkoutSet
+from ..models import ActivityDraft, BodyMetric, Exercise, Workout, WorkoutSet
 from ..schemas import (
     ExerciseFeedbackOut, ExerciseIn, ExerciseOut, LastSessionOut, WeightIn, WeightOut, WorkoutDetail, WorkoutExerciseOut, WorkoutIn,
 )
@@ -160,6 +160,8 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
         db.add(WorkoutSet(user_id=uid, workout_id=w.id, exercise_id=s.exercise_id, set_number=counters[s.exercise_id],
                           reps=s.reps, weight_kg=s.weight_kg or None, rpe=s.rpe,
                           reached_failure=s.reached_failure))
+    if body.draft_id:
+        db.execute(delete(ActivityDraft).where(ActivityDraft.user_id == uid, ActivityDraft.client_id == body.draft_id))
     db.commit()
     if body.kcal_burned is None and body.estimate_calories:
         _try_estimate(db, w)

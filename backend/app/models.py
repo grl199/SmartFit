@@ -274,6 +274,23 @@ class Workout(Base):
     notes: Mapped[str | None] = mapped_column(Text, comment="Notas libres sobre la sesión.")
 
 
+class ActivityDraft(Base):
+    __tablename__ = "activity_drafts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_id", name="uq_activity_drafts_user_client"),
+        {"comment": "Recorrido GPS de andar/correr en curso; permite recuperar una ruta tras una interrupción."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del borrador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario que está grabando.")
+    client_id: Mapped[str] = mapped_column(String(64), comment="Identificador generado por el cliente para reenvíos idempotentes.")
+    kind: Mapped[str] = mapped_column(String(100), comment="Título de la actividad.")
+    category: Mapped[str] = mapped_column(String(20), comment="'walking' | 'running'.")
+    performed_on: Mapped[date | None] = mapped_column(Date, comment="Día indicado para la actividad.")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="Instante de inicio del seguimiento.")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="Último envío de puntos.")
+    points: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"), comment="Puntos GPS recibidos, ordenados por fecha.")
+
+
 class Exercise(Base):
     __tablename__ = "exercises"
     __table_args__ = (

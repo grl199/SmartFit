@@ -10,7 +10,7 @@ from .config import get_settings
 from .db import SessionLocal, init_db
 from .deps import require_onboarded
 from .models import User
-from .routers import auth, chat, dashboard, foods, habits, insights, logs, plan, profile, recipes, training
+from .routers import activity_drafts, auth, chat, dashboard, foods, habits, insights, logs, plan, profile, recipes, training
 from .security import hash_password
 from .services.exercise_catalog import seed_catalog
 from .services.exercise_content import seed_content
@@ -64,7 +64,7 @@ app.add_middleware(
 app.include_router(auth.router)
 app.include_router(profile.router)
 # Resto: requieren sesión Y onboarding completado.
-for r in (foods.router, logs.router, dashboard.router, training.router, plan.router, recipes.router, habits.router, insights.router, chat.router):
+for r in (foods.router, logs.router, dashboard.router, training.router, activity_drafts.router, plan.router, recipes.router, habits.router, insights.router, chat.router):
     app.include_router(r, dependencies=[Depends(require_onboarded)])
 
 
