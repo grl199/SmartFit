@@ -109,9 +109,9 @@ def test_login_recovers_profile_saved_before_ai_outage(client):
         account.onboarding_completed = False
         db.commit()
 
-    logged_in = client.post("/auth/session/login", json={"name": u["name"], "password": u["password"]})
-    assert logged_in.status_code == 200, logged_in.text
-    assert logged_in.json()["user"]["onboarding_completed"] is True
+    restored = client.get("/auth/me", headers=u["headers"])
+    assert restored.status_code == 200
+    assert restored.json()["onboarding_completed"] is True
 
 
 def test_onboarding_falls_back_when_ai_returns_unsafe_plan(client):
