@@ -56,7 +56,7 @@ def _like(token: str) -> str:
     return "%" + token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-FUZZY_THRESHOLD = 0.62  # evita coincidencias semánticamente lejanas; admite erratas comunes
+FUZZY_THRESHOLD = 0.55  # similitud trigramas más permisiva para marcas, variantes y erratas
 
 
 def search_foods(
