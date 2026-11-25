@@ -11,14 +11,14 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..models import Food
+from ..models import Food, FoodServing
 from .names import clean_name, schedule_translation
 
 log = logging.getLogger(__name__)
 OFF_URL = "https://world.openfoodfacts.org/api/v2/product/{code}.json"
 OFF_FIELDS = ("code,product_name,product_name_es,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
               "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,allergens_tags,"
-              "ingredients_text_es,ingredients_text,categories,labels,generic_name_es,generic_name")
+              "ingredients_text_es,ingredients_text,categories,labels,labels_tags,generic_name_es,generic_name,serving_size")
 
 ALLERGENS_ES = {
     "gluten": "Gluten", "milk": "Leche", "eggs": "Huevos", "nuts": "Frutos secos", "peanuts": "Cacahuetes",
@@ -93,9 +93,18 @@ def parse_off_meta(product: dict) -> dict:
     cats = [c.strip() for c in cats.split(",")] if isinstance(cats, str) else [str(c).split(":", 1)[-1] for c in (cats or [])]
     ingredients = product.get("ingredients_text_es") or product.get("ingredients_text")
     generic = product.get("generic_name_es") or product.get("generic_name")
+    raw_labels = product.get("labels_tags") or product.get("labels") or []
+    if isinstance(raw_labels, str):
+        raw_labels = [x.strip() for x in raw_labels.split(",") if x.strip()]
+    labels = [
+        str(v).split(":", 1)[-1].replace("-", " ").strip().capitalize()
+        for v in raw_labels if str(v).strip()
+    ][:12]
     extra = {k: v for k, v in {
         "allergens": allergens, "ingredients": (ingredients or "")[:1500] or None, "categories": [c for c in cats if c][:6],
         "generic_name": str(generic).strip()[:200] if generic else None,
+        "labels": labels,
+        "serving_size": str(product.get("serving_size") or "").strip()[:120] or None,
     }.items() if v}
     qty = product.get("quantity")
     return dict(
@@ -104,6 +113,69 @@ def parse_off_meta(product: dict) -> dict:
         image_url=product.get("image_front_small_url") or product.get("image_front_url") or product.get("image_url") or None,
         quantity=str(qty)[:100] if qty else None, extra=extra,
     )
+
+
+def parse_serving_unit(serving_size: str | None, serving_quantity, product_name: str = "") -> dict | None:
+    """Interpreta solo unidades declaradas explícitamente por OFF; nunca inventa gramos por pieza."""
+    text = str(serving_size or "").strip().lower()
+    if not text:
+        return None
+    try:
+        total = float(str(serving_quantity).replace(",", ".")) if serving_quantity is not None else None
+    except (TypeError, ValueError):
+        total = None
+    if total is None or total <= 0:
+        weight = re.search(r"\(\s*(\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\s*\)", text)
+        if weight:
+            total = float(weight.group(1).replace(",", "."))
+    patterns = (
+        r"^\s*(\d+(?:[.,]\d+)?)\s*(?:x\s*)?([^(),\d]+?)\s*(?:\(|$)",
+        r"\(\s*(\d+(?:[.,]\d+)?)\s*([^(),\d]+?)\s*\)",
+    )
+    count, raw_unit = None, None
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            try:
+                count = float(match.group(1).replace(",", "."))
+                raw_unit = match.group(2).strip().rstrip("s")
+                break
+            except (TypeError, ValueError):
+                continue
+    if not count or count <= 0 or not raw_unit or total is None or total <= 0:
+        return None
+    name = re.sub(r"[^a-záéíóúüñ]", "", raw_unit)
+    if "rega" in str(product_name or "").lower():
+        singular, plural = "regañá", "regañás"
+    else:
+        aliases = {
+            "piece": ("unidad", "unidades"), "unit": ("unidad", "unidades"),
+            "portion": ("ración", "raciones"), "serving": ("ración", "raciones"),
+            "slice": ("rebanada", "rebanadas"), "biscuit": ("galleta", "galletas"),
+            "cookie": ("galleta", "galletas"), "cracker": ("cracker", "crackers"),
+            "tablespoon": ("cucharada", "cucharadas"), "teaspoon": ("cucharadita", "cucharaditas"),
+            "bar": ("barrita", "barritas"), "unidad": ("unidad", "unidades"),
+            "ración": ("ración", "raciones"), "galleta": ("galleta", "galletas"),
+            "rebanada": ("rebanada", "rebanadas"), "loncha": ("loncha", "lonchas"),
+            "trozo": ("trozo", "trozos"),
+        }
+        singular, plural = aliases.get(name, (name, name + ("s" if not name.endswith("s") else "")))
+    grams = total / count
+    if grams <= 0 or grams > 5000:
+        return None
+    return {"unit_name": singular[:40], "unit_name_plural": plural[:40], "grams_per_unit": round(grams, 3),
+            "description": f"Derivado de serving_size de Open Food Facts: {serving_size}"[:200]}
+
+
+def _add_off_serving(db: Session, food: Food, serving_size: str | None, serving_quantity, product_name: str = "") -> None:
+    unit = parse_serving_unit(serving_size, serving_quantity, product_name or food.name)
+    if not unit:
+        return
+    exists = db.scalar(select(FoodServing.id).where(
+        FoodServing.food_id == food.id, FoodServing.unit_name == unit["unit_name"]
+    ))
+    if not exists:
+        db.add(FoodServing(food_id=food.id, **unit))
 
 
 def enrich_food_from_off(db: Session, food: Food) -> bool:
@@ -123,8 +195,13 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
     for col in ("nutriscore_grade", "nova_group", "ecoscore_grade", "image_url", "quantity"):
         if meta[col] is not None:
             setattr(food, col, meta[col])
+    product = r.json()["product"]
+    if not food.serving_g:
+        food.serving_g = _num(product, "serving_quantity")
     food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
     db.add(food)
+    db.flush()
+    _add_off_serving(db, food, product.get("serving_size"), product.get("serving_quantity"), product.get("product_name_es") or product.get("product_name") or food.name)
     db.commit()
     return True
 
@@ -171,6 +248,8 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
         meta["extra"]["original_name"] = raw_name
     food = Food(name=name, brand=brand, barcode=code, source="openfoodfacts", serving_g=serving, **nutrients, **meta)
     db.add(food)
+    db.flush()
+    _add_off_serving(db, food, p.get("serving_size"), p.get("serving_quantity"), raw_name)
     db.commit()
     schedule_translation()
     return BarcodeResult("openfoodfacts", food, name, brand)
@@ -181,8 +260,8 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
 # persistencia de todo lo encontrado en Postgres (la siguiente búsqueda ya es local).
 SEARCH_FIELDS = ("code,product_name,brands,nutriments,serving_quantity,quantity,nutriscore_grade,nova_group,"
                  "ecoscore_grade,environmental_score_grade,image_front_small_url,image_front_url,image_url,"
-                 "allergens_tags,ingredients_text_es,ingredients_text,categories,generic_name_es,generic_name")
-MAX_ENRICH = 6  # si un hit no trae nutrientes, se completa con la API de producto (100/min) como máximo para N hits
+                 "allergens_tags,ingredients_text_es,ingredients_text,categories,labels,labels_tags,generic_name_es,generic_name,serving_size")
+MAX_ENRICH = 10  # si un hit no trae nutrientes, se completa con la API de producto (100/min) como máximo para N hits
 
 
 class _RateLimiter:
@@ -202,7 +281,7 @@ class _RateLimiter:
 
 _limiter = _RateLimiter(get_settings().off_search_per_minute)
 _recent_queries: dict[str, float] = {}
-RECENT_TTL_S = 6 * 3600
+RECENT_TTL_S = 60
 
 
 def _nutriments_flat(raw) -> dict:
@@ -242,6 +321,7 @@ def parse_search_hit(hit: dict) -> dict | None:
     if clean != raw_name:
         meta["extra"]["original_name"] = raw_name
     return {"code": norm, "name": clean, "brand": brand, "serving_g": _num(hit, "serving_quantity"),
+            "serving_unit": parse_serving_unit(hit.get("serving_size"), hit.get("serving_quantity"), raw_name),
             "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}), "meta": meta}
 
 
@@ -260,17 +340,26 @@ def _store(db: Session, item: dict) -> bool:
             "nova_group": func.coalesce(ins.excluded.nova_group, Food.nova_group),
             "ecoscore_grade": func.coalesce(ins.excluded.ecoscore_grade, Food.ecoscore_grade),
             "quantity": func.coalesce(ins.excluded.quantity, Food.quantity),
+            "serving_g": func.coalesce(Food.serving_g, ins.excluded.serving_g),
             "extra": Food.extra.op("||")(ins.excluded.extra),
             "source_updated_at": func.now(),
         },
-    ).returning(literal_column("(xmax = 0)").label("inserted"))
-    return bool(db.execute(stmt).scalar())
+    ).returning(Food.id, literal_column("(xmax = 0)").label("inserted"))
+    food_id, inserted = db.execute(stmt).one()
+    unit = item.get("serving_unit")
+    if unit:
+        exists = db.scalar(select(FoodServing.id).where(
+            FoodServing.food_id == food_id, FoodServing.unit_name == unit["unit_name"]
+        ))
+        if not exists:
+            db.add(FoodServing(food_id=food_id, **unit))
+    return bool(inserted)
 
 
-def search_off_and_store(db: Session, query: str, page_size: int = 10) -> int:
+def search_off_and_store(db: Session, query: str, page_size: int = 30) -> int:
     """Busca en OFF y guarda en `foods` los productos con datos nutricionales. Devuelve cuántos son nuevos."""
     s = get_settings()
-    r = httpx.get(s.off_search_url, params={"q": query, "page_size": page_size, "langs": "es,en", "fields": SEARCH_FIELDS},
+    r = httpx.get(s.off_search_url, params={"q": query, "page": 1, "page_size": page_size, "langs": "es,en", "fields": SEARCH_FIELDS},
                   headers={"User-Agent": s.off_user_agent}, timeout=8, follow_redirects=True)
     r.raise_for_status()
     data = r.json()
