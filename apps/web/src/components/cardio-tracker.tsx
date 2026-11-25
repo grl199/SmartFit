@@ -193,6 +193,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
             <label>Modalidad<select value={category} onChange={event => onCategoryChange(event.target.value as "walking" | "running")}><option value="walking">Andar</option><option value="running">Correr</option></select></label>
           </div>
           {!manual ? (
+            <>
             {recovered && status==="idle" && <div className="cardio-recover" role="alert"><strong>Tienes un recorrido sin terminar</strong><p>{recovered.kind} · {new Date(recovered.startedAt).toLocaleString("es-ES")} · {recovered.points.length} puntos GPS · {routeStats(recovered.points,null,null).distanceKm.toLocaleString("es-ES",{maximumFractionDigits:2})} km</p><div className="cardio-route-actions"><button type="button" className="primary-button" onClick={resumeRecovered}>Reanudar</button><button type="button" className="secondary-button" onClick={saveRecoveredAsIs}>Guardar tal cual</button><button type="button" className="secondary-button" onClick={discardRecovered}>Descartar</button></div></div>}
             <div className="cardio-gps-controls">
               <div className="cardio-live-clock">{durationText(elapsed)}</div>
@@ -206,6 +207,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
               {notice&&<p className="cardio-gps-error">{notice}</p>}
               {gpsError && <p className="cardio-gps-error">{gpsError}</p>}
             </div>
+            </>
           ) : (
             <div className="cardio-manual-fields">
               <p className="muted">Introduce los datos manualmente si no quieres usar el GPS o no tienes permiso de ubicación.</p>
