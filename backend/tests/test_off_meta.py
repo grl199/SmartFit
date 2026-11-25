@@ -212,6 +212,10 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboar
         food_id = food.id
         from app.services.nutrition import create_log
         entry = create_log(db, onboarded["id"], food, 200)
+        # Simulate the snapshot produced by the legacy importer before the defensive repair existed.
+        entry.sodium_mg = 293012
+        db.add(entry)
+        db.commit()
         entry_id = entry.id
         assert entry.sodium_mg == 293012
 
