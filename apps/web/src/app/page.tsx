@@ -23,15 +23,19 @@ const initialProfile = {
 export default function Home() {
   const [mode, setMode] = useState<Mode>("login");
   const [user, setUser] = useState<User | null>(null);
+  const [authReady, setAuthReady] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<OnboardingResult | null>(null);
   const [profile, setProfile] = useState(initialProfile);
 
   useEffect(() => {
+    let active = true;
     getCurrentUser()
-      .then(setUser)
-      .catch(() => setUser(null));
+      .then((currentUser) => { if (active) setUser(currentUser); })
+      .catch(() => { if (active) setUser(null); })
+      .finally(() => { if (active) setAuthReady(true); });
+    return () => { active = false; };
   }, []);
 
   async function onAuth(event: FormEvent<HTMLFormElement>) {
@@ -78,6 +82,19 @@ export default function Home() {
       setUser(null);
       setResult(null);
     }
+  }
+
+  if (!authReady) {
+    return (
+      <main className="shell auth-shell">
+        <section className="auth-panel">
+          <div className="form-card">
+            <div className="eyebrow">SMARTFIT</div>
+            <p className="intro">Comprobando tu sesión…</p>
+          </div>
+        </section>
+      </main>
+    );
   }
 
   if (user?.onboarding_completed) {

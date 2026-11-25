@@ -29,17 +29,28 @@ async function readError(response: Response): Promise<never> {
   throw new ApiError(message, response.status);
 }
 
-async function refreshWebSession(): Promise<boolean> {
-  try {
-    const response = await fetch("/api/auth/refresh", {
-      method: "POST",
-      credentials: "same-origin",
-      cache: "no-store",
-    });
-    return response.ok;
-  } catch {
-    return false;
+// El refresh token rota en cada uso. Compartimos una única renovación entre
+// las peticiones simultáneas para evitar que una segunda rotación invalide la primera.
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshWebSession(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = (async () => {
+      try {
+        const response = await fetch("/api/auth/refresh", {
+          method: "POST",
+          credentials: "same-origin",
+          cache: "no-store",
+        });
+        return response.ok;
+      } catch {
+        return false;
+      } finally {
+        refreshInFlight = null;
+      }
+    })();
   }
+  return refreshInFlight;
 }
 
 async function requestWithSessionRetry(
