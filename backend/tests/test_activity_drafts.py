@@ -42,3 +42,15 @@ def test_workout_consumes_draft_and_ignores_gap(client,onboarded):
     assert r.status_code==201,r.text
     assert r.json()["distance_km"]==pytest.approx(.067,abs=.005)
     assert client.get("/activity-drafts/active",headers=h).json() is None
+
+
+def test_account_deletion_removes_active_gps_draft(client,onboarded):
+    from sqlalchemy import select
+    from app.db import SessionLocal
+    from app.models import ActivityDraft
+    headers=onboarded["headers"]
+    draft(client,headers,"run-delete-0001",[payload(0),payload(10,lat=40.0001)])
+    response=client.request("DELETE","/auth/me",headers=headers,json={"password":onboarded["password"]})
+    assert response.status_code==204,response.text
+    with SessionLocal() as db:
+        assert db.scalar(select(ActivityDraft).where(ActivityDraft.user_id==onboarded["id"])) is None
