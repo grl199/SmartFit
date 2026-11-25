@@ -199,7 +199,7 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboar
     from app.models import Food, FoodLog
     from app.services.openfoodfacts import enrich_food_from_off
 
-    code = "8412345678901"
+    code = "84" + rnd(11, digits=True)
     with SessionLocal() as db:
         food = Food(
             name="Café con leche de prueba", barcode=code, source="openfoodfacts",
