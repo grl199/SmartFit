@@ -1523,3 +1523,12 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .nutrition-barcode-camera input{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;clip-path:inset(50%)}
 .nutrition-barcode-camera:focus-within{outline:2px solid #789c64;outline-offset:2px}
 .nutrition-food-result img{width:42px;height:42px;flex:0 0 42px;object-fit:contain;background:#fff;border:1px solid #eef1eb}
+
+
+/* Imágenes visibles en la lista desplegable de productos de Open Food Facts */
+.nutrition-off-autocomplete{margin:8px 0 13px;max-height:360px;overflow-y:auto}
+.nutrition-off-autocomplete>button>img,.nutrition-off-autocomplete>button>.nutrition-food-placeholder{display:grid;width:44px;height:44px;flex:0 0 44px;place-items:center;border-radius:8px;background:#f1f5ed;object-fit:contain;font-size:20px}
+.nutrition-off-autocomplete>button>span:nth-child(2){display:flex;flex:1;flex-direction:column;gap:4px;min-width:0}
+.nutrition-off-autocomplete>button>span:nth-child(2)>strong{font-size:10px}
+.nutrition-search-camera{margin:10px 0 2px}
+.nutrition-barcode-manual{display:block;margin:5px 0 12px;padding:5px 2px;border:0;background:transparent;color:#74836f;font-size:9px;font-weight:700;text-align:left;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
