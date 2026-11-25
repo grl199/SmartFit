@@ -17,6 +17,7 @@ type Content={description?:string|null;start_position?:string|null;instructions?
 type MuscleSummary={start:string;end:string;sessions:number;muscles:Record<string,{sets:number;strength_sets:number;cardio_sets:number;volume_kg:number;exercises:string[]}>};
 type Tab="session"|"history"|"plan"|"muscles";
 const CATS=[["strength","Fuerza"],["walking","Andar"],["running","Correr"],["sport","Deporte"],["full_body","Cuerpo entero"],["stretching","Estiramientos"]];
+const isCardio=(value:string)=>value==="walking"||value==="running";
 const EMPTY={reps:"10",weight_kg:"",reached_failure:null as boolean|null};
 const fmt=(v:number|null|undefined,d=0)=>v==null?"—":v.toLocaleString("es-ES",{maximumFractionDigits:d});
 const err=(e:unknown)=>e instanceof Error?e.message:"No se pudo completar la operación.";
