@@ -92,3 +92,29 @@ def test_recipe_payload_accepts_preparation_steps():
     )
     assert recipe.steps == ["Cortar las verduras", "Pochar la cebolla", "Añadir el tomate y cocinar"]
 
+
+
+
+def test_recipe_ingredient_unit_is_normalized_to_grams():
+    from app.routers.recipes import IngredientIn
+
+    row = IngredientIn(food_id=1, quantity_g=30, unit_name="cucharada", quantity=2, grams_per_unit=15)
+    assert row.quantity_g == 30
+    assert row.quantity == 2
+
+
+def test_recipe_ingredient_requires_conversion_for_non_gram_units():
+    import pytest
+    from pydantic import ValidationError
+    from app.routers.recipes import IngredientIn
+
+    with pytest.raises(ValidationError):
+        IngredientIn(food_id=1, quantity_g=30, unit_name="trozo", quantity=2)
+
+
+def test_automatic_meal_assignment_has_five_categories():
+    from app.services.nutrition import guess_meal
+
+    assert [guess_meal(hour) for hour in (8, 10, 13, 17, 21)] == [
+        "breakfast", "mid_morning", "lunch", "snack", "dinner"
+    ]
