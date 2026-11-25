@@ -14,7 +14,7 @@ const mealLegend = [
   { key: "dinner", label: "Cena", icon: "🌙" },
 ] as const;
 
-const format = (value: number) => value.toLocaleString("es-ES", { maximumFractionDigits: 1 });
+const format = (value: number) => value.toLocaleString("es-ES", { maximumFractionDigits: 3 });
 
 export function NutritionContribution({ meals, targets = {} }: Props) {
   const energyTarget = Number(targets.kcal) > 0 ? Number(targets.kcal) : 2500;
