@@ -1,110 +1,98 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 690" role="img" aria-labelledby="title desc">
-<title id="title">Mapa anatómico muscular, vista frontal y posterior</title>
-<desc id="desc">Ilustración vectorial anatómica deportiva con musculatura principal diferenciada en vistas anterior y posterior.</desc>
+<svg id="smartfit-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" width="100%" role="img" aria-labelledby="sf-title sf-desc" preserveAspectRatio="xMidYMid meet" class="smartfit-muscle-map">
+<title id="sf-title">Mapa muscular SmartFit</title>
+<desc id="sf-desc">Figura humana en vista frontal y posterior con los principales grupos musculares.</desc>
+<style>
+.smartfit-muscle-map{--sf-skin:#ece2d3;--sf-skin-edge:#b9ab95;--sf-line:#5d6853;--sf-text:#2f3a2c;--sf-m0:#d9ddd0;--sf-m0b:#e2dccb;--sf-l1:#f7e27a;--sf-l2:#f6bd45;--sf-l3:#ee8b2f;--sf-l4:#dc4a28;--sf-l5:#a8141f;--sf-stroke:#4f5b46;--sf-hair:#5a4636;font-family:system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+.smartfit-muscle-map .skin{fill:var(--sf-skin);stroke:var(--sf-skin-edge);stroke-width:1}
+.smartfit-muscle-map .hair path{fill:var(--sf-hair);stroke:#3a2c20;stroke-width:.8;stroke-linejoin:round}
+.smartfit-muscle-map .strand{fill:none;stroke:#8a7058;stroke-width:.8;stroke-linecap:round;opacity:.7}
+.smartfit-muscle-map .muscle{fill:var(--mc,var(--sf-m0));stroke:var(--sf-stroke);stroke-width:.9;stroke-linejoin:round;filter:url(#sf-inner);transition:fill .3s ease;cursor:pointer}
+.smartfit-muscle-map .muscle.tone-b{--sf-m0:var(--sf-m0b)}
+.smartfit-muscle-map .muscle:hover,.smartfit-muscle-map .muscle:focus{stroke-width:1.6;outline:none}
+.smartfit-muscle-map .level-0{--mc:var(--sf-m0)}
+.smartfit-muscle-map .level-1{--mc:var(--sf-l1)}
+.smartfit-muscle-map .level-2{--mc:var(--sf-l2)}
+.smartfit-muscle-map .level-3{--mc:var(--sf-l3)}
+.smartfit-muscle-map .level-4{--mc:var(--sf-l4)}
+.smartfit-muscle-map .level-5{--mc:var(--sf-l5)}
+.smartfit-muscle-map .detail{fill:none;stroke:var(--sf-stroke);stroke-width:.7;stroke-linecap:round;opacity:.55;pointer-events:none}
+.smartfit-muscle-map .vol{pointer-events:none;opacity:.55}
+.smartfit-muscle-map .lead{fill:none;stroke:var(--sf-line);stroke-width:.8;pointer-events:none}
+.smartfit-muscle-map .dot{fill:var(--sf-line);pointer-events:none}
+.smartfit-muscle-map .label{font-size:12px;fill:var(--sf-text);pointer-events:none}
+.smartfit-muscle-map .view-title{font-size:14px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;fill:#6b705f;text-anchor:middle}
+.smartfit-muscle-map.no-labels .labels{display:none}
+@media (max-width:600px){.smartfit-muscle-map .label{font-size:15px}}
+@media (prefers-reduced-motion:reduce){.smartfit-muscle-map .muscle{transition:none}}
+</style>
 <defs>
- <linearGradient id="skin" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f4d9c4"/><stop offset=".48" stop-color="#e8c3a8"/><stop offset="1" stop-color="#c99b80"/></linearGradient>
- <linearGradient id="skinBack" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#d7ad94"/><stop offset=".5" stop-color="#f0d0b8"/><stop offset="1" stop-color="#c99b80"/></linearGradient>
- <linearGradient id="muscle" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ff9a83"/><stop offset=".55" stop-color="#e96d62"/><stop offset="1" stop-color="#bd4c4b"/></linearGradient>
- <linearGradient id="muscleAlt" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#ffc09b"/><stop offset=".55" stop-color="#f18a70"/><stop offset="1" stop-color="#c85b54"/></linearGradient>
- <linearGradient id="deep" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d96862"/><stop offset="1" stop-color="#a94349"/></linearGradient>
- <filter id="shadow" x="-30%" y="-20%" width="160%" height="150%"><feGaussianBlur stdDeviation="7"/></filter>
- <pattern id="fibers" width="8" height="8" patternUnits="userSpaceOnUse"><path d="M1 0L5 8" stroke="#8f3e43" stroke-opacity=".18" stroke-width="1"/></pattern>
- <style>
-  .outline{stroke:#9d7867;stroke-width:2.1;stroke-linejoin:round;stroke-linecap:round}
-  .skin{fill:url(#skin)} .skinBack{fill:url(#skinBack)}
-  .m{fill:url(#muscle);stroke:#a84c4b;stroke-width:1.4;stroke-linejoin:round}
-  .ma{fill:url(#muscleAlt);stroke:#b65a51;stroke-width:1.25;stroke-linejoin:round}
-  .md{fill:url(#deep);stroke:#963f45;stroke-width:1.2;stroke-linejoin:round}
-  .fiber{fill:none;stroke:#873f43;stroke-opacity:.27;stroke-width:1.15;stroke-linecap:round}
-  .fine{fill:none;stroke:#9d7867;stroke-opacity:.42;stroke-width:1.2;stroke-linecap:round}
-  .label{font:600 13px Inter,system-ui,sans-serif;fill:#435365;letter-spacing:.2px}
-  .sub{font:500 10px Inter,system-ui,sans-serif;fill:#82909c;letter-spacing:1.8px}
-  .call{fill:none;stroke:#9aa7b3;stroke-width:1.15;stroke-linecap:round;stroke-dasharray:2 3}
-  .dot{fill:#e87968;stroke:#fff;stroke-width:2}
- </style>
+<radialGradient id="sf-vol" cx="50%" cy="45%" r="65%"><stop offset="0" stop-color="#fff" stop-opacity=".35"/><stop offset="1" stop-color="#3a3a2a" stop-opacity=".28"/></radialGradient>
+<filter id="sf-inner" x="-10%" y="-10%" width="120%" height="120%"><feFlood flood-color="#1f2a1a" flood-opacity=".38"/><feComposite in2="SourceAlpha" operator="out"/><feGaussianBlur stdDeviation="2.2"/><feComposite in2="SourceAlpha" operator="in"/><feComposite in2="SourceGraphic" operator="over"/></filter>
+<g id="sf-sil-half">
+<path d="M0,82 L11,82 C30,86 50,90 58,98 L56,130 C54,160 50,190 46,215 C44,235 46,248 48,262 L0,262 Z"/>
+<path d="M58,96 C70,92 80,100 80,118 C82,140 84,165 84,185 C88,210 94,240 94,268 L98,276 C100,290 100,300 94,308 L82,304 C76,300 76,284 76,272 C72,245 68,215 66,190 C64,165 60,140 56,128 Z"/>
+<path d="M2,258 C20,254 44,258 50,268 C54,300 54,330 50,352 C52,380 50,420 46,455 L46,478 C48,484 50,488 48,490 L18,490 C16,484 20,478 22,470 C22,460 22,456 22,452 C20,420 18,385 16,352 C14,320 8,290 2,270 Z"/>
+</g>
+<g id="sf-head"><rect x="-9" y="56" width="18" height="30" rx="6"/><ellipse cx="-21.5" cy="38" rx="3.2" ry="6"/><ellipse cx="21.5" cy="38" rx="3.2" ry="6"/><ellipse cx="0" cy="34" rx="21" ry="27"/></g>
 </defs>
-<rect width="1000" height="690" rx="22" fill="#f8fafc"/>
-<path d="M500 42V640" stroke="#e4e9ef" stroke-width="1.5" stroke-dasharray="4 8"/>
-<text x="250" y="43" text-anchor="middle" class="sub">ANTERIOR</text><text x="750" y="43" text-anchor="middle" class="sub">POSTERIOR</text>
-<text x="250" y="66" text-anchor="middle" class="label" font-size="17">Vista frontal</text><text x="750" y="66" text-anchor="middle" class="label" font-size="17">Vista posterior</text>
-<ellipse cx="250" cy="625" rx="105" ry="12" fill="#6b7b8b" opacity=".10" filter="url(#shadow)"/>
-<ellipse cx="750" cy="625" rx="105" ry="12" fill="#6b7b8b" opacity=".10" filter="url(#shadow)"/>
-<!-- ANTERIOR: silhouette -->
-<g id="anterior" class="outline">
- <path class="skin" d="M228 111Q225 126 215 137L215 153Q196 156 179 168Q160 181 157 208L169 285Q173 306 185 317L197 308L190 236L199 205L207 190L211 235L207 300Q207 329 216 358L207 408L194 487Q188 525 187 564L184 608Q183 622 196 624L218 625Q230 621 230 606L241 534L250 454L260 534L270 606Q270 621 284 625L306 624Q318 621 315 607L312 563Q310 525 303 487L291 408L284 358Q293 329 293 300L289 235L293 190L301 205L310 236L303 308L315 317Q327 306 331 285L343 208Q340 181 321 168Q304 156 285 153L285 137Q275 126 272 111Z"/>
- <path class="skin" d="M228 104Q218 80 229 68Q250 53 271 68Q282 80 272 104Q265 121 250 124Q235 121 228 104Z"/>
- <path class="skin" d="M222 118Q250 132 278 118L285 157Q270 171 250 171Q230 171 215 157Z"/>
- <!-- arms / hand definition -->
- <path class="fine" d="M176 212Q184 248 184 284M324 212Q316 248 316 284M188 291L183 307M312 291L317 307"/>
- <!-- pectorals -->
- <g id="pectoralis-major" class="m"><path d="M211 170Q228 159 247 167L247 211Q231 215 216 203Q208 191 211 170Z"/><path d="M253 167Q272 159 289 170Q292 191 284 203Q269 215 253 211Z"/></g>
- <!-- deltoids -->
- <g id="deltoids-anterior" class="ma"><path d="M181 171Q195 157 213 163Q222 174 215 195Q204 207 190 201Q179 190 181 171Z"/><path d="M319 171Q305 157 287 163Q278 174 285 195Q296 207 310 201Q321 190 319 171Z"/></g>
- <!-- biceps -->
- <g id="biceps-brachii" class="m"><path d="M188 204Q199 205 207 215L202 257Q198 273 188 274Q180 260 181 239Z"/><path d="M312 204Q301 205 293 215L298 257Q302 273 312 274Q320 260 319 239Z"/></g>
- <!-- forearms -->
- <g id="forearms-anterior" class="ma"><path d="M181 270Q190 274 199 266L194 303Q190 315 184 308Q177 297 181 270Z"/><path d="M319 270Q310 274 301 266L306 303Q310 315 316 308Q323 297 319 270Z"/></g>
- <!-- abs -->
- <g id="rectus-abdominis" class="m">
- <path d="M229 214Q239 209 248 214L248 246Q238 251 229 245Z"/><path d="M252 214Q261 209 271 214L271 245Q262 251 252 246Z"/>
- <path d="M229 250Q239 255 248 250L248 280Q238 284 229 278Z"/><path d="M252 250Q261 255 271 250L271 278Q262 284 252 280Z"/>
- <path d="M230 284Q239 289 248 284L247 309Q238 313 231 306Z"/><path d="M253 284Q262 289 270 284L269 306Q262 313 253 309Z"/>
- </g>
- <g id="obliques" class="ma"><path d="M214 211Q224 215 226 245L222 291Q216 305 211 292L207 249Z"/><path d="M286 211Q276 215 274 245L278 291Q284 305 289 292L293 249Z"/></g>
- <!-- quads -->
- <g id="quadriceps" class="m"><path d="M211 365Q226 356 245 365L241 421Q235 455 228 482Q215 481 208 464L211 411Z"/><path d="M255 365Q274 356 289 365L289 411L292 464Q285 481 272 482Q265 455 259 421Z"/></g>
- <g id="abductors" class="ma"><path d="M207 369Q216 365 222 376L217 423Q213 438 207 430Q201 409 203 386Z"/><path d="M293 369Q284 365 278 376L283 423Q287 438 293 430Q299 409 297 386Z"/></g>
- <g id="adductors" class="ma"><path d="M242 374Q249 369 249 383L246 438Q242 451 237 438L235 398Z"/><path d="M258 374Q251 369 251 383L254 438Q258 451 263 438L265 398Z"/></g>
- <g class="fiber"><path d="M219 374Q225 421 216 462M236 371Q239 418 226 470M280 374Q274 421 284 462M263 371Q260 418 273 470"/></g>
- <!-- tibialis -->
- <g id="tibialis-anterior" class="ma"><path d="M211 488Q221 483 229 489L218 570Q214 585 205 580Q202 570 205 548Z"/><path d="M289 488Q279 483 271 489L282 570Q286 585 295 580Q298 570 295 548Z"/></g>
- <!-- anatomical contour lines -->
- <path class="fine" d="M250 171V207M250 312Q244 332 250 351M215 354Q250 366 285 354M250 366V405M221 485Q250 494 279 485M250 488V572"/>
+<text class="view-title" x="250" y="22">Vista frontal</text>
+<text class="view-title" x="710" y="22">Vista posterior</text>
+<g id="front-view" transform="translate(250 36)">
+<g class="skin"><use href="#sf-head"/><use href="#sf-sil-half"/><use href="#sf-sil-half" transform="scale(-1 1)"/></g>
+<g class="vol" fill="url(#sf-vol)"><use href="#sf-sil-half"/><use href="#sf-sil-half" transform="scale(-1 1)"/></g>
+<g class="hair"><path d="M-22.5,40 C-27,4 -10,-4 2,-3 C18,-4 28,6 22.5,40 C21,32 20,26 18,22 C12,18 6,20 0,15 C-6,21 -14,19 -18,23 C-20,28 -21,34 -22.5,40 Z"/></g>
+<path class="strand" d="M-14,10 C-8,4 6,2 16,8 M-18,20 C-12,12 4,8 14,14 M-4,5 C-2,10 2,14 6,15"/>
+<g id="front-muscles">
+<g id="quadriceps" class="muscle level-0" data-muscle="quadriceps" data-view="front" tabindex="0"><title>Cuádriceps</title><path id="quadriceps-r" d="M6,262 C22,258 42,262 50,274 C54,306 54,330 50,346 C42,352 32,350 24,346 C14,320 8,292 6,262 Z"/><use href="#quadriceps-r" transform="scale(-1 1)"/></g>
+<g id="tibialis-anterior" class="muscle level-0 tone-b" data-muscle="tibialis-anterior" data-view="front" tabindex="0"><title>Tibial anterior</title><path id="tibialis-anterior-r" d="M26,372 C34,366 42,368 44,378 C46,410 44,436 40,452 C34,448 30,420 28,400 C26,388 26,380 26,372 Z"/><use href="#tibialis-anterior-r" transform="scale(-1 1)"/></g>
+<g id="external-obliques" class="muscle level-0 tone-b" data-muscle="external-obliques" data-view="front" tabindex="0"><title>Oblicuos externos</title><path id="external-obliques-r" d="M30,146 C40,142 48,142 52,146 C52,180 50,210 46,232 C38,236 30,236 26,236 C30,210 30,176 30,146 Z"/><use href="#external-obliques-r" transform="scale(-1 1)"/></g>
+<g id="rectus-abdominis" class="muscle level-0" data-muscle="rectus-abdominis" data-view="front" tabindex="0"><title>Recto abdominal</title><path id="rectus-abdominis-r" d="M3,148 L26,148 C28,176 28,206 24,236 L3,240 Z"/><use href="#rectus-abdominis-r" transform="scale(-1 1)"/></g>
+<g id="pectoralis-major" class="muscle level-0" data-muscle="pectoralis-major" data-view="front" tabindex="0"><title>Pectoral mayor</title><path id="pectoralis-major-r" d="M4,100 C20,96 42,98 58,104 C58,122 52,138 38,142 C22,144 10,138 4,128 Z"/><use href="#pectoralis-major-r" transform="scale(-1 1)"/></g>
+<g id="forearms" class="muscle level-0 tone-b" data-muscle="forearms" data-view="front" tabindex="0"><title>Antebrazos</title><path id="forearms-r" d="M70,194 C78,190 86,196 88,212 C90,236 92,256 92,268 L84,270 C78,252 72,230 68,212 C66,204 68,198 70,194 Z"/><use href="#forearms-r" transform="scale(-1 1)"/></g>
+<g id="biceps" class="muscle level-0" data-muscle="biceps" data-view="front" tabindex="0"><title>Bíceps braquial</title><path id="biceps-r" d="M66,146 C72,142 80,146 82,160 C83,172 82,182 80,188 C74,188 68,184 66,176 C64,166 64,154 66,146 Z"/><use href="#biceps-r" transform="scale(-1 1)"/></g>
+<g id="deltoid-anterior" class="muscle level-0 tone-b" data-muscle="deltoid-anterior" data-view="front" tabindex="0"><title>Deltoides anterior</title><path id="deltoid-anterior-r" d="M52,100 C56,95 62,94 64,94 C68,114 70,132 74,144 C66,146 58,130 56,118 C54,110 52,106 52,100 Z"/><use href="#deltoid-anterior-r" transform="scale(-1 1)"/></g>
+<g id="deltoid-lateral" class="muscle level-0" data-muscle="deltoid-lateral" data-view="front" tabindex="0"><title>Deltoides lateral</title><path id="deltoid-lateral-r" d="M64,94 C74,92 82,102 81,120 C80,130 78,138 74,144 C70,132 68,114 64,94 Z"/><use href="#deltoid-lateral-r" transform="scale(-1 1)"/></g>
 </g>
-<!-- POSTERIOR -->
-<g id="posterior" class="outline">
- <path class="skinBack" d="M728 111Q725 126 715 137L715 153Q696 156 679 168Q660 181 657 208L669 285Q673 306 685 317L697 308L690 236L699 205L707 190L711 235L707 300Q707 329 716 358L707 408L694 487Q688 525 687 564L684 608Q683 622 696 624L718 625Q730 621 730 606L741 534L750 454L760 534L770 606Q770 621 784 625L806 624Q818 621 815 607L812 563Q810 525 803 487L791 408L784 358Q793 329 793 300L789 235L793 190L801 205L810 236L803 308L815 317Q827 306 831 285L843 208Q840 181 821 168Q804 156 785 153L785 137Q775 126 772 111Z"/>
- <path class="skinBack" d="M728 104Q718 80 729 68Q750 53 771 68Q782 80 772 104Q765 121 750 124Q735 121 728 104Z"/>
- <path class="skinBack" d="M722 118Q750 132 778 118L785 157Q770 171 750 171Q730 171 715 157Z"/>
- <!-- trapezius -->
- <g id="trapezius" class="md"><path d="M723 158L750 143L777 158L790 190L773 216L750 231L727 216L710 190Z"/></g>
- <!-- posterior deltoids -->
- <g id="deltoids-posterior" class="ma"><path d="M681 171Q696 157 714 164Q723 177 715 197Q704 207 690 201Q679 190 681 171Z"/><path d="M819 171Q804 157 786 164Q777 177 785 197Q796 207 810 201Q821 190 819 171Z"/></g>
- <!-- triceps -->
- <g id="triceps-brachii" class="m"><path d="M688 204Q700 207 708 218L702 258Q698 275 688 275Q680 260 681 239Z"/><path d="M812 204Q800 207 792 218L798 258Q802 275 812 275Q820 260 819 239Z"/></g>
- <!-- forearms posterior -->
- <g id="forearms-posterior" class="ma"><path d="M681 270Q690 274 699 266L694 303Q690 315 684 308Q677 297 681 270Z"/><path d="M819 270Q810 274 801 266L806 303Q810 315 816 308Q823 297 819 270Z"/></g>
- <!-- lats -->
- <g id="latissimus-dorsi" class="m"><path d="M716 211Q731 218 747 230L746 299Q734 319 714 306Q701 283 704 249Z"/><path d="M784 211Q769 218 753 230L754 299Q766 319 786 306Q799 283 796 249Z"/></g>
- <!-- spinal erectors -->
- <g id="erector-spinae" class="ma"><path d="M746 230Q750 225 754 230L756 328Q753 340 750 343Q747 340 744 328Z"/></g>
- <!-- glutes -->
- <g id="gluteus-maximus" class="m"><path d="M711 333Q730 323 748 337L747 385Q734 401 714 389Q704 367 711 333Z"/><path d="M752 337Q770 323 789 333Q796 367 786 389Q766 401 753 385Z"/></g>
- <g id="gluteus-medius" class="ma"><path d="M710 322Q723 310 744 320L748 340Q730 330 713 345Z"/><path d="M756 320Q777 310 790 322L787 345Q770 330 752 340Z"/></g>
- <!-- hamstrings -->
- <g id="hamstrings" class="m"><path d="M711 399Q728 393 746 401L741 465Q735 484 722 485Q711 466 709 438Z"/><path d="M754 401Q772 393 789 399L791 438Q789 466 778 485Q765 484 759 465Z"/></g>
- <!-- calves -->
- <g id="gastrocnemius" class="ma"><path d="M710 489Q724 482 739 491Q745 510 736 542L726 568Q716 577 708 563L706 526Z"/><path d="M761 491Q776 482 790 489L794 526L792 563Q784 577 774 568L764 542Q755 510 761 491Z"/></g>
- <g class="fiber"><path d="M719 410Q725 447 717 473M737 407Q741 445 730 478M781 410Q775 447 783 473M763 407Q759 445 770 478M719 497Q731 525 716 557M781 497Q769 525 784 557"/></g>
- <path class="fine" d="M750 174V224M750 344V390M750 400V482M750 490V570"/>
+<g class="detail"><path d="M0,148 L0,242"/><path d="M4,168 L26,168"/><path d="M4,190 L26,190"/><path d="M4,212 L25,212"/><path d="M-4,168 L-26,168"/><path d="M-4,190 L-26,190"/><path d="M-4,212 L-25,212"/><ellipse cx="0" cy="229" rx="2" ry="3"/><ellipse cx="32" cy="352" rx="8" ry="9"/><ellipse cx="-32" cy="352" rx="8" ry="9"/></g>
 </g>
-<!-- callouts left -->
-<g>
- <path class="call" d="M213 180H104L88 165"/><circle class="dot" cx="213" cy="180" r="3.5"/><text class="label" x="82" y="160" text-anchor="end">Deltoides</text>
- <path class="call" d="M218 190H112L95 204"/><circle class="dot" cx="218" cy="190" r="3.5"/><text class="label" x="89" y="209" text-anchor="end">Pectoral</text>
- <path class="call" d="M221 260H111L95 275"/><circle class="dot" cx="221" cy="260" r="3.5"/><text class="label" x="89" y="280" text-anchor="end">Bíceps</text>
- <path class="call" d="M229 291H119L103 306"/><circle class="dot" cx="229" cy="291" r="3.5"/><text class="label" x="97" y="311" text-anchor="end">Abdominales</text>
- <path class="call" d="M214 430H112L95 445"/><circle class="dot" cx="214" cy="430" r="3.5"/><text class="label" x="89" y="450" text-anchor="end">Cuádriceps</text>
- <path class="call" d="M213 536H119L103 551"/><circle class="dot" cx="213" cy="536" r="3.5"/><text class="label" x="97" y="556" text-anchor="end">Tibial anterior</text>
+<g id="back-view" transform="translate(710 36)">
+<g class="skin"><use href="#sf-head"/><use href="#sf-sil-half"/><use href="#sf-sil-half" transform="scale(-1 1)"/></g>
+<g class="vol" fill="url(#sf-vol)"><use href="#sf-sil-half"/><use href="#sf-sil-half" transform="scale(-1 1)"/></g>
+<g class="hair"><path d="M-22.5,42 C-28,2 -10,-5 0,-5 C10,-5 28,2 22.5,42 C22,52 14,60 0,61 C-14,60 -22,52 -22.5,42 Z"/></g>
+<path class="strand" d="M0,-3 C-2,20 -2,40 0,58 M-12,2 C-16,22 -14,42 -8,56 M12,2 C16,22 14,42 8,56 M-19,16 C-21,30 -19,42 -15,50 M19,16 C21,30 19,42 15,50"/>
+<g id="back-muscles">
+<g id="soleus" class="muscle level-0 tone-b" data-muscle="soleus" data-view="back" tabindex="0"><title>Sóleo</title><path id="soleus-r" d="M22,420 C28,430 40,432 44,420 C46,436 44,452 40,464 C34,466 28,462 26,450 C24,440 22,430 22,420 Z"/><use href="#soleus-r" transform="scale(-1 1)"/></g>
+<g id="gastrocnemius" class="muscle level-0" data-muscle="gastrocnemius" data-view="back" tabindex="0"><title>Gemelos</title><path id="gastrocnemius-r" d="M18,360 C30,354 42,356 47,366 C49,390 46,416 40,436 C34,440 28,436 24,428 C18,408 16,382 18,360 Z"/><use href="#gastrocnemius-r" transform="scale(-1 1)"/></g>
+<g id="hamstrings" class="muscle level-0" data-muscle="hamstrings" data-view="back" tabindex="0"><title>Isquiotibiales</title><path id="hamstrings-r" d="M4,292 C20,294 40,292 50,284 C54,310 52,332 48,346 C38,352 28,350 22,346 C12,326 6,308 4,292 Z"/><use href="#hamstrings-r" transform="scale(-1 1)"/></g>
+<g id="gluteus-maximus" class="muscle level-0 tone-b" data-muscle="gluteus-maximus" data-view="back" tabindex="0"><title>Glúteo mayor</title><path id="gluteus-maximus-r" d="M2,244 C14,238 30,242 38,250 C50,252 54,266 48,280 C38,292 18,292 6,282 C2,272 2,258 2,244 Z"/><use href="#gluteus-maximus-r" transform="scale(-1 1)"/></g>
+<g id="gluteus-medius" class="muscle level-0" data-muscle="gluteus-medius" data-view="back" tabindex="0"><title>Glúteo medio</title><path id="gluteus-medius-r" d="M24,226 C34,218 48,222 52,236 C50,244 42,248 34,248 C28,242 24,234 24,226 Z"/><use href="#gluteus-medius-r" transform="scale(-1 1)"/></g>
+<g id="latissimus-dorsi" class="muscle level-0" data-muscle="latissimus-dorsi" data-view="back" tabindex="0"><title>Dorsal ancho</title><path id="latissimus-dorsi-r" d="M26,140 C36,128 50,118 56,114 C58,140 52,170 40,196 C32,200 24,196 18,190 C20,170 22,150 26,140 Z"/><use href="#latissimus-dorsi-r" transform="scale(-1 1)"/></g>
+<g id="erector-spinae" class="muscle level-0 tone-b" data-muscle="erector-spinae" data-view="back" tabindex="0"><title>Erectores espinales</title><path id="erector-spinae-r" d="M4,170 C10,172 16,178 18,190 C20,206 20,222 18,236 L4,238 Z"/><use href="#erector-spinae-r" transform="scale(-1 1)"/></g>
+<g id="trapezius" class="muscle level-0 tone-b" data-muscle="trapezius" data-view="back" tabindex="0"><title>Trapecio</title><path id="trapezius-r" d="M0,78 L10,80 C30,84 48,90 58,98 C52,110 40,118 28,134 C18,148 8,158 0,166 Z"/><use href="#trapezius-r" transform="scale(-1 1)"/></g>
+<g id="triceps" class="muscle level-0" data-muscle="triceps" data-view="back" tabindex="0"><title>Tríceps</title><path id="triceps-r" d="M62,142 C72,140 82,146 83,162 C84,174 82,184 80,190 C72,190 66,184 64,172 C62,160 62,150 62,142 Z"/><use href="#triceps-r" transform="scale(-1 1)"/></g>
+<g id="deltoid-posterior" class="muscle level-0 tone-b" data-muscle="deltoid-posterior" data-view="back" tabindex="0"><title>Deltoides posterior</title><path id="deltoid-posterior-r" d="M56,96 C68,92 80,100 80,120 C80,132 76,138 72,142 C64,134 58,120 56,108 Z"/><use href="#deltoid-posterior-r" transform="scale(-1 1)"/></g>
 </g>
-<!-- callouts right -->
-<g>
- <path class="call" d="M778 180H888L904 165"/><circle class="dot" cx="778" cy="180" r="3.5"/><text class="label" x="910" y="160">Trapecio</text>
- <path class="call" d="M785 258H889L905 243"/><circle class="dot" cx="785" cy="258" r="3.5"/><text class="label" x="911" y="238">Tríceps</text>
- <path class="call" d="M784 290H889L905 305"/><circle class="dot" cx="784" cy="290" r="3.5"/><text class="label" x="911" y="310">Dorsal ancho</text>
- <path class="call" d="M786 362H889L905 377"/><circle class="dot" cx="786" cy="362" r="3.5"/><text class="label" x="911" y="382">Glúteos</text>
- <path class="call" d="M785 438H889L905 453"/><circle class="dot" cx="785" cy="438" r="3.5"/><text class="label" x="911" y="458">Isquiotibiales</text>
- <path class="call" d="M785 530H889L905 545"/><circle class="dot" cx="785" cy="530" r="3.5"/><text class="label" x="911" y="550">Gemelos</text>
+<g class="detail"><path d="M0,78 L0,262"/><ellipse cx="32" cy="352" rx="7" ry="6"/><ellipse cx="-32" cy="352" rx="7" ry="6"/></g>
 </g>
-<g transform="translate(320 657)"><rect x="0" y="-11" width="14" height="14" rx="4" fill="#e96d62"/><text x="22" y="1" class="sub">GRUPOS MUSCULARES PRINCIPALES</text><text x="680" y="1" text-anchor="end" class="sub">ILUSTRACIÓN ORIENTATIVA</text></g>
+<g class="labels">
+<path class="lead" d="M140,154 H220"/><circle class="dot" cx="220" cy="154" r="2"/><text class="label" x="134" y="158" text-anchor="end">Pectoral mayor</text>
+<path class="lead" d="M140,226 H236"/><circle class="dot" cx="236" cy="226" r="2"/><text class="label" x="134" y="230" text-anchor="end">Recto abdominal</text>
+<path class="lead" d="M140,341 H222"/><circle class="dot" cx="222" cy="341" r="2"/><text class="label" x="134" y="345" text-anchor="end">Cuádriceps</text>
+<path class="lead" d="M140,446 H215"/><circle class="dot" cx="215" cy="446" r="2"/><text class="label" x="134" y="450" text-anchor="end">Tibial anterior</text>
+<path class="lead" d="M362,140 H308"/><circle class="dot" cx="308" cy="140" r="2"/><text class="label" x="368" y="144">Deltoides anterior</text>
+<path class="lead" d="M362,158 H326"/><circle class="dot" cx="326" cy="158" r="2"/><text class="label" x="368" y="162">Deltoides lateral</text>
+<path class="lead" d="M362,202 H324"/><circle class="dot" cx="324" cy="202" r="2"/><text class="label" x="368" y="206">Bíceps braquial</text>
+<path class="lead" d="M362,236 H296"/><circle class="dot" cx="296" cy="236" r="2"/><text class="label" x="368" y="240">Oblicuos externos</text>
+<path class="lead" d="M362,266 H330"/><circle class="dot" cx="330" cy="266" r="2"/><text class="label" x="368" y="270">Antebrazos</text>
+<path class="lead" d="M600,154 H688"/><circle class="dot" cx="688" cy="154" r="2"/><text class="label" x="594" y="158" text-anchor="end">Trapecio</text>
+<path class="lead" d="M600,196 H670"/><circle class="dot" cx="670" cy="196" r="2"/><text class="label" x="594" y="200" text-anchor="end">Dorsal ancho</text>
+<path class="lead" d="M600,241 H700"/><circle class="dot" cx="700" cy="241" r="2"/><text class="label" x="594" y="245" text-anchor="end">Erectores espinales</text>
+<path class="lead" d="M600,304 H680"/><circle class="dot" cx="680" cy="304" r="2"/><text class="label" x="594" y="308" text-anchor="end">Glúteo mayor</text>
+<path class="lead" d="M600,431 H678"/><circle class="dot" cx="678" cy="431" r="2"/><text class="label" x="594" y="435" text-anchor="end">Gemelos</text>
+<path class="lead" d="M824,154 H780"/><circle class="dot" cx="780" cy="154" r="2"/><text class="label" x="830" y="158">Deltoides posterior</text>
+<path class="lead" d="M824,204 H784"/><circle class="dot" cx="784" cy="204" r="2"/><text class="label" x="830" y="208">Tríceps</text>
+<path class="lead" d="M824,272 H752"/><circle class="dot" cx="752" cy="272" r="2"/><text class="label" x="830" y="276">Glúteo medio</text>
+<path class="lead" d="M824,356 H740"/><circle class="dot" cx="740" cy="356" r="2"/><text class="label" x="830" y="360">Isquiotibiales</text>
+<path class="lead" d="M824,482 H750"/><circle class="dot" cx="750" cy="482" r="2"/><text class="label" x="830" y="486">Sóleo</text>
+</g>
 </svg>
