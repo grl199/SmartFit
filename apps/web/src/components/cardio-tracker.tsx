@@ -16,6 +16,7 @@ type Props = {
   category: "walking" | "running";
   onCategoryChange: (category: "walking" | "running") => void;
   onExit: () => void;
+  onTrackingChange: (tracking: boolean) => void;
   onSaved: () => void;
 };
 
@@ -42,7 +43,7 @@ const paceText = (milliseconds: number, kilometres: number) => {
   return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0") + " /km";
 };
 
-export function CardioTracker({ token, category, onCategoryChange, onExit, onSaved }: Props) {
+export function CardioTracker({ token, category, onCategoryChange, onExit, onTrackingChange, onSaved }: Props) {
   const [name, setName] = useState(category === "running" ? "Correr" : "Andar");
   const [date, setDate] = useState(new Date().toLocaleDateString("sv-SE"));
   const [steps, setSteps] = useState("");
@@ -75,7 +76,9 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
     };
     tick();
     const timer = window.setInterval(tick, 1000);
-    return () => window.clearInterval(timer);
+    const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
+    window.addEventListener("beforeunload", guard);
+    return () => { window.clearInterval(timer); window.removeEventListener("beforeunload", guard); };
   }, [status]);
 
   useEffect(() => () => {
@@ -109,6 +112,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
     setAccuracy(null);
     startedAt.current = Date.now();
     setStatus("tracking");
+    onTrackingChange(true);
     try {
       watchId.current = navigator.geolocation.watchPosition(position => {
         const coords = position.coords;
@@ -137,11 +141,13 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
           stopGps();
           startedAt.current = null;
           setStatus("idle");
+          onTrackingChange(false);
         }
       }, { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
     } catch {
       startedAt.current = null;
       setStatus("idle");
+      onTrackingChange(false);
       setGpsError("No se pudo iniciar el GPS. Comprueba los permisos del navegador.");
     }
   }
@@ -151,6 +157,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
     stopGps();
     startedAt.current = null;
     setStatus("finished");
+    onTrackingChange(false);
   }
 
   function discardGps() {
@@ -161,6 +168,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
     setAccuracy(null);
     setGpsError("");
     setStatus("idle");
+    onTrackingChange(false);
   }
 
   function switchToManual() {
@@ -207,6 +215,8 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
         }
       });
       discardGps();
+      setManual(false);
+      setManualDuration("30");
       setNotes("");
       setSteps("");
       setHeartRate("");
