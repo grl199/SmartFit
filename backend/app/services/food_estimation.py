@@ -194,7 +194,7 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
             kwargs["response_format"] = {"type": "json_object"}
         if provider == "gemini":
             kwargs["service_tier"] = settings.gemini_service_tier
-        response = client.chat.completions.create(**kwargs)
+        response = create_chat_completion(client, kwargs, service_tier=kwargs.get("service_tier"))
 
     raw = response.choices[0].message.content or ""
     return normalize_estimate(_parse_json(raw))
