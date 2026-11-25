@@ -145,6 +145,9 @@ def parse_serving_unit(serving_size: str | None, serving_quantity, product_name:
     if not count or count <= 0 or not raw_unit or total is None or total <= 0:
         return None
     name = re.sub(r"[^a-záéíóúüñ]", "", raw_unit)
+    # A plain mass or volume (e.g. "30 g") is not a count of separate units.
+    if name in {"g", "gr", "gram", "grams", "ml", "milliliter", "milliliters", "mililitro", "mililitros"}:
+        return None
     if "rega" in str(product_name or "").lower():
         singular, plural = "regañá", "regañás"
     else:
