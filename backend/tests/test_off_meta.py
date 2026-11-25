@@ -192,3 +192,41 @@ def test_off_product_response_accepts_v3_and_legacy_v2_envelopes():
     assert _extract_off_product({"status": 1, "product": product}) == product
     assert _extract_off_product({"status": "failure"}) is None
     assert _extract_off_product({"status": 0}) is None
+
+
+def test_enrichment_repairs_previously_cached_thousandfold_sodium(client):
+    from app.db import SessionLocal
+    from app.models import Food
+    from app.services.openfoodfacts import enrich_food_from_off
+
+    code = "8412345678901"
+    with SessionLocal() as db:
+        food = Food(
+            name="Café con leche de prueba", barcode=code, source="openfoodfacts",
+            kcal=31, protein_g=1.65, carbs_g=2.4, sugars_g=2.4,
+            fat_g=1.65, sat_fat_g=0.95, fiber_g=0, sodium_mg=146506,
+            extra={"off_enriched": True},
+        )
+        db.add(food)
+        db.commit()
+        food_id = food.id
+
+    product = {
+        "product_name": "Café con leche de prueba",
+        "nutriments": {
+            "energy-kcal_100g": 31, "proteins_100g": 1.65, "carbohydrates_100g": 2.4,
+            "sugars_100g": 2.4, "fat_100g": 1.65, "saturated-fat_100g": 0.95,
+            "sodium_100g": 146.506,
+        },
+    }
+
+    def product_response(url, **kwargs):
+        request = httpx.Request("GET", url)
+        return httpx.Response(200, json={"status": "success", "product": product}, request=request)
+
+    with patch("app.services.openfoodfacts.httpx.get", product_response):
+        with SessionLocal() as db:
+            cached = db.get(Food, food_id)
+            assert enrich_food_from_off(db, cached) is True
+            db.refresh(cached)
+            assert cached.sodium_mg == 146.5
