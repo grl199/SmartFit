@@ -359,7 +359,7 @@ def _store(db: Session, item: dict) -> bool:
     return bool(inserted)
 
 
-def search_off_and_store(db: Session, query: str, page_size: int = 30) -> int:
+def search_off_and_store(db: Session, query: str, page_size: int = 50) -> int:
     """Busca en OFF y guarda en `foods` los productos con datos nutricionales. Devuelve cuántos son nuevos."""
     s = get_settings()
     r = httpx.get(s.off_search_url, params={"q": query, "page": 1, "page_size": page_size, "langs": "es,en", "fields": SEARCH_FIELDS},
@@ -384,7 +384,7 @@ def search_off_and_store(db: Session, query: str, page_size: int = 30) -> int:
 
 
 def online_search_allowed(query: str) -> bool:
-    """Consulta online solo si es nueva (6 h) y hay cupo; marca la consulta como hecha."""
+    """Consulta online solo si es nueva (60 s) y hay cupo; marca la consulta como hecha."""
     key = re.sub(r"\s+", " ", query.strip().lower())
     now = time.monotonic()
     if now - _recent_queries.get(key, -RECENT_TTL_S) < RECENT_TTL_S:
