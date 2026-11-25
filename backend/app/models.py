@@ -245,7 +245,10 @@ class Workout(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario que entrenó.")
     performed_on: Mapped[date] = mapped_column(Date, index=True, comment="Día en que se realizó el entrenamiento.")
     kind: Mapped[str] = mapped_column(String(100), comment="Tipo de entrenamiento en texto libre (fuerza, running, bici...).")
-    duration_min: Mapped[int] = mapped_column(Integer, comment="Duración en minutos.")
+    duration_min: Mapped[int] = mapped_column(Integer, comment="Duración total de la sesión en minutos (suma de los tiempos por ejercicio cuando se registran).")
+    exercise_durations_min: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb"),
+        comment="Minutos dedicados a cada ejercicio en esta sesión. Claves = exercise_id como texto; la suma define duration_min cuando existe.")
     category: Mapped[str | None] = mapped_column(
         String(20), comment="Categoría de la sesión (Cardio = walking/running/sport). Valores: 'strength' | 'walking' | 'running' | 'sport' | 'full_body' | 'stretching'.")
     kcal_burned: Mapped[float | None] = mapped_column(Float, comment="Energía gastada en la sesión, en kcal (estimada por la IA o introducida a mano).")

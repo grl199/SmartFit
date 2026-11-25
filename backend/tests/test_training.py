@@ -85,6 +85,37 @@ def test_workout_with_sets_and_llm_calories(client, onboarded):
     assert "Sentadilla con barra" in prompt and "8x80kg" in prompt and "Peso corporal: 80.0 kg" in prompt and "Fuerza" in prompt and "Pierna" in prompt
 
 
+def test_exercise_durations_are_saved_and_summed(client, onboarded):
+    h = onboarded["headers"]
+    payload = legs_payload(client, h, exercise_durations_min={
+        str(ex_id(client, h, "Sentadilla con barra")): 15,
+        str(ex_id(client, h, "Extensión de piernas")): 10,
+    }, estimate_calories=False)
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 201, response.text
+    workout = response.json()
+    assert workout["duration_min"] == 25
+    assert workout["exercise_durations_min"] == {
+        str(ex_id(client, h, "Sentadilla con barra")): 15,
+        str(ex_id(client, h, "Extensión de piernas")): 10,
+    }
+    assert {row["exercise"]: row["duration_min"] for row in workout["exercises"]} == {
+        "Sentadilla con barra": 15,
+        "Extensión de piernas (cuádriceps)": 10,
+    }
+    stored = client.get("/workouts", headers=h).json()[0]
+    assert stored["duration_min"] == 25
+
+
+def test_exercise_durations_must_cover_every_exercise(client, onboarded):
+    h = onboarded["headers"]
+    squat_id = ex_id(client, h, "Sentadilla con barra")
+    extension_id = ex_id(client, h, "Extensión de piernas")
+    payload = legs_payload(client, h, exercise_durations_min={str(squat_id): 15}, estimate_calories=False)
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 422
+
+
 def test_calories_scale_with_weight_and_duration_in_code(client, onboarded):
     """La IA solo decide el MET; kcal = MET x kg x horas lo calcula el código."""
     h = onboarded["headers"]

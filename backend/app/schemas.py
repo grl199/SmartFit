@@ -285,6 +285,7 @@ class WorkoutIn(BaseModel):
     kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
     category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
+    exercise_durations_min: dict[int, int] = Field(default_factory=dict, description="Minutos totales dedicados a cada ejercicio; la suma sustituye duration_min.")
     kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
     distance_km: float | None = Field(None, gt=0, le=500)
     elevation_gain_m: float | None = Field(None, ge=0, le=10000)
@@ -294,6 +295,22 @@ class WorkoutIn(BaseModel):
     sets: list[SetIn] = Field(default=[], max_length=300)
     estimate_calories: bool = True
 
+    @model_validator(mode="after")
+    def total_duration_from_exercises(self):
+        if not self.exercise_durations_min:
+            return self
+        exercise_ids = {item.exercise_id for item in self.sets}
+        duration_ids = set(self.exercise_durations_min)
+        if duration_ids != exercise_ids:
+            raise ValueError("Indica el tiempo de todos los ejercicios de la sesión.")
+        if any(minutes < 1 or minutes > 600 for minutes in self.exercise_durations_min.values()):
+            raise ValueError("Cada ejercicio debe tener entre 1 y 600 minutos.")
+        total = sum(self.exercise_durations_min.values())
+        if total > 600:
+            raise ValueError("La duración total del entrenamiento no puede superar 600 minutos.")
+        self.duration_min = total
+        return self
+
 
 class WorkoutOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -302,6 +319,7 @@ class WorkoutOut(BaseModel):
     kind: str
     category: str | None = None
     duration_min: int
+    exercise_durations_min: dict[int, int] = Field(default_factory=dict)
     kcal_burned: float | None = None
     kcal_source: str | None = None
     met: float | None = None
@@ -330,6 +348,7 @@ class WorkoutExerciseOut(BaseModel):
     exercise: str
     primary_muscle: str
     sets: list[dict]
+    duration_min: int | None = None
 
 
 class ExerciseFeedbackOut(BaseModel):
