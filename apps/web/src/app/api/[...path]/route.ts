@@ -8,6 +8,23 @@ const API_TARGET = (
   "http://localhost:8000"
 ).replace(/\/+$/, "");
 
+function hasSameOrigin(request: NextRequest): boolean {
+  const originHeader = request.headers.get("origin");
+  const forwardedHost = request.headers.get("x-forwarded-host")?.split(",")[0]?.trim();
+  const hostHeader = request.headers.get("host")?.split(",")[0]?.trim();
+  const requestHost = forwardedHost || hostHeader || request.nextUrl.host;
+  const expectedProtocol = process.env.NODE_ENV === "production" ? "https:" : request.nextUrl.protocol;
+
+  try {
+    if (!originHeader) return false;
+    const origin = new URL(originHeader);
+    const expectedHost = new URL(`${expectedProtocol}//${requestHost}`).host;
+    return origin.protocol === expectedProtocol && origin.host === expectedHost;
+  } catch {
+    return false;
+  }
+}
+
 async function forward(request: NextRequest, context: RouteContext) {
   const { path } = await context.params;
   const pathname = path.map((segment) => encodeURIComponent(segment)).join("/");
@@ -17,11 +34,8 @@ async function forward(request: NextRequest, context: RouteContext) {
 
   const method = request.method.toUpperCase();
   if (accessToken) headers.set("authorization", `Bearer ${accessToken}`);
-  if (accessToken && !["GET", "HEAD", "OPTIONS"].includes(method)) {
-    const origin = request.headers.get("origin");
-    if (!origin || origin !== request.nextUrl.origin) {
-      return NextResponse.json({ detail: "Origen no permitido" }, { status: 403 });
-    }
+  if (accessToken && !["GET", "HEAD", "OPTIONS"].includes(method) && !hasSameOrigin(request)) {
+    return NextResponse.json({ detail: "Origen no permitido" }, { status: 403 });
   }
 
   for (const name of ["accept", "content-type"]) {
