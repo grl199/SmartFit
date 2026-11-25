@@ -18,8 +18,8 @@ def search_hybrid(
     effective_source = "catalog" if source == "generic" else source
     local = search_foods(db, user_id, query, limit * 2 if source == "all" else limit, source=effective_source)
     q = query.strip()
-    # Los filtros explícitos se respetan. En "all" mezclamos ingredientes y productos comerciales;
-    # en el filtro exclusivo de OFF seguimos evitando consultas si ya hay suficientes coincidencias.
+    # El filtro exclusivo de OFF sigue consultando la fuente externa aunque haya pocas o varias coincidencias locales;
+    # en "all" se mezclan resultados genéricos, personales y de marca.
     if source not in ("all", "openfoodfacts") or not online or len(q) < MIN_ONLINE_CHARS:
         return _limit(local, limit, effective_source)
     if not online_search_allowed(q):
