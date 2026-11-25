@@ -94,14 +94,17 @@ def test_onboarding_retries_invalid_plan_then_succeeds(client):
         assert client.post("/onboarding", json=ONBOARDING, headers=u["headers"]).status_code == 200
 
 
-def test_onboarding_rejects_unsafe_llm_output_and_stays_incomplete(client):
+def test_onboarding_falls_back_when_ai_returns_unsafe_plan(client):
     u = register(client)
-    unsafe = {**GOOD_PLAN, "kcal": 900, "carbs_g": 50}  # 900 kcal: por debajo del suelo
+    unsafe = {**GOOD_PLAN, "kcal": 900, "carbs_g": 50}  # no se acepta la propuesta del modelo
     with patch("app.services.plan.chat_text", lambda m, json_mode=False: json.dumps(unsafe)):
         r = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
-    assert r.status_code == 502
-    assert client.get("/auth/me", headers=u["headers"]).json()["onboarding_completed"] is False
-    assert client.get("/profile", headers=u["headers"]).json()["goal"] == "gain_muscle"  # el perfil sí se guardó: se puede reintentar
+    assert r.status_code == 200, r.text
+    assert r.json()["targets"]["source"] == "fallback"
+    assert r.json()["targets"]["kcal"] >= 1500
+    assert client.get("/auth/me", headers=u["headers"]).json()["onboarding_completed"] is True
+    assert client.get("/dashboard/day", headers=u["headers"]).status_code == 200
+    assert client.get("/profile", headers=u["headers"]).json()["goal"] == "gain_muscle"
 
 
 def test_onboarding_validation(client):
