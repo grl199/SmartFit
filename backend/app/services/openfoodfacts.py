@@ -356,6 +356,15 @@ def parse_search_hit(hit: dict) -> dict | None:
     meta = parse_off_meta(hit)
     if clean != raw_name:
         meta["extra"]["original_name"] = raw_name
+    # El índice de búsqueda no siempre trae la miniatura en image_front_small_url.
+    if not meta.get("image_url"):
+        images = hit.get("images") if isinstance(hit.get("images"), dict) else {}
+        front = images.get("front") if isinstance(images.get("front"), dict) else {}
+        thumb = front.get("small") or front.get("display") or front.get("thumb")
+        if isinstance(thumb, dict):
+            thumb = thumb.get("url")
+        if isinstance(thumb, str) and thumb.startswith("https://"):
+            meta["image_url"] = thumb
     return {"code": norm, "name": clean, "brand": brand, "serving_g": _num(hit, "serving_quantity"),
             "serving_unit": parse_serving_unit(hit.get("serving_size"), hit.get("serving_quantity"), raw_name, hit.get("quantity")),
             "nutrients": parse_off_product({"nutriments": _nutriments_flat(hit.get("nutriments"))}), "meta": meta}
