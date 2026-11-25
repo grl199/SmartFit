@@ -44,6 +44,8 @@ class FoodOut(FoodBase):
     allergens: list[str] = []
     ingredients: str | None = None
     categories: list[str] = []
+    labels: list[str] = []
+    serving_size: str | None = None
     generic_name: str | None = None      # «Denominación general» en español
     original_name: str | None = None     # nombre original de OFF si se limpió o tradujo
     barcode_ambiguous: bool = False      # código de uso restringido de tienda (puede repetirse entre productos)

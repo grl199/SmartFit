@@ -9,8 +9,7 @@ from .names import schedule_translation
 from .openfoodfacts import online_search_allowed, search_off_and_store
 
 log = logging.getLogger(__name__)
-MIN_ONLINE_CHARS = 3
-ENOUGH_LOCAL = 5  # con tantos resultados locales no se consulta OFF
+MIN_ONLINE_CHARS = 2
 
 
 def search_hybrid(
@@ -23,7 +22,7 @@ def search_hybrid(
     # en el filtro exclusivo de OFF seguimos evitando consultas si ya hay suficientes coincidencias.
     if source not in ("all", "openfoodfacts") or not online or len(q) < MIN_ONLINE_CHARS:
         return _limit(local, limit, effective_source)
-    if (source == "openfoodfacts" and len(local) >= ENOUGH_LOCAL) or not online_search_allowed(q):
+    if not online_search_allowed(q):
         return _limit(_mix(local, limit) if source == "all" else local, limit, effective_source)
     try:
         added = search_off_and_store(db, q)
