@@ -147,6 +147,7 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
     w = Workout(user_id=uid, performed_on=body.performed_on or today_local(), kind=body.kind.strip(), category=body.category,
                 duration_min=body.duration_min,
                 exercise_durations_min={str(k): v for k, v in body.exercise_durations_min.items()},
+                route_points=[point.model_dump(mode="json") for point in body.route_points],
                 notes=body.notes, kcal_burned=body.kcal_burned,
                 distance_km=body.distance_km, elevation_gain_m=body.elevation_gain_m,
                 steps=body.steps if body.category in {"walking", "running"} else None, avg_hr_bpm=body.avg_hr_bpm,

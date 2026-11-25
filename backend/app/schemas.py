@@ -1,4 +1,5 @@
 import datetime as dt
+import math
 from datetime import date, datetime
 from typing import Literal
 
@@ -280,12 +281,21 @@ class SetOut(BaseModel):
     rpe: float | None = None
 
 
+class RoutePointIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    altitude_m: float | None = Field(None, ge=-1000, le=10000)
+    accuracy_m: float | None = Field(None, ge=0, le=10000)
+    recorded_at: datetime
+
+
 class WorkoutIn(BaseModel):
     performed_on: date | None = None
     kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
     category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
     exercise_durations_min: dict[int, int] = Field(default_factory=dict, description="Minutos totales dedicados a cada ejercicio; la suma sustituye duration_min.")
+    route_points: list[RoutePointIn] = Field(default_factory=list, max_length=10000)
     kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
     distance_km: float | None = Field(None, gt=0, le=500)
     elevation_gain_m: float | None = Field(None, ge=0, le=10000)
@@ -297,6 +307,25 @@ class WorkoutIn(BaseModel):
 
     @model_validator(mode="after")
     def total_duration_from_exercises(self):
+        if self.route_points and self.category not in {"walking", "running"}:
+            raise ValueError("La ruta GPS solo se puede guardar en sesiones de andar o correr.")
+        if len(self.route_points) > 1:
+            route_distance = 0.0
+            for previous, current in zip(self.route_points, self.route_points[1:]):
+                lat1, lat2 = math.radians(previous.lat), math.radians(current.lat)
+                dlat = lat2 - lat1
+                dlng = math.radians(current.lng - previous.lng)
+                a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlng / 2) ** 2
+                route_distance += 6371.0088 * 2 * math.atan2(math.sqrt(a), math.sqrt(max(0.0, 1 - a)))
+            if route_distance > 0:
+                self.distance_km = round(route_distance, 3)
+            elevation_gain = sum(
+                max(0.0, current.altitude_m - previous.altitude_m)
+                for previous, current in zip(self.route_points, self.route_points[1:])
+                if previous.altitude_m is not None and current.altitude_m is not None
+            )
+            if elevation_gain > 0:
+                self.elevation_gain_m = round(elevation_gain)
         if not self.exercise_durations_min:
             return self
         exercise_ids = {item.exercise_id for item in self.sets}
@@ -320,6 +349,7 @@ class WorkoutOut(BaseModel):
     category: str | None = None
     duration_min: int
     exercise_durations_min: dict[int, int] = Field(default_factory=dict)
+    route_points: list[dict] = Field(default_factory=list)
     kcal_burned: float | None = None
     kcal_source: str | None = None
     met: float | None = None

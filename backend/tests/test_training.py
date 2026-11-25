@@ -115,6 +115,36 @@ def test_exercise_durations_must_cover_every_exercise(client, onboarded):
     assert response.status_code == 422
 
 
+def test_gps_route_is_saved_and_calculates_distance(client, onboarded):
+    h = onboarded["headers"]
+    payload = {
+        "kind": "Carrera GPS", "category": "running", "duration_min": 2,
+        "route_points": [
+            {"lat": 40.4168, "lng": -3.7038, "altitude_m": 650, "accuracy_m": 5, "recorded_at": "2026-11-25T12:00:00Z"},
+            {"lat": 40.4178, "lng": -3.7038, "altitude_m": 655, "accuracy_m": 4, "recorded_at": "2026-11-25T12:02:00Z"},
+        ],
+        "estimate_calories": False,
+    }
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 201, response.text
+    workout = response.json()
+    assert workout["distance_km"] == 0.111
+    assert workout["elevation_gain_m"] == 5
+    assert len(workout["route_points"]) == 2
+    stored = client.get("/workouts", headers=h).json()[0]
+    assert len(stored["route_points"]) == 2
+
+
+def test_gps_route_is_rejected_for_strength(client, onboarded):
+    h = onboarded["headers"]
+    payload = {
+        "kind": "Fuerza", "category": "strength", "duration_min": 30,
+        "route_points": [{"lat": 40.4168, "lng": -3.7038, "recorded_at": "2026-11-25T12:00:00Z"}],
+        "estimate_calories": False,
+    }
+    assert client.post("/workouts", headers=h, json=payload).status_code == 422
+
+
 def test_steps_are_kept_only_for_walking_and_running(client, onboarded):
     h = onboarded["headers"]
     for category in ("strength", "sport", "full_body", "stretching"):

@@ -34,6 +34,7 @@ _COLUMNS = [
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS intensity VARCHAR(10)",
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kcal_note TEXT",
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS exercise_durations_min JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS route_points JSONB NOT NULL DEFAULT '[]'::jsonb",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercises_owner_name ON exercises (coalesce(user_id, 0), lower(name))",
     # Andar/correr: métricas
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS distance_km DOUBLE PRECISION",
