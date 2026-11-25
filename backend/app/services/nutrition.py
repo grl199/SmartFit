@@ -22,7 +22,7 @@ def scale(food, grams: float) -> dict[str, float]:
         # Defensive repair for legacy imports that stored sodium in µg or multiplied mg by 1000.
         if nutrient == "sodium_mg" and per_100g > 10000:
             per_100g /= 1000
-        values[nutrient] = round(per_100g * k, 2)
+        values[nutrient] = round(per_100g * k, 3 if nutrient == "sodium_mg" else 2)
     return values
 
 
