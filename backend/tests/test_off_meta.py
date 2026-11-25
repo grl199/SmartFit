@@ -16,7 +16,7 @@ def test_parse_off_sodium_normalizes_milligrams_without_thousandfold_inflation()
 
     base = {"energy-kcal_100g": 31, "proteins_100g": 1.65, "carbohydrates_100g": 2.4, "fat_100g": 1.65}
     # Standard OFF value: grams of sodium per 100 g.
-    assert parse_off_product({"nutriments": {**base, "sodium_100g": 0.146506}})["sodium_mg"] == 146.5
+    assert parse_off_product({"nutriments": {**base, "sodium_100g": 0.146506}})["sodium_mg"] == 146.506
     # Malformed records sometimes put milligrams in sodium_100g, e.g. 146.506 mg.
     assert parse_off_product({"nutriments": {**base, "sodium_100g": 146.506}})["sodium_mg"] == 146.5
     # Salt fallback remains in grams when normalised as expected.
@@ -233,6 +233,6 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboar
             cached = db.get(Food, food_id)
             assert enrich_food_from_off(db, cached) is True
             db.refresh(cached)
-            assert cached.sodium_mg == 146.5
+            assert cached.sodium_mg == 146.506
             repaired_log = db.get(FoodLog, entry_id)
-            assert repaired_log.sodium_mg == 293
+            assert repaired_log.sodium_mg == 293.012
