@@ -115,10 +115,8 @@ def test_gemini_flex_503_falls_back_to_standard():
     )
 
     assert result.result == "respuesta"
-    assert [request["service_tier"] for request in fake.chat.completions.requests] == [
-        "flex",
-        "standard",
-    ]
+    assert fake.chat.completions.requests[0]["service_tier"] == "flex"
+    assert "service_tier" not in fake.chat.completions.requests[1]
 
 
 def test_gemini_standard_503_is_not_retried_as_flex():

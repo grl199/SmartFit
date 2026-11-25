@@ -157,7 +157,7 @@ def create_chat_completion(client: OpenAI, request: dict, service_tier: str | No
         if service_tier != "flex" or getattr(exc, "status_code", None) != 503:
             raise
         fallback_request = dict(request)
-        fallback_request["service_tier"] = "standard"
+        fallback_request.pop("service_tier", None)
         log.warning(
             "Gemini devolvió HTTP 503 en Flex; se reintenta la petición en Standard."
         )
