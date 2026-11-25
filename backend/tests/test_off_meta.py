@@ -114,6 +114,20 @@ def test_parse_search_hit_uses_front_image_variants_when_small_url_missing():
 
 
 
+def test_scale_corrects_legacy_sodium_value_misrecorded_as_micrograms():
+    from types import SimpleNamespace
+    from app.services.nutrition import scale
+
+    food = SimpleNamespace(
+        kcal=50, protein_g=3, carbs_g=5, sugars_g=4, fat_g=2,
+        sat_fat_g=1, fiber_g=0, sodium_mg=146506,
+    )
+    scaled = scale(food, 100)
+    assert scaled["sodium_mg"] == 146.51
+    assert scale(food, 200)["sodium_mg"] == 293.01
+
+
+
 
 def test_parse_off_serving_unit_requires_explicit_count_and_uses_hacendado_piece_name():
     from app.services.openfoodfacts import parse_serving_unit
