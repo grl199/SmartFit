@@ -125,7 +125,8 @@ def parse_serving_unit(serving_size: str | None, serving_quantity, product_name:
     except (TypeError, ValueError):
         total = None
     if total is None or total <= 0:
-        weight = re.search(r"\(\s*(\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\s*\)", text)
+        # Puede aparecer tanto "2 pieces (30 g)" como "30 g (2 pieces)".
+        weight = re.search(r"(\d+(?:[.,]\d+)?)\s*(?:g|gr|ml)\b", text)
         if weight:
             total = float(weight.group(1).replace(",", "."))
     patterns = (
@@ -137,17 +138,19 @@ def parse_serving_unit(serving_size: str | None, serving_quantity, product_name:
         match = re.search(pattern, text)
         if match:
             try:
+                candidate_unit = match.group(2).strip().rstrip("s")
+                candidate_name = re.sub(r"[^a-záéíóúüñ]", "", candidate_unit)
+                # Skip mass/volume tokens and continue looking for an explicit item count.
+                if candidate_name in {"g", "gr", "gram", "grams", "ml", "milliliter", "milliliters", "mililitro", "mililitros"}:
+                    continue
                 count = float(match.group(1).replace(",", "."))
-                raw_unit = match.group(2).strip().rstrip("s")
+                raw_unit = candidate_unit
                 break
             except (TypeError, ValueError):
                 continue
     if not count or count <= 0 or not raw_unit or total is None or total <= 0:
         return None
     name = re.sub(r"[^a-záéíóúüñ]", "", raw_unit)
-    # A plain mass or volume (e.g. "30 g") is not a count of separate units.
-    if name in {"g", "gr", "gram", "grams", "ml", "milliliter", "milliliters", "mililitro", "mililitros"}:
-        return None
     if "rega" in str(product_name or "").lower():
         singular, plural = "regañá", "regañás"
     else:
