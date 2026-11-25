@@ -16,7 +16,14 @@ TARGET_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g", "fiber_g")
 def scale(food, grams: float) -> dict[str, float]:
     """Nutrientes consumidos = valor_por_100g * gramos / 100."""
     k = grams / 100
-    return {n: round((getattr(food, n) or 0) * k, 2) for n in NUTRIENTS}
+    values = {}
+    for nutrient in NUTRIENTS:
+        per_100g = float(getattr(food, nutrient) or 0)
+        # Defensive repair for legacy imports that stored sodium in µg or multiplied mg by 1000.
+        if nutrient == "sodium_mg" and per_100g > 10000:
+            per_100g /= 1000
+        values[nutrient] = round(per_100g * k, 2)
+    return values
 
 
 def guess_meal(hour: int) -> str:
