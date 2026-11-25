@@ -118,8 +118,6 @@ def parse_off_meta(product: dict) -> dict:
 def parse_serving_unit(serving_size: str | None, serving_quantity, product_name: str = "", package_quantity: str | None = None) -> dict | None:
     """Interpreta solo unidades declaradas explícitamente por OFF; nunca inventa gramos por pieza."""
     text = str(serving_size or "").strip().lower()
-    if not text:
-        return None
     try:
         total = float(str(serving_quantity).replace(",", ".")) if serving_quantity is not None else None
     except (TypeError, ValueError):
