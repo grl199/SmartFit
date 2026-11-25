@@ -194,7 +194,7 @@ def test_off_product_response_accepts_v3_and_legacy_v2_envelopes():
     assert _extract_off_product({"status": 0}) is None
 
 
-def test_enrichment_repairs_previously_cached_thousandfold_sodium(client):
+def test_enrichment_repairs_previously_cached_thousandfold_sodium(client, onboarded):
     from app.db import SessionLocal
     from app.models import Food
     from app.services.openfoodfacts import enrich_food_from_off
@@ -210,6 +210,10 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client):
         db.add(food)
         db.commit()
         food_id = food.id
+        from app.services.nutrition import create_log
+        entry = create_log(db, onboarded["id"], food, 200)
+        entry_id = entry.id
+        assert entry.sodium_mg == 293012
 
     product = {
         "product_name": "Café con leche de prueba",
@@ -230,3 +234,5 @@ def test_enrichment_repairs_previously_cached_thousandfold_sodium(client):
             assert enrich_food_from_off(db, cached) is True
             db.refresh(cached)
             assert cached.sodium_mg == 146.5
+            repaired_log = db.get(__import__("app.models", fromlist=["FoodLog"]).FoodLog, entry_id)
+            assert repaired_log.sodium_mg == 293
