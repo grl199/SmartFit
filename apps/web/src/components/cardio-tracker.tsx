@@ -1,6 +1,7 @@
 "use client";
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
+import { GeoRouteMap } from "@/components/geo-route-map";
 
 type RoutePoint = {
   lat: number;
@@ -299,14 +300,8 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
           <span className="count-chip">{accuracy != null ? "±" + Math.round(accuracy) + " m" : "GPS"}</span>
         </div>
         <div className="cardio-route-map">
-          {points.length > 1 ? (
-            <svg viewBox="0 0 640 260" role="img" aria-label="Trazado GPS del recorrido">
-              <polyline points={route} fill="none" stroke="#6f9d5b" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
-              <circle cx={route.split(" ")[0].split(",")[0]} cy={route.split(" ")[0].split(",")[1]} r="8" fill="#467a45" stroke="white" strokeWidth="3" />
-              <circle cx={route.split(" ").slice(-1)[0].split(",")[0]} cy={route.split(" ").slice(-1)[0].split(",")[1]} r="8" fill="#c65c45" stroke="white" strokeWidth="3" />
-            </svg>
-          ) : (
-            <div className="cardio-route-empty"><span>⌖</span><strong>Ruta GPS</strong><p>Cuando empieces, SmartFit irá dibujando tu recorrido.</p></div>
+          {points.length > 1 ? <GeoRouteMap points={points} /> : (
+            <div className="cardio-route-empty"><span>⌖</span><strong>Ruta GPS</strong><p>Cuando empieces, SmartFit irá dibujando tu recorrido sobre el mapa.</p></div>
           )}
         </div>
         <div className="cardio-live-stats">
