@@ -257,12 +257,18 @@ def resolve_barcode(db: Session, raw: str, user_id: int | None = None) -> Barcod
     except httpx.HTTPError as e:
         log.warning("OFF no disponible: %s", e)
         return BarcodeResult("error")
-    payload = r.json()
-    p = _extract_off_product(payload)
-    if r.status_code == 404 or (r.is_success and p is None):
+    if r.status_code == 404:
         return BarcodeResult("not_found")
-    if not r.is_success or p is None:
+    if not r.is_success:
         return BarcodeResult("error")
+    try:
+        payload = r.json()
+    except ValueError:
+        log.warning("Open Food Facts devolvió una respuesta no JSON para %s", code)
+        return BarcodeResult("error")
+    p = _extract_off_product(payload)
+    if p is None:
+        return BarcodeResult("not_found")
 
     raw_name = p.get("product_name_es") or p.get("product_name") or f"Producto {code}"
     brand = (p.get("brands") or "").split(",")[0].strip() or None
