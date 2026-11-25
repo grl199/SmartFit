@@ -1544,3 +1544,14 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .nutrition-camera-actions>button{flex:1}
 .nutrition-barcode-upload{min-height:44px;margin-top:9px;padding:9px;font-size:10px}
 @media(max-width:640px){.nutrition-camera-overlay{align-items:flex-end;padding:0}.nutrition-camera-dialog{width:100%;max-height:94dvh;padding:16px 16px calc(16px + env(safe-area-inset-bottom));border-radius:18px 18px 0 0}.nutrition-camera-preview{max-height:60dvh}}
+
+
+/* Estado y recuperación del seguimiento GPS de cardio */
+.cardio-tracking-health{display:flex;flex-wrap:wrap;gap:6px;width:100%}
+.cardio-tracking-health span{padding:4px 9px;border-radius:999px;font-size:9px;font-weight:700}
+.cardio-tracking-health .ok{background:#e8f4dd;color:#4a7a3e}
+.cardio-tracking-health .warn{background:#fff3ed;color:#a64b38}
+.cardio-recover{margin:0 0 14px;padding:12px;border-radius:10px;background:#f3f6ee;border:1px solid #d9e4cf;color:#43603a}
+.cardio-recover strong{font-size:12px}
+.cardio-recover p{margin:4px 0 10px;font-size:10px;line-height:1.5}
+.cardio-recover .cardio-route-actions{flex-wrap:wrap}

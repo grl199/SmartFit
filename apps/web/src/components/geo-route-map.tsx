@@ -1,5 +1,6 @@
 "use client";
 import { useMemo } from "react";
+import { GAP_MS } from "@/lib/route";
 
 export type GeoRoutePoint = {
   lat: number;
@@ -10,7 +11,7 @@ export type GeoRoutePoint = {
 };
 
 type Tile = { url: string; x: number; y: number };
-type Geometry = { zoom: number; tiles: Tile[]; line: string } | null;
+type Geometry = { zoom: number; tiles: Tile[]; line: string; segments: string[]; gaps: string[] } | null;
 
 const TILE_TEMPLATE = process.env.NEXT_PUBLIC_OSM_TILE_URL || "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
@@ -56,8 +57,15 @@ function buildGeometry(points: GeoRoutePoint[]): Geometry {
       tiles.push({ url, x: x * 256 - left, y: y * 256 - top });
     }
   }
-  const line = projected.map(point => (point.x - left).toFixed(1) + "," + (point.y - top).toFixed(1)).join(" ");
-  return { zoom, tiles, line };
+  const coords=projected.map(point=>(point.x-left).toFixed(1)+","+(point.y-top).toFixed(1));
+  const segments:string[]=[],gaps:string[]=[];let current=[coords[0]];
+  for(let i=1;i<points.length;i++){
+    const before=points[i-1].recorded_at,after=points[i].recorded_at;
+    if(before&&after&&Date.parse(after)-Date.parse(before)>GAP_MS){segments.push(current.join(" "));gaps.push(coords[i-1]+" "+coords[i]);current=[coords[i]];}
+    else current.push(coords[i]);
+  }
+  segments.push(current.join(" "));
+  return {zoom,tiles,line:coords.join(" "),segments,gaps};
 }
 
 export function GeoRouteMap({ points, compact = false }: { points: GeoRoutePoint[]; compact?: boolean }) {
@@ -71,8 +79,9 @@ export function GeoRouteMap({ points, compact = false }: { points: GeoRoutePoint
         {geometry.tiles.map((tile, index) => (
           <image key={index} href={tile.url} x={tile.x} y={tile.y} width="256" height="256" />
         ))}
-        <polyline points={geometry.line} fill="none" stroke="#ffffff" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />
-        <polyline points={geometry.line} fill="none" stroke="#4e8a43" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />
+        {geometry.gaps.map((gap,index)=><polyline key={"gap"+index} points={gap} fill="none" stroke="#7d8a78" strokeOpacity="0.7" strokeWidth="3" strokeDasharray="2 8" strokeLinecap="round" />)}
+        {geometry.segments.map((segment,index)=><polyline key={"white"+index} points={segment} fill="none" stroke="#ffffff" strokeWidth="9" strokeLinecap="round" strokeLinejoin="round" />)}
+        {geometry.segments.map((segment,index)=><polyline key={"green"+index} points={segment} fill="none" stroke="#4e8a43" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" />)}
         <circle cx={start[0]} cy={start[1]} r="8" fill="#367e3e" stroke="#fff" strokeWidth="3" />
         <circle cx={end[0]} cy={end[1]} r="8" fill="#ce5946" stroke="#fff" strokeWidth="3" />
       </svg>
