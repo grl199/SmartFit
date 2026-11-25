@@ -1490,3 +1490,28 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
  .nutrition-recipe-ingredients{flex-wrap:wrap}
  .nutrition-recipe-ingredients>strong{flex-basis:100%}
 }
+
+
+/* Desglose nutricional compartido: colores por comida y marcador de objetivo */
+.nutrition-contribution-legend{display:flex;flex-wrap:wrap;gap:8px 13px;margin:0 0 15px;color:#657565;font-size:9px}
+.nutrition-contribution-legend>span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.nutrition-contribution-legend i{display:inline-block;width:9px;height:9px;border-radius:3px}
+.nutrition-contribution-legend i[data-meal="breakfast"]{background:#dfb75d}
+.nutrition-contribution-legend i[data-meal="mid_morning"]{background:#8dbb7d}
+.nutrition-contribution-legend i[data-meal="lunch"]{background:#6f9b70}
+.nutrition-contribution-legend i[data-meal="snack"]{background:#d69a70}
+.nutrition-contribution-legend i[data-meal="dinner"]{background:#8292b0}
+.nutrition-contribution-track{position:relative}
+.nutrition-contribution-track .nutrition-contribution-target{position:absolute;z-index:2;top:-3px;bottom:-3px;width:3px;transform:translateX(-50%);border:1px solid #435143;border-radius:2px;background:#fff;box-shadow:0 0 0 1px #ffffff80}
+.nutrition-contribution-status{display:flex;flex-wrap:wrap;justify-content:space-between;gap:4px 10px;color:#748273;font-size:9px;line-height:1.45}
+.nutrition-contribution-status small{color:#8b9689;font-size:8px}
+.nutrition-contribution-status.is-over>span{color:#ad5a42;font-weight:800}
+.nutrition-contribution-status.is-pending>span{color:#9b7840;font-weight:700}
+.nutrition-contribution-status.is-ok>span{color:#66805e;font-weight:700}
+.nutrition-contribution-disclaimer{margin:12px 0 0;color:#899489;font-size:8px;line-height:1.5}
+.nutrition-meal-contribution>p.muted{margin-bottom:12px}
+.nutrition-meal-contribution .nutrition-contribution-row{margin:13px 0}
+@media(max-width:640px){
+ .nutrition-contribution-legend{gap:8px 10px}
+ .nutrition-contribution-status{font-size:8px}
+}
