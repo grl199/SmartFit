@@ -11,6 +11,20 @@ FULL = {**BIZCOCHO, "quantity": "800 g", "nutriscore_grade": "d", "nova_group": 
         "ingredients_text_es": "Huevo, azúcar, yogur, harina de trigo", "categories": "Bizcochos, Pasteles, Snacks dulces"}
 
 
+def test_parse_off_sodium_normalizes_milligrams_without_thousandfold_inflation():
+    from app.services.openfoodfacts import parse_off_product
+
+    base = {"energy-kcal_100g": 31, "proteins_100g": 1.65, "carbohydrates_100g": 2.4, "fat_100g": 1.65}
+    # Standard OFF value: grams of sodium per 100 g.
+    assert parse_off_product({"nutriments": {**base, "sodium_100g": 0.146506}})["sodium_mg"] == 146.5
+    # Malformed records sometimes put milligrams in sodium_100g, e.g. 146.506 mg.
+    assert parse_off_product({"nutriments": {**base, "sodium_100g": 146.506}})["sodium_mg"] == 146.5
+    # Salt fallback remains in grams when normalised as expected.
+    assert parse_off_product({"nutriments": {**base, "salt_100g": 0.366265}})["sodium_mg"] == 146.5
+    # And malformed salt values in mg are not multiplied by 1,000 either.
+    assert parse_off_product({"nutriments": {**base, "salt_100g": 366.265}})["sodium_mg"] == 146.5
+
+
 def test_parse_off_meta_is_tolerant():
     from app.services.openfoodfacts import parse_off_meta
     m = parse_off_meta(FULL)
@@ -50,12 +64,15 @@ def test_lazy_enrichment_on_selection(client, onboarded):
     h, tag, calls, code = onboarded["headers"], rnd(10), [], LONG[:-6] + rnd(6, digits=True)
     def search_fake(url, **kw):  # el buscador NO trae metadatos (solo código, nombre y nutrientes)
         if "search.openfoodfacts.org" in url:
-            hit = {"code": code, "product_name": f"Bizcocho {tag}", "brands": "Hacendado", "nutriments": BIZCOCHO["nutriments"]}
+            hit = {"code": code, "product_name": f"Bizcocho {tag}", "brands": "Hacendado",
+                   "image_front_small_url": "https://images.openfoodfacts.org/images/products/test/front.200.jpg",
+                   "nutriments": BIZCOCHO["nutriments"]}
             return httpx.Response(200, json={"hits": [hit]}, request=httpx.Request("GET", url))
         return _product_get(code, calls)(url, **kw)
     with patch("app.services.openfoodfacts.httpx.get", search_fake):
         found = client.get("/foods/search", params={"q": tag}, headers=h).json()[0]
         assert found["nutriscore_grade"] is None and found["allergens"] == []
+        assert found["image_url"].endswith("front.200.jpg")
         full = client.get(f"/foods/{found['id']}", headers=h).json()      # al seleccionar se completa
         assert full["nutriscore_grade"] == "d" and "Gluten" in full["allergens"] and full["image_url"]
         client.get(f"/foods/{found['id']}", headers=h)
