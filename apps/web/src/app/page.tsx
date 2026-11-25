@@ -65,7 +65,7 @@ export default function Home() {
       } as unknown as components["schemas"]["OnboardingIn"];
       const response = await completeOnboarding(input);
       setResult(response);
-      setUser((current) => current ? { ...current, onboarding_completed: true } : current);
+      setUser((current: User | null) => current ? { ...current, onboarding_completed: true } : current);
     } catch (err) {
       setError(err instanceof Error ? err.message : "No se pudo guardar el perfil.");
     } finally {
