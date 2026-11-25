@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import type { components } from "@smartfit/contracts";
-import { authenticate, completeOnboarding, getCurrentUser, logoutWebSession } from "@/lib/api";
+import { ApiError, authenticate, completeOnboarding, getCurrentUser, logoutWebSession } from "@/lib/api";
 import { Workspace } from "@/components/workspace";
 
 type User = components["schemas"]["UserOut"];
@@ -24,6 +24,7 @@ export default function Home() {
   const [mode, setMode] = useState<Mode>("login");
   const [user, setUser] = useState<User | null>(null);
   const [authReady, setAuthReady] = useState(false);
+  const [sessionCheckError, setSessionCheckError] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<OnboardingResult | null>(null);
@@ -33,7 +34,18 @@ export default function Home() {
     let active = true;
     getCurrentUser()
       .then((currentUser) => { if (active) setUser(currentUser); })
-      .catch(() => { if (active) setUser(null); })
+      .catch((err: unknown) => {
+        if (!active) return;
+        // 401 significa que no hay una sesión válida; otros errores son fallos
+        // de API/despliegue y no deben disfrazarse como un logout.
+        if (err instanceof ApiError && err.status === 401) {
+          setUser(null);
+          return;
+        }
+        setSessionCheckError(
+          err instanceof Error ? err.message : "No se pudo comprobar la sesión. Revisa la conexión con SmartFit API.",
+        );
+      })
       .finally(() => { if (active) setAuthReady(true); });
     return () => { active = false; };
   }, []);
@@ -91,6 +103,23 @@ export default function Home() {
           <div className="form-card">
             <div className="eyebrow">SMARTFIT</div>
             <p className="intro">Comprobando tu sesión…</p>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
+  if (sessionCheckError) {
+    return (
+      <main className="shell auth-shell">
+        <section className="auth-panel">
+          <div className="form-card">
+            <div className="eyebrow">SMARTFIT / SESIÓN</div>
+            <h2>No se pudo comprobar tu sesión.</h2>
+            <p className="intro">{sessionCheckError}</p>
+            <button className="primary-button" onClick={() => window.location.reload()}>
+              Reintentar conexión
+            </button>
           </div>
         </section>
       </main>
