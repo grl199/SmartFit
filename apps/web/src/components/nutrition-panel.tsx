@@ -60,6 +60,7 @@ export function NutritionPanel({token,date,onDateChange}:Props){
       await apiRequest("/logs",{method:"POST",token,body});setNotice("Comida añadida al diario.");await loadDay();
     }catch(x){setError(err(x));}finally{setBusy(false);}
   }
+  async function saveLogEdit(e:FormEvent){e.preventDefault();if(!editingLog)return;setBusy(true);try{await apiRequest("/logs/"+editingLog.id,{method:"PUT",token,body:{grams:Number(editingLog.grams),meal:editingLog.meal}});setEditingLog(null);setNotice("Registro actualizado.");await loadDay();}catch(x){setError(err(x));}finally{setBusy(false);}}
   async function deleteLog(id:number){try{await apiRequest("/logs/"+id,{method:"DELETE",token});await loadDay();}catch(x){setError(err(x));}}
   function emptyDraft(){setEditing(null);setDraft({name:"",brand:"",barcode:"",serving_g:"",kcal:"",protein_g:"",carbs_g:"",sugars_g:"",fat_g:"",sat_fat_g:"",fiber_g:"",sodium_mg:""});setMineUnits([]);}
   async function editFood(item:Food){setEditing(item);setDraft({name:item.name,brand:item.brand||"",barcode:item.barcode||"",serving_g:String(item.serving_g||""),kcal:String(item.kcal),protein_g:String(item.protein_g),carbs_g:String(item.carbs_g),sugars_g:String(item.sugars_g),fat_g:String(item.fat_g),sat_fat_g:String(item.sat_fat_g),fiber_g:String(item.fiber_g),sodium_mg:String(item.sodium_mg)});try{setMineUnits(await apiRequest<Serving[]>("/foods/"+item.id+"/servings",{token}));}catch(x){setError(err(x));}}
