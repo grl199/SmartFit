@@ -98,3 +98,29 @@ def test_text_search_hit_includes_product_image_and_processing_metadata():
     assert "image_front_small_url" in SEARCH_FIELDS
     assert "nutriscore_grade" in SEARCH_FIELDS
 
+
+
+
+def test_parse_off_serving_unit_requires_explicit_count_and_uses_hacendado_piece_name():
+    from app.services.openfoodfacts import parse_serving_unit
+
+    unit = parse_serving_unit("2 pieces (30 g)", 30, "Regañás Hacendado")
+    assert unit["unit_name"] == "regañá"
+    assert unit["unit_name_plural"] == "regañás"
+    assert unit["grams_per_unit"] == 15
+
+    # A plain serving weight is not enough to infer how many regañás it contains.
+    assert parse_serving_unit("30 g", 30, "Regañás Hacendado") is None
+    assert parse_serving_unit("150 ml", 150, "Bebida") is None
+    assert parse_serving_unit(None, 30, "Regañás Hacendado") is None
+
+
+def test_off_labels_and_serving_size_are_exposed_as_metadata():
+    from app.services.openfoodfacts import parse_off_meta
+
+    metadata = parse_off_meta({
+        "labels_tags": ["en:high-protein", "es:sin-gluten"],
+        "serving_size": "2 pieces (30 g)",
+    })
+    assert metadata["extra"]["labels"] == ["High protein", "Sin gluten"]
+    assert metadata["extra"]["serving_size"] == "2 pieces (30 g)"
