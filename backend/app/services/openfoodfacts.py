@@ -71,14 +71,23 @@ def parse_off_product(product: dict) -> dict | None:
     protein, carbs, fat = _num(n, "proteins_100g"), _num(n, "carbohydrates_100g"), _num(n, "fat_100g")
     if kcal is None and protein is None and carbs is None and fat is None:
         return None
-    sodium_g = _num(n, "sodium_100g")
-    if sodium_g is None and (salt := _num(n, "salt_100g")) is not None:
-        sodium_g = salt / 2.5
+    sodium_raw = _num(n, "sodium_100g")
+    salt_raw = _num(n, "salt_100g")
+    # OFF normalises *_100g mass nutrients to grams. Some imported/search-index records
+    # nevertheless contain sodium in mg while still using the *_100g key (e.g. 146.506).
+    # Such a value cannot be grams per 100 g; preserve it as mg instead of multiplying by 1,000.
+    if sodium_raw is not None:
+        sodium_mg = sodium_raw if sodium_raw > 100 else sodium_raw * 1000
+    elif salt_raw is not None:
+        # The same malformed-unit safeguard applies to salt when sodium is not supplied.
+        sodium_mg = salt_raw / 2.5 if salt_raw > 250 else (salt_raw / 2.5) * 1000
+    else:
+        sodium_mg = 0
     return dict(
         kcal=round(kcal or 0, 1), protein_g=protein or 0, carbs_g=carbs or 0,
         sugars_g=_num(n, "sugars_100g") or 0, fat_g=fat or 0,
         sat_fat_g=_num(n, "saturated-fat_100g") or 0, fiber_g=_num(n, "fiber_100g") or 0,
-        sodium_mg=round((sodium_g or 0) * 1000, 1),
+        sodium_mg=round(sodium_mg, 1),
     )
 
 
@@ -209,7 +218,9 @@ def _add_off_serving(db: Session, food: Food, serving_size: str | None, serving_
 def enrich_food_from_off(db: Session, food: Food) -> bool:
     """Completa metadatos (foto, Nutri-Score, NOVA, alérgenos...) de un producto ya guardado. Una consulta a la API
     de producto (100/min). Marca off_enriched solo si OFF respondió. Nunca lanza."""
-    if food.source != "openfoodfacts" or not food.barcode or (food.extra or {}).get("off_enriched"):
+    # Re-enrich cached products with implausible sodium values (>10 g per 100 g).
+    sodium_needs_repair = food.sodium_mg is not None and food.sodium_mg > 10000
+    if food.source != "openfoodfacts" or not food.barcode or ((food.extra or {}).get("off_enriched") and not sodium_needs_repair):
         return False
     try:
         r = httpx.get(OFF_URL.format(code=food.barcode), params={"fields": OFF_FIELDS}, timeout=6,
@@ -219,12 +230,15 @@ def enrich_food_from_off(db: Session, food: Food) -> bool:
         if not r.is_success or product is None:
             return False
         meta = parse_off_meta(product)
+        nutrients = parse_off_product({"nutriments": product.get("nutriments") or {}})
     except Exception as e:  # noqa: BLE001
         log.warning("No se pudo completar %s desde OFF: %s", food.barcode, e)
         return False
     for col in ("nutriscore_grade", "nova_group", "ecoscore_grade", "image_url", "quantity"):
         if meta[col] is not None:
             setattr(food, col, meta[col])
+    if nutrients is not None:
+        food.sodium_mg = nutrients["sodium_mg"]
     if not food.serving_g:
         food.serving_g = _num(product, "serving_quantity")
     food.extra = {**(food.extra or {}), **meta["extra"], "off_enriched": True}  # reasignar: JSONB no detecta mutaciones
@@ -386,6 +400,7 @@ def _store(db: Session, item: dict) -> bool:
             "ecoscore_grade": func.coalesce(ins.excluded.ecoscore_grade, Food.ecoscore_grade),
             "quantity": func.coalesce(ins.excluded.quantity, Food.quantity),
             "serving_g": func.coalesce(Food.serving_g, ins.excluded.serving_g),
+            "sodium_mg": ins.excluded.sodium_mg,
             "extra": Food.extra.op("||")(ins.excluded.extra),
             "source_updated_at": func.now(),
         },
