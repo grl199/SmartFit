@@ -54,7 +54,7 @@ def onboarding(body: OnboardingIn, user: User = Depends(current_user), db: Sessi
         result = generate_targets(db, user.id)
     except PlanRejected as e:
         raise HTTPException(422, str(e))
-    except (PlanGenerationError, Exception):
+    except Exception:
         # A provider outage or unusable model response must not trap the account in onboarding.
         log.exception("La IA no pudo generar el plan inicial; se aplican objetivos provisionales.")
         result = generate_fallback_targets(db, user.id)
