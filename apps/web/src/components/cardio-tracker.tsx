@@ -261,7 +261,7 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
               <button type="button" className="secondary-button" onClick={() => setManual(false)}>Volver al GPS</button>
             </div>
           )}
-          {!manual && status === "idle" && <button type="button" className="cardio-manual-link" onClick={switchToManual}>Registrar manualmente sin GPS</button>}
+          {!manual && status !== "tracking" && <button type="button" className="cardio-manual-link" onClick={switchToManual}>Registrar manualmente sin GPS</button>}
           {!manual && status === "finished" && (
             <div className="cardio-final-metrics">
               <div><span>Distancia</span><strong>{distance.toLocaleString("es-ES", { maximumFractionDigits: 2 })} km</strong></div>
