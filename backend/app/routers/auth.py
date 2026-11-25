@@ -28,6 +28,23 @@ def _find(db: Session, name: str) -> User | None:
     return db.scalar(select(User).where(func.lower(User.name) == name.strip().lower()))
 
 
+def _recover_saved_onboarding(db: Session, user: User) -> None:
+    """Unlocks accounts whose complete profile was saved before an AI outage interrupted onboarding."""
+    if user.onboarding_completed:
+        return
+    from ..services.plan import PlanRejected, generate_fallback_targets
+
+    try:
+        generate_fallback_targets(db, user.id)
+    except PlanRejected:
+        # Profile or weight is incomplete, or the selected deficit goal is unsafe: keep onboarding gated.
+        db.rollback()
+        return
+    user.onboarding_completed = True
+    db.add(user)
+    db.commit()
+
+
 @router.post("/register", response_model=TokenOut, status_code=201)
 def register(body: Credentials, db: Session = Depends(get_db)):
     """Crea la cuenta e inicia sesión. El usuario debe completar el onboarding antes de usar la app."""
@@ -56,6 +73,7 @@ def login(body: Credentials, db: Session = Depends(get_db)):
         register_failure(key)
         raise HTTPException(401, "Usuario o contraseña incorrectos")  # mismo mensaje exista o no el usuario
     clear_failures(key)
+    _recover_saved_onboarding(db, user)
     return TokenOut(access_token=create_token(user.id), user=user)
 
 
@@ -89,6 +107,7 @@ def login_web_session(body: Credentials, db: Session = Depends(get_db)):
         register_failure(key)
         raise HTTPException(401, "Usuario o contraseña incorrectos")
     clear_failures(key)
+    _recover_saved_onboarding(db, user)
     access, refresh = create_session(db, user.id)
     db.commit()
     return {"access_token": access, "refresh_token": refresh, "token_type": "bearer", "user": UserOut.model_validate(user)}
