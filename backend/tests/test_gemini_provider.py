@@ -90,3 +90,53 @@ def test_gemini_embeddings_use_configured_dimensions_and_task_type(monkeypatch):
     assert captured["config"].task_type == "RETRIEVAL_QUERY"
     assert captured["config"].output_dimensionality == 3
     assert result[0] == [0.6, 0.8, 0.0]
+
+
+
+def test_gemini_flex_503_falls_back_to_standard():
+    class ServiceUnavailable(Exception):
+        status_code = 503
+
+    class Completions:
+        def __init__(self):
+            self.requests = []
+
+        def create(self, **kwargs):
+            self.requests.append(kwargs)
+            if kwargs.get("service_tier") == "flex":
+                raise ServiceUnavailable("temporarily overloaded")
+            return NS(result="respuesta")
+
+    fake = NS(chat=NS(completions=Completions()))
+    result = llm.create_chat_completion(
+        fake,
+        {"model": "gemini-3.1-flash-lite", "messages": [], "service_tier": "flex"},
+        service_tier="flex",
+    )
+
+    assert result.result == "respuesta"
+    assert [request["service_tier"] for request in fake.chat.completions.requests] == [
+        "flex",
+        "standard",
+    ]
+
+
+def test_gemini_standard_503_is_not_retried_as_flex():
+    class ServiceUnavailable(Exception):
+        status_code = 503
+
+    class Completions:
+        def create(self, **kwargs):
+            raise ServiceUnavailable("temporarily overloaded")
+
+    fake = NS(chat=NS(completions=Completions()))
+    try:
+        llm.create_chat_completion(
+            fake,
+            {"model": "gemini-3.1-flash-lite", "messages": [], "service_tier": "standard"},
+            service_tier="standard",
+        )
+    except ServiceUnavailable:
+        pass
+    else:
+        raise AssertionError("El error 503 de Standard debe propagarse sin bucle de fallback.")

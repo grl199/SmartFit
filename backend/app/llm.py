@@ -1,5 +1,6 @@
 """Clientes de OpenRouter, OpenAI y Gemini para chat y embeddings."""
 from functools import lru_cache
+import logging
 import math
 
 from google import genai
@@ -8,6 +9,8 @@ from openai import OpenAI
 
 from .config import get_settings
 from .vault import get_openai_api_key
+
+log = logging.getLogger(__name__)
 
 
 @lru_cache
@@ -144,6 +147,23 @@ def embed_texts(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list
     return vectors
 
 
+def create_chat_completion(client: OpenAI, request: dict, service_tier: str | None = None):
+    """Ejecuta Chat Completions y degrada Flex a Standard si Gemini responde 503."""
+    try:
+        return client.chat.completions.create(**request)
+    except Exception as exc:
+        # El SDK de OpenAI ya ha agotado sus reintentos internos antes de llegar aquí.
+        # Flex es best-effort; Standard es una opción más adecuada para chat interactivo.
+        if service_tier != "flex" or getattr(exc, "status_code", None) != 503:
+            raise
+        fallback_request = dict(request)
+        fallback_request["service_tier"] = "standard"
+        log.warning(
+            "Gemini devolvió HTTP 503 en Flex; se reintenta la petición en Standard."
+        )
+        return client.chat.completions.create(**fallback_request)
+
+
 def chat_text(messages: list[dict], json_mode: bool = False) -> str:
     """Llamada simple de chat (sin herramientas) con el proveedor configurado. Devuelve el texto."""
     s = get_settings()
@@ -164,5 +184,5 @@ def chat_text(messages: list[dict], json_mode: bool = False) -> str:
             kwargs["response_format"] = {"type": "json_object"}
     else:
         raise ValueError(f"AI_PROVIDER no válido: {provider!r}.")
-    resp = client.chat.completions.create(**kwargs)
+    resp = create_chat_completion(client, kwargs, service_tier=kwargs.get("service_tier"))
     return resp.choices[0].message.content or ""
