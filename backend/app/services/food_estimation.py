@@ -161,7 +161,7 @@ def estimate_meal(description: str, image: bytes | None = None) -> dict[str, Any
             jpg, mime = prepare_for_llm(image)
             image_url = f"data:{mime};base64,{base64.b64encode(jpg).decode('ascii')}"
             response = create_chat_completion(client, {
-                model=settings.food_vision_model,
+                "model": settings.food_vision_model,
                 messages=[
                     {"role": "system", "content": SYSTEM_PROMPT},
                     {"role": "user", "content": [
