@@ -1379,3 +1379,47 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .training-last-session-sets{display:flex;flex-wrap:wrap;gap:6px}
 .training-last-session-sets span{padding:5px 7px;border-radius:6px;background:#f5f8f2;color:#647365;font-size:9px}
 @media(max-width:640px){.training-progress-table-head,.training-progress-table-row{min-width:430px}.training-exercise-duration{flex-basis:100%}.training-exercise-quick-add{padding:11px}}
+
+
+/* Seguimiento GPS dedicado para andar y correr */
+.training-cardio-workspace{display:grid;grid-template-columns:minmax(300px,.95fr) minmax(0,1.05fr);gap:16px;align-items:start}
+.cardio-title-row{display:flex;align-items:center;gap:13px;margin-bottom:16px}
+.cardio-icon{display:grid;place-items:center;width:50px;height:50px;flex:0 0 50px;border-radius:14px;background:#f0f6e9;font-size:25px}
+.cardio-title-row h3{margin:3px 0;color:#344a38;font:700 18px Manrope,sans-serif}
+.cardio-title-row p{margin:3px 0;font-size:10px}
+.cardio-gps-controls{display:flex;flex-direction:column;align-items:center;gap:10px;margin:9px 0 13px;padding:18px 14px;border:1px solid #e7eee1;border-radius:13px;background:linear-gradient(180deg,#fbfdf9,#f5f9f1)}
+.cardio-live-clock{color:#2f4733;font:700 clamp(42px,6vw,58px) Manrope,sans-serif;letter-spacing:.02em;font-variant-numeric:tabular-nums}
+.cardio-status{padding:5px 9px;border-radius:999px;background:#edf1e9;color:#778675;font-size:8px;font-weight:800;letter-spacing:.1em}
+.cardio-status.tracking{background:#e8f4dd;color:#4a7a3e}
+.cardio-status.finished{background:#eef0e9;color:#566a50}
+.cardio-main-action{width:100%;min-height:46px;font-size:12px}
+.cardio-route-actions{display:flex;width:100%;gap:8px}
+.cardio-route-actions>*{flex:1}
+.cardio-gps-controls>p{margin:2px 0 0;text-align:center;font-size:9px;line-height:1.5}
+.cardio-gps-error{width:100%;padding:9px 10px;border-radius:8px;background:#fff3ed;color:#a64b38;font-size:10px;line-height:1.5}
+.cardio-manual-fields{display:flex;flex-direction:column;gap:10px;padding:13px;border:1px solid #e7eee1;border-radius:10px;background:#fafcf8}
+.cardio-manual-fields>p{margin:0;font-size:10px}
+.cardio-manual-link,.cardio-exit-link{width:100%;border:0;background:transparent;color:#70836b;font-size:10px;font-weight:700;text-align:center;text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.cardio-final-metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:12px 0;padding:12px;border-radius:10px;background:#f3f8ee}
+.cardio-final-metrics>div{display:flex;flex-direction:column;gap:5px;min-width:0}
+.cardio-final-metrics span{color:#82907d;font-size:8px}
+.cardio-final-metrics strong{color:#3d573c;font-size:13px;font-variant-numeric:tabular-nums}
+.cardio-save-action{width:100%;min-height:44px;margin-top:5px}
+.cardio-exit-link{padding:7px}
+.cardio-route-panel{min-width:0}
+.cardio-route-map{display:grid;place-items:center;min-height:280px;margin:13px 0;border:1px solid #e9eee5;border-radius:12px;background-color:#f7faf5;background-image:linear-gradient(#e9eee6 1px,transparent 1px),linear-gradient(90deg,#e9eee6 1px,transparent 1px);background-size:32px 32px;overflow:hidden}
+.cardio-route-map svg{display:block;width:100%;height:100%;min-height:280px;padding:8px;overflow:visible}
+.cardio-route-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:24px;text-align:center}
+.cardio-route-empty>span{color:#7b9c69;font-size:44px;line-height:1}
+.cardio-route-empty strong{color:#52644f;font-size:12px}
+.cardio-route-empty p{max-width:230px;margin:0;color:#89948b;font-size:10px;line-height:1.5}
+.cardio-live-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:9px;margin:10px 0}
+.cardio-live-stats>div{display:flex;flex-direction:column;gap:5px;padding:11px 9px;border:1px solid #edf1e9;border-radius:9px;background:#fff;min-width:0}
+.cardio-live-stats span{color:#89948b;font-size:9px}
+.cardio-live-stats strong{color:#405a41;font:700 clamp(14px,2vw,18px) Manrope,sans-serif;font-variant-numeric:tabular-nums;white-space:nowrap}
+.cardio-privacy-note{margin:9px 0 0;font-size:9px;line-height:1.55}
+.training-history-route{display:flex;flex-direction:column;gap:5px;margin:10px 0;padding:8px;border:1px solid #e9eee5;border-radius:9px;background:#f7faf5}
+.training-history-route svg{display:block;width:100%;height:120px}
+.training-history-route span{color:#859184;font-size:8px}
+@media(max-width:1000px){.training-cardio-workspace{grid-template-columns:1fr}}
+@media(max-width:640px){.training-cardio-workspace{grid-template-columns:1fr}.cardio-live-clock{font-size:48px}.cardio-route-map,.cardio-route-map svg{min-height:220px}.cardio-live-stats{gap:6px}.cardio-live-stats>div{padding:9px 7px}.cardio-final-metrics{gap:5px;padding:9px}.cardio-final-metrics strong{font-size:11px}}
