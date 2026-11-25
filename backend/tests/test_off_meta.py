@@ -117,6 +117,13 @@ def test_parse_off_serving_unit_requires_explicit_count_and_uses_hacendado_piece
     assert parse_serving_unit("150 ml", 150, "Bebida") is None
     assert parse_serving_unit(None, 30, "Regañás Hacendado") is None
 
+    # OFF's package quantity can also specify an explicit multipack count and unit weight.
+    multipack = parse_serving_unit(None, None, "Bebida", "3 x 150 g")
+    assert multipack["unit_name"] == "unidad"
+    assert multipack["grams_per_unit"] == 150
+    assert parse_serving_unit(None, None, "Huevos", "6 eggs") is None
+    assert parse_serving_unit(None, None, "Galletas", "250 g") is None
+
 
 def test_off_labels_and_serving_size_are_exposed_as_metadata():
     from app.services.openfoodfacts import parse_off_meta
