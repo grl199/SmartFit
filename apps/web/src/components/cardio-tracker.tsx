@@ -42,21 +42,6 @@ const paceText = (milliseconds: number, kilometres: number) => {
   return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0") + " /km";
 };
 
-const svgRoute = (points: RoutePoint[]) => {
-  if (points.length < 2) return "";
-  const lats = points.map(point => point.lat);
-  const lngs = points.map(point => point.lng);
-  const minLat = Math.min(...lats);
-  const maxLat = Math.max(...lats);
-  const minLng = Math.min(...lngs);
-  const maxLng = Math.max(...lngs);
-  return points.map(point => {
-    const x = 24 + (point.lng - minLng) / (maxLng - minLng || 1) * 592;
-    const y = 236 - (point.lat - minLat) / (maxLat - minLat || 1) * 212;
-    return x.toFixed(1) + "," + y.toFixed(1);
-  }).join(" ");
-};
-
 export function CardioTracker({ token, category, onCategoryChange, onExit, onSaved }: Props) {
   const [name, setName] = useState(category === "running" ? "Correr" : "Andar");
   const [date, setDate] = useState(new Date().toLocaleDateString("sv-SE"));
@@ -82,7 +67,6 @@ export function CardioTracker({ token, category, onCategoryChange, onExit, onSav
     const previous = points[index];
     return total + (point.altitude_m != null && previous.altitude_m != null ? Math.max(0, point.altitude_m - previous.altitude_m) : 0);
   }, 0), [points]);
-  const route = useMemo(() => svgRoute(points), [points]);
 
   useEffect(() => {
     if (status !== "tracking") return;

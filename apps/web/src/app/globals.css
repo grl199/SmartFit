@@ -1423,3 +1423,15 @@ input:focus,select:focus{border-color:#91b66e;box-shadow:0 0 0 3px #b8f36b30}
 .training-history-route span{color:#859184;font-size:8px}
 @media(max-width:1000px){.training-cardio-workspace{grid-template-columns:1fr}}
 @media(max-width:640px){.training-cardio-workspace{grid-template-columns:1fr}.cardio-live-clock{font-size:48px}.cardio-route-map,.cardio-route-map svg{min-height:220px}.cardio-live-stats{gap:6px}.cardio-live-stats>div{padding:9px 7px}.cardio-final-metrics{gap:5px;padding:9px}.cardio-final-metrics strong{font-size:11px}}
+
+
+/* Mapa de ruta con teselas OSM y atribución */
+.geo-route-map{position:relative;width:100%;min-width:0;overflow:hidden;border-radius:10px;background:#eef2ea}
+.geo-route-map svg{display:block;width:100%;height:auto;aspect-ratio:16/9}
+.geo-route-map>a{position:absolute;right:6px;bottom:5px;padding:3px 5px;border-radius:4px;background:#ffffffd9;color:#4f6250;font-size:8px;text-decoration:none}
+.geo-route-map.compact svg{height:145px;aspect-ratio:16/5}
+.cardio-route-map>.geo-route-map{width:100%;height:100%}
+.cardio-route-map>.geo-route-map svg{min-height:0;height:auto;padding:0}
+.training-history-route-toggle{display:flex;flex-direction:column;gap:8px;margin:10px 0;padding:9px;border:1px solid #e9eee5;border-radius:9px;background:#f8faf6}
+.training-history-route-toggle>button{align-self:flex-start;border:0;background:transparent;color:#58764d;font-size:9px;font-weight:700;cursor:pointer}
+.training-history-route-toggle .geo-route-map.compact{max-width:520px}
