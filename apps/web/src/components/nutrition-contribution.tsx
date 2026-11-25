@@ -40,7 +40,12 @@ export function NutritionContribution({ meals, targets = {} }: Props) {
         ))}
       </div>
       {rows.map(row => {
-        const total = meals.reduce((sum, meal) => sum + Math.max(0, Number(meal.totals[row.key] || 0)), 0);
+        const normalizedValue = (meal: Meal) => {
+          const value = Math.max(0, Number(meal.totals[row.key] || 0));
+          // Old food records occasionally stored mg as µg; 146506 mg/100g is not plausible.
+          return row.key === "sodium_mg" && value > 10000 ? value / 1000 : value;
+        };
+        const total = meals.reduce((sum, meal) => sum + normalizedValue(meal), 0);
         const visualMax = Math.max(row.goal * 1.18, total * 1.08, 1);
         const markerPosition = Math.min(100, row.goal / visualMax * 100);
         const percentage = total / row.goal * 100;
@@ -59,8 +64,8 @@ export function NutritionContribution({ meals, targets = {} }: Props) {
             </div>
             <div className="nutrition-contribution-track" role="img" aria-label={row.label + ": " + format(total) + " de " + format(row.goal) + " " + row.unit}>
               {meals.map(meal => (
-                <span key={meal.key} data-meal={meal.key} title={meal.label + " · " + format(Number(meal.totals[row.key] || 0)) + " " + row.unit}
-                  style={{ width: (Math.max(0, Number(meal.totals[row.key] || 0)) / visualMax * 100) + "%" }} />
+                <span key={meal.key} data-meal={meal.key} title={meal.label + " · " + format(normalizedValue(meal)) + " " + row.unit}
+                  style={{ width: (Math.max(0, normalizedValue(meal)) / visualMax * 100) + "%" }} />
               ))}
               <i className="nutrition-contribution-target" style={{ left: markerPosition + "%" }} />
             </div>
