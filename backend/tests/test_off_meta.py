@@ -109,6 +109,9 @@ def test_parse_off_serving_unit_requires_explicit_count_and_uses_hacendado_piece
     assert unit["unit_name_plural"] == "regañás"
     assert unit["grams_per_unit"] == 15
 
+    reversed_format = parse_serving_unit("30 g (2 pieces)", None, "Regañás Hacendado")
+    assert reversed_format["grams_per_unit"] == 15
+
     # A plain serving weight is not enough to infer how many regañás it contains.
     assert parse_serving_unit("30 g", 30, "Regañás Hacendado") is None
     assert parse_serving_unit("150 ml", 150, "Bebida") is None
