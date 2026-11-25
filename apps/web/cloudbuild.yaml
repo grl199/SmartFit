@@ -23,6 +23,25 @@ steps:
           exit 1
         fi
 
+  # Generate the API schema and TypeScript contracts before the Docker build.
+  # These generated files are intentionally produced from the FastAPI source of truth.
+  - name: python:3.12-slim
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        python -m pip install --no-cache-dir -r backend/requirements.txt
+        python backend/scripts/export_openapi.py
+
+  - name: node:22
+    entrypoint: bash
+    args:
+      - -ceu
+      - |
+        corepack enable
+        corepack prepare pnpm@10.12.1 --activate
+        pnpm --filter @smartfit/contracts generate
+
   - name: gcr.io/cloud-builders/docker
     args:
       - build
