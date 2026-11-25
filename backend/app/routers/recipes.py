@@ -30,7 +30,10 @@ class IngredientIn(BaseModel):
                 self.grams_per_unit = 1.0
             elif self.grams_per_unit is None:
                 raise ValueError("Indica cuántos gramos equivale una unidad.")
-            self.quantity_g = round(self.quantity * (self.grams_per_unit or 1), 2)
+            grams = round(self.quantity * (self.grams_per_unit or 1), 2)
+            if grams > 5000:
+                raise ValueError("La cantidad convertida supera los 5000 g.")
+            self.quantity_g = grams
         else:
             self.quantity = self.quantity_g
             self.grams_per_unit = self.grams_per_unit or 1.0
@@ -80,7 +83,10 @@ class EstimatedRecipeItemIn(BaseModel):
                 self.grams_per_unit = 1.0
             elif self.grams_per_unit is None:
                 raise ValueError("Indica los gramos por unidad.")
-            self.grams = round(self.quantity * (self.grams_per_unit or 1), 2)
+            grams = round(self.quantity * (self.grams_per_unit or 1), 2)
+            if grams > 5000:
+                raise ValueError("La cantidad convertida supera los 5000 g.")
+            self.grams = grams
         else:
             self.quantity = self.grams
             self.grams_per_unit = self.grams_per_unit or 1.0
