@@ -21,10 +21,10 @@ export function NutritionContribution({ meals, targets = {} }: Props) {
   const target = (value: number | undefined, fallback: number) => Number(value) > 0 ? Number(value) : fallback;
   const rows: Array<{ key: NutrientKey; label: string; unit: string; goal: number; kind: "goal" | "limit" | "minimum"; note: string }> = [
     { key: "kcal", label: "Energía", unit: "kcal", goal: energyTarget, kind: "goal", note: "Objetivo diario personalizado" },
-    { key: "protein_g", label: "Proteína", unit: "g", goal: target(targets.protein_g, energyTarget * 0.2 / 4), kind: "goal", note: "Objetivo diario personalizado" },
-    { key: "carbs_g", label: "Hidratos", unit: "g", goal: target(targets.carbs_g, energyTarget * 0.5 / 4), kind: "goal", note: "Objetivo diario personalizado" },
+    { key: "protein_g", label: "Proteína", unit: "g", goal: target(targets.protein_g, energyTarget * 0.15 / 4), kind: "goal", note: Number(targets.protein_g) > 0 ? "Objetivo diario de tu perfil" : "Referencia provisional del 15 % de la energía" },
+    { key: "carbs_g", label: "Hidratos", unit: "g", goal: target(targets.carbs_g, energyTarget * 0.55 / 4), kind: "goal", note: Number(targets.carbs_g) > 0 ? "Objetivo diario de tu perfil" : "Referencia provisional del 55 % de la energía" },
     { key: "sugars_g", label: "Azúcares", unit: "g", goal: energyTarget * 0.1 / 4, kind: "limit", note: "Referencia orientativa: 10 % de la energía, para azúcares libres" },
-    { key: "fat_g", label: "Grasas", unit: "g", goal: target(targets.fat_g, energyTarget * 0.3 / 9), kind: "goal", note: "Objetivo diario personalizado" },
+    { key: "fat_g", label: "Grasas", unit: "g", goal: target(targets.fat_g, energyTarget * 0.3 / 9), kind: "goal", note: Number(targets.fat_g) > 0 ? "Objetivo diario de tu perfil" : "Referencia provisional del 30 % de la energía" },
     { key: "sat_fat_g", label: "Grasas saturadas", unit: "g", goal: energyTarget * 0.1 / 9, kind: "limit", note: "Límite orientativo: menos del 10 % de la energía" },
     { key: "fiber_g", label: "Fibra", unit: "g", goal: target(targets.fiber_g, 25), kind: "minimum", note: "Referencia mínima orientativa para adultos" },
     { key: "sodium_mg", label: "Sodio", unit: "mg", goal: 2000, kind: "limit", note: "Referencia OMS: menos de 2.000 mg al día" },
@@ -71,7 +71,7 @@ export function NutritionContribution({ meals, targets = {} }: Props) {
           </div>
         );
       })}
-      <p className="nutrition-contribution-disclaimer">Las referencias son orientativas, no sustituyen una pauta individual. SmartFit registra azúcares totales y no distingue los azúcares libres de los alimentos.</p>
+      <p className="nutrition-contribution-disclaimer">Las referencias son orientativas, no sustituyen una pauta individual. Si faltan objetivos de macros, se muestra una estimación provisional desde las kcal. SmartFit registra azúcares totales y no distingue los azúcares libres.</p>
     </section>
   );
 }
