@@ -94,6 +94,26 @@ def test_onboarding_retries_invalid_plan_then_succeeds(client):
         assert client.post("/onboarding", json=ONBOARDING, headers=u["headers"]).status_code == 200
 
 
+def test_login_recovers_profile_saved_before_ai_outage(client):
+    u = register(client)
+    with patch("app.services.plan.chat_text", side_effect=RuntimeError("AI service unavailable")):
+        response = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
+    assert response.status_code == 200, response.text
+    assert response.json()["targets"]["source"] == "fallback"
+
+    # Simulate an account left incomplete by a deployment that used the old onboarding flow.
+    from app.db import SessionLocal
+    from app.models import User
+    with SessionLocal() as db:
+        account = db.get(User, u["id"])
+        account.onboarding_completed = False
+        db.commit()
+
+    logged_in = client.post("/auth/session/login", json={"name": u["name"], "password": u["password"]})
+    assert logged_in.status_code == 200, logged_in.text
+    assert logged_in.json()["user"]["onboarding_completed"] is True
+
+
 def test_onboarding_falls_back_when_ai_returns_unsafe_plan(client):
     u = register(client)
     unsafe = {**GOOD_PLAN, "kcal": 900, "carbs_g": 50}  # no se acepta la propuesta del modelo
