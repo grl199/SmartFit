@@ -32,8 +32,8 @@ def _generate_or_http(db: Session, user_id: int) -> dict:
 
 @router.post("/onboarding", response_model=OnboardingOut)
 def onboarding(body: OnboardingIn, user: User = Depends(current_user), db: Session = Depends(get_db)):
-    """Paso OBLIGATORIO tras el registro: guarda el perfil y el peso, pide objetivos al LLM y
-    marca la cuenta como completada. Si el LLM falla, el perfil queda guardado y se puede reintentar."""
+    """Paso obligatorio tras el registro: guarda el perfil y el peso, genera objetivos y completa la cuenta.
+    Si la IA falla, usa objetivos provisionales para no bloquear el acceso."""
     data = body.model_dump(exclude={"weight_kg"})
     profile = db.get(UserProfile, user.id) or UserProfile(user_id=user.id)
     for k, v in data.items():
