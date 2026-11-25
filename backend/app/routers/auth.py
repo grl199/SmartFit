@@ -143,7 +143,10 @@ def logout_web_session(
 
 
 @router.get("/me", response_model=UserOut)
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    # A saved profile can predate a failed AI call; recover it during session restoration.
+    _recover_saved_onboarding(db, user)
+    db.refresh(user)
     return user
 
 
