@@ -134,3 +134,16 @@ def test_off_labels_and_serving_size_are_exposed_as_metadata():
     })
     assert metadata["extra"]["labels"] == ["High protein", "Sin gluten"]
     assert metadata["extra"]["serving_size"] == "2 pieces (30 g)"
+
+
+
+def test_off_product_response_accepts_v3_and_legacy_v2_envelopes():
+    from app.services.openfoodfacts import OFF_URL, _extract_off_product
+
+    assert "/api/v3/product/" in OFF_URL
+    product = {"code": "123", "serving_size": "2 pieces (30 g)"}
+    assert _extract_off_product({"status": "success", "product": product}) == product
+    assert _extract_off_product({"status": "success_with_warnings", "product": product}) == product
+    assert _extract_off_product({"status": 1, "product": product}) == product
+    assert _extract_off_product({"status": "failure"}) is None
+    assert _extract_off_product({"status": 0}) is None
