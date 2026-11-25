@@ -53,7 +53,7 @@ export function NutritionPanel({token,date,onDateChange}:Props){
   useEffect(()=>{setError("");void loadDay().catch(e=>setError(err(e)));},[token,date]);
   useEffect(()=>{apiRequest<{photo:boolean;audio:boolean}>("/foods/estimate-capabilities",{token}).then(setCaps).catch(e=>setError(err(e)));},[token]);
   useEffect(()=>{if(tab==="my-library"){void loadMine().catch(e=>setError(err(e)));void loadRecipes().catch(e=>setError(err(e)));void loadCatalog().catch(e=>setError(err(e)));}if(tab==="search"&&!catalogSections.length)void loadCatalog().catch(e=>setError(err(e)));},[tab]);
-  async function searchBrandedFoods(){if(!query.trim())return;setBusy(true);setError("");setFood(null);setSearchMode("openfoodfacts");try{const q=encodeURIComponent(query.trim());setResults(await apiRequest<Food[]>("/foods/search?q="+q+"&limit=30&online=true&source=openfoodfacts",{token}));}catch(x){setError(err(x));}finally{setBusy(false);}}
+  async function searchBrandedFoods(){if(!query.trim())return;setBusy(true);setError("");setFood(null);setSearchMode("openfoodfacts");try{const q=encodeURIComponent(query.trim());const found=await apiRequest<Food[]>("/foods/search?q="+q+"&limit=30&online=true&source=openfoodfacts",{token});setResults(found.map(item=>({...item,image_url:item.image_url||null})));}catch(x){setError(err(x));}finally{setBusy(false);}}
   async function openFood(item:Food){setError("");try{const [full,sv]=await Promise.all([apiRequest<Food>("/foods/"+item.id,{token}),apiRequest<Serving[]>("/foods/"+item.id+"/servings",{token})]);setFood(full);setServings(sv);setUnit("");setQuantity(String(full.serving_g||100));}catch(x){setError(err(x));}}
   async function logFood(item=food,grams?:number){
     if(!item)return;setBusy(true);setError("");
