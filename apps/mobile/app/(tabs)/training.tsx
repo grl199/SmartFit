@@ -23,6 +23,9 @@ type PlanResponse = { has_plan: boolean; plan?: { id: number; name: string; sour
 type MuscleSummary = { start: string; end: string; sessions: number; muscles: Record<string, { sets: number; strength_sets: number; cardio_sets: number; volume_kg: number; exercises: string[] }> };
 type Content = { description?: string | null; start_position?: string | null; instructions?: string[]; common_mistakes?: string[]; image_url?: string | null; video_url?: string | null };
 type Tab = "session" | "plan" | "history" | "muscles";
+type PlanExerciseDraft = { exercise_id: number; exercise: string; sets: string; reps_min: string; reps_max: string; rest_s: string; notes: string };
+const muscleOptions = ["chest","shoulders","biceps","triceps","forearms","abs","quadriceps","hamstrings","glutes","calves","lats","upper_back","lower_back","traps","neck","abductors","adductors"];
+const equipmentOptions = ["none","barbell","dumbbell","machine","cable","kettlebell","resistance_band","bench","plate","wheel","medicine_ball","box","suspension","other"];
 const categories = [
   { value: "strength", label: "Fuerza" }, { value: "walking", label: "Andar" },
   { value: "running", label: "Correr" }, { value: "sport", label: "Deporte" },
@@ -56,6 +59,15 @@ export default function TrainingScreen() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [editingDay, setEditingDay] = useState<PlanDay | null>(null);
+  const [dayLabel, setDayLabel] = useState("");
+  const [dayDraft, setDayDraft] = useState<PlanExerciseDraft[]>([]);
+  const [planQuery, setPlanQuery] = useState("");
+  const [planResults, setPlanResults] = useState<Exercise[]>([]);
+  const [newExerciseName, setNewExerciseName] = useState("");
+  const [newExerciseKind, setNewExerciseKind] = useState("strength");
+  const [newExerciseMuscle, setNewExerciseMuscle] = useState("chest");
+  const [newExerciseEquipment, setNewExerciseEquipment] = useState("none");
 
   const loadAll = useCallback(async () => {
     if (!token) return;
@@ -174,6 +186,83 @@ export default function TrainingScreen() {
     }
   }
 
+  function startEditDay(day: PlanDay) {
+    setEditingDay(day);
+    setDayLabel(day.label);
+    setDayDraft(day.exercises.map(item => ({
+      exercise_id: item.exercise_id, exercise: item.exercise, sets: String(item.sets),
+      reps_min: String(item.reps_min), reps_max: String(item.reps_max),
+      rest_s: item.rest_s == null ? "" : String(item.rest_s), notes: item.notes ?? "",
+    })));
+    setPlanQuery("");
+    setPlanResults([]);
+  }
+
+  async function searchPlanExercises() {
+    if (!token || !planQuery.trim()) return;
+    try {
+      setPlanResults(await api<Exercise[]>("/exercises?kind=strength&q=" + encodeURIComponent(planQuery.trim()), token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudieron buscar ejercicios para el plan.");
+    }
+  }
+
+  function addPlanExercise(exercise: Exercise) {
+    setDayDraft(current => current.some(item => item.exercise_id === exercise.id) ? current : [
+      ...current,
+      { exercise_id: exercise.id, exercise: exercise.name, sets: "3", reps_min: "8", reps_max: "12", rest_s: "90", notes: "" },
+    ]);
+    setPlanResults([]);
+  }
+
+  async function savePlanDay() {
+    if (!token || !editingDay) return;
+    const exercises = dayDraft.map(item => ({
+      exercise_id: item.exercise_id, sets: Number(item.sets), reps_min: Number(item.reps_min),
+      reps_max: Number(item.reps_max), rest_s: item.rest_s.trim() ? Number(item.rest_s) : null,
+      notes: item.notes.trim() || null,
+    }));
+    if (!dayLabel.trim() || exercises.length === 0 || exercises.some(item =>
+      !Number.isInteger(item.sets) || item.sets < 1 || item.sets > 8 ||
+      !Number.isInteger(item.reps_min) || !Number.isInteger(item.reps_max) ||
+      item.reps_min < 1 || item.reps_max > 50 || item.reps_min > item.reps_max ||
+      (item.rest_s !== null && (!Number.isInteger(item.rest_s) || item.rest_s < 0 || item.rest_s > 600)))) {
+      setError("Revisa el nombre del día, los ejercicios, las series, las repeticiones y los descansos.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const updated = await api<PlanResponse>("/plan/days/" + editingDay.id, token, {
+        method: "PUT", body: { label: dayLabel.trim(), exercises },
+      });
+      setPlan(updated);
+      setEditingDay(null);
+      setNotice("Día del plan actualizado.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar el día del plan.");
+    } finally { setBusy(false); }
+  }
+
+  async function createCustomExercise() {
+    if (!token || !newExerciseName.trim()) {
+      setError("Escribe el nombre del ejercicio.");
+      return;
+    }
+    setBusy(true); setError(""); setNotice("");
+    try {
+      const exercise = await api<Exercise>("/exercises", token, { method: "POST", body: {
+        name: newExerciseName.trim(), kind: newExerciseKind,
+        primary_muscle: newExerciseMuscle, equipment: [newExerciseEquipment],
+      } });
+      setNewExerciseName("");
+      await refreshCatalog();
+      addExercise(exercise);
+      setNotice("Ejercicio propio creado y añadido a la sesión.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo crear el ejercicio.");
+    } finally { setBusy(false); }
+  }
+
   async function generatePlan() {
     if (!token) return;
     setBusy(true); setError(""); setNotice("");
@@ -264,6 +353,20 @@ export default function TrainingScreen() {
         </View>)}
         {catalog.length === 0 ? <Muted>No hay resultados. Prueba otra búsqueda.</Muted> : null}
       </Panel>
+      <Panel>
+        <SectionTitle title="Crear ejercicio propio" />
+        <Field label="Nombre del ejercicio" value={newExerciseName} onChangeText={setNewExerciseName} placeholder="Ej. Press inclinado con mancuernas" />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo</Text>
+        <ChoiceRow value={newExerciseKind} onChange={setNewExerciseKind} options={[
+          { value: "strength", label: "Fuerza" }, { value: "full_body", label: "Cuerpo entero" }, { value: "stretching", label: "Estiramiento" },
+        ]} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Músculo principal</Text>
+        <ChoiceRow value={newExerciseMuscle} onChange={setNewExerciseMuscle} options={muscleOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
+        <ChoiceRow value={newExerciseEquipment} onChange={setNewExerciseEquipment} options={equipmentOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
+        <AppButton title="Crear ejercicio" onPress={() => void createCustomExercise()} loading={busy} disabled={!newExerciseName.trim()} variant="secondary" />
+        <Muted>El ejercicio se guarda en tu catálogo privado.</Muted>
+      </Panel>
       {selectedExercise ? <Panel>
         <SectionTitle title={selectedExercise.name} />
         {exerciseContent?.description ? <Muted>{exerciseContent.description}</Muted> : <Muted>Ficha de ejercicio</Muted>}
@@ -309,8 +412,31 @@ export default function TrainingScreen() {
           <Muted>{exercise.sets} series · {exercise.reps_min}–{exercise.reps_max} repeticiones · descanso {exercise.rest_s ?? "—"} s</Muted>
           {exercise.notes ? <Muted>{exercise.notes}</Muted> : null}
         </View>)}
+        <AppButton title="Editar este día" onPress={() => startEditDay(day)} variant="secondary" />
       </Panel>) : plan?.legacy_markdown ? <Panel><Muted>{plan.legacy_markdown}</Muted></Panel> :
         <Muted>Aún no hay un plan guardado. Genera uno para empezar.</Muted>}
+      {editingDay ? <Panel>
+        <SectionTitle title={"Editar " + editingDay.label} />
+        <Field label="Nombre del día" value={dayLabel} onChangeText={setDayLabel} />
+        {dayDraft.map((item, index) => <View key={item.exercise_id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, gap: 7 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Text style={{ color: colors.text, fontWeight: "800", flex: 1 }}>{item.exercise}</Text>
+            <Text onPress={() => setDayDraft(current => current.filter(x => x.exercise_id !== item.exercise_id))} style={{ color: colors.danger, padding: 5 }}>Quitar</Text>
+          </View>
+          <View style={{ flexDirection: "row", gap: 8 }}>
+            <View style={{ flex: 1 }}><Field label="Series" value={item.sets} onChangeText={value => setDayDraft(current => current.map((x, i) => i === index ? { ...x, sets: value } : x))} keyboardType="number-pad" /></View>
+            <View style={{ flex: 1 }}><Field label="Reps mín." value={item.reps_min} onChangeText={value => setDayDraft(current => current.map((x, i) => i === index ? { ...x, reps_min: value } : x))} keyboardType="number-pad" /></View>
+            <View style={{ flex: 1 }}><Field label="Reps máx." value={item.reps_max} onChangeText={value => setDayDraft(current => current.map((x, i) => i === index ? { ...x, reps_max: value } : x))} keyboardType="number-pad" /></View>
+          </View>
+          <Field label="Descanso (segundos)" value={item.rest_s} onChangeText={value => setDayDraft(current => current.map((x, i) => i === index ? { ...x, rest_s: value } : x))} keyboardType="number-pad" />
+          <Field label="Notas" value={item.notes} onChangeText={value => setDayDraft(current => current.map((x, i) => i === index ? { ...x, notes: value } : x))} />
+        </View>)}
+        <Field label="Buscar ejercicio para añadir" value={planQuery} onChangeText={setPlanQuery} returnKeyType="search" onSubmitEditing={() => void searchPlanExercises()} />
+        <AppButton title="Buscar ejercicios" onPress={() => void searchPlanExercises()} variant="quiet" disabled={!planQuery.trim()} />
+        {planResults.map(exercise => <Text key={exercise.id} onPress={() => addPlanExercise(exercise)} style={{ color: colors.accent, fontWeight: "800", paddingVertical: 7 }}>＋ {exercise.name}</Text>)}
+        <AppButton title="Guardar día" onPress={() => void savePlanDay()} loading={busy} disabled={!dayDraft.length} />
+        <AppButton title="Cancelar" onPress={() => setEditingDay(null)} variant="quiet" />
+      </Panel> : null}
     </> : null}
 
     {tab === "history" ? <>
