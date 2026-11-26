@@ -1,10 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Platform, Pressable, Text, View } from "react-native";
+import * as ImagePicker from "expo-image-picker";
 import { api, apiUpload, type DashboardDay, type FoodSearchResult } from "@/lib/api";
 import { localDateISO, formatKcal, clampPercent } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
 import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, ProgressBar, Screen, SectionTitle } from "@/components/ui";
 import { colors } from "@/theme";
+import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 type Meal = "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
 type OwnedFood = {
@@ -45,6 +47,7 @@ type FoodEstimate = {
   assumptions: string[]; total_grams: number; confidence: "low" | "medium";
   totals: { kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number; sat_fat_g: number; fiber_g: number; sodium_mg: number };
   per_100g: Record<string, number>;
+  method?: "description" | "photo" | "audio";
 };
 
 const meals: Array<{ value: Meal; label: string }> = [
@@ -70,6 +73,9 @@ export default function NutritionScreen() {
   const [meal, setMeal] = useState<Meal>("lunch");
   const [barcode, setBarcode] = useState("");
   const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
+  const [barcodeScannerVisible, setBarcodeScannerVisible] = useState(false);
+  const [estimatePhoto, setEstimatePhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [estimateCapabilities, setEstimateCapabilities] = useState<{ description: boolean; photo: boolean; audio: boolean } | null>(null);
   const [estimateDescription, setEstimateDescription] = useState("");
   const [estimateResult, setEstimateResult] = useState<FoodEstimate | null>(null);
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
@@ -110,6 +116,13 @@ export default function NutritionScreen() {
   }, [token, date]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!token) return;
+    void api<{ description: boolean; photo: boolean; audio: boolean }>("/foods/estimate-capabilities", token)
+      .then(setEstimateCapabilities)
+      .catch(() => setEstimateCapabilities({ description: true, photo: false, audio: false }));
+  }, [token]);
 
   async function loadRecipes() {
     if (!token) return;
@@ -296,12 +309,57 @@ export default function NutritionScreen() {
     ]);
   }
 
+  async function chooseMealPhoto(source: "camera" | "library") {
+    setError("");
+    try {
+      if (source === "camera") {
+        const permission = await ImagePicker.requestCameraPermissionsAsync();
+        if (!permission.granted) {
+          setError("Necesitas permitir el acceso a la cámara para fotografiar la comida.");
+          return;
+        }
+      }
+      const options: ImagePicker.ImagePickerOptions = {
+        mediaTypes: ["images"], allowsEditing: true, aspect: [4, 3], quality: 0.85,
+      };
+      const result = source === "camera"
+        ? await ImagePicker.launchCameraAsync(options)
+        : await ImagePicker.launchImageLibraryAsync(options);
+      if (!result.canceled && result.assets[0]) {
+        setEstimatePhoto(result.assets[0]);
+        setEstimateResult(null);
+      }
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo abrir la cámara o la galería.");
+    }
+  }
+
   async function estimateFood() {
-    if (!token || !estimateDescription.trim()) return;
+    if (!token || (!estimateDescription.trim() && !estimatePhoto)) {
+      setError("Describe la comida o adjunta una fotografía.");
+      return;
+    }
+    if (estimatePhoto && estimateCapabilities?.photo === false) {
+      setError("La estimación por fotografía no está activada en el servidor. Puedes continuar describiendo la comida.");
+      return;
+    }
     const form = new FormData();
     form.append("description", estimateDescription.trim());
-    form.append("method", "description");
-    setLoading(true); setError(""); setEstimateResult(null);
+    form.append("method", estimatePhoto ? "photo" : "description");
+    if (estimatePhoto) {
+      if (Platform.OS === "web") {
+        const response = await fetch(estimatePhoto.uri);
+        const blob = await response.blob();
+        form.append("image", blob, estimatePhoto.fileName ?? "comida.jpg");
+      } else {
+        form.append("image", {
+          uri: estimatePhoto.uri,
+          name: estimatePhoto.fileName ?? "comida.jpg",
+          type: estimatePhoto.mimeType ?? "image/jpeg",
+        } as unknown as Blob);
+      }
+    }
+    setLoading(true); setError(""); setNotice(""); setEstimateResult(null);
     try {
       setEstimateResult(await apiUpload<FoodEstimate>("/foods/estimate", form, token));
     } catch (reason) {
@@ -316,14 +374,14 @@ export default function NutritionScreen() {
     try {
       await api("/foods/estimate-log", token, { method: "POST", body: {
         name: estimateResult.name, grams: estimateResult.total_grams, log_date: date, meal,
-        method: "description", description: estimateDescription,
+        method: estimateResult.method ?? (estimatePhoto ? "photo" : "description"), description: estimateDescription,
         kcal: values.kcal_per_100g, protein_g: values.protein_g_per_100g,
         carbs_g: values.carbs_g_per_100g, sugars_g: values.sugars_g_per_100g,
         fat_g: values.fat_g_per_100g, sat_fat_g: values.sat_fat_g_per_100g,
         fiber_g: values.fiber_g_per_100g, sodium_mg: values.sodium_mg_per_100g,
         components: estimateResult.items,
       } });
-      setEstimateResult(null); setEstimateDescription("");
+      setEstimateResult(null); setEstimateDescription(""); setEstimatePhoto(null);
       await load();
       setNotice("Comida estimada revisada y registrada en tu diario.");
     } catch (reason) {
@@ -331,16 +389,22 @@ export default function NutritionScreen() {
     } finally { setLoading(false); }
   }
 
-  async function findBarcode() {
-    if (!token || !barcode.trim()) return;
+  async function lookupBarcode(code: string) {
+    if (!token || !code.trim()) return;
+    setBarcode(code.trim());
     setLoading(true); setError(""); setBarcodeResult(null);
     try {
-      const result = await api<BarcodeResult>("/foods/barcode/" + encodeURIComponent(barcode.trim()), token);
+      const result = await api<BarcodeResult>("/foods/barcode/" + encodeURIComponent(code.trim()), token);
       setBarcodeResult(result);
-      if (!result.food) setError("No se encontró un alimento asociado a ese código.");
+      if (!result.food) setError("No encontramos ese producto. Comprueba el código o búscalo por nombre.");
+      else setNotice("Código detectado: " + result.food.name);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo consultar el código de barras.");
     } finally { setLoading(false); }
+  }
+
+  async function findBarcode() {
+    await lookupBarcode(barcode);
   }
 
   async function searchRecipeFoods() {
@@ -593,9 +657,21 @@ export default function NutritionScreen() {
       </Panel>
       <SectionTitle title="Estimar comida con IA" />
       <Panel>
-        <Muted>Describe el plato y la IA propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la estimación antes de guardarla.</Muted>
-        <Field label="Descripción de la comida" value={estimateDescription} onChangeText={setEstimateDescription} multiline numberOfLines={3} maxLength={2000} placeholder="Ej. Un plato de arroz con pollo, verduras y aceite de oliva…" />
-        <AppButton title="Estimar nutrientes" onPress={() => void estimateFood()} loading={loading} disabled={!estimateDescription.trim()} variant="secondary" />
+        <Muted>Describe el plato o adjunta una foto. SmartFit propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la estimación antes de guardarla.</Muted>
+        <Field label="Descripción (opcional con foto)" value={estimateDescription} onChangeText={setEstimateDescription} multiline numberOfLines={3} maxLength={2000} placeholder="Ej. Arroz con pollo, verduras y aceite de oliva…" />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}><AppButton title="Hacer foto" variant="secondary" onPress={() => void chooseMealPhoto("camera")} loading={loading} /></View>
+          <View style={{ flex: 1 }}><AppButton title="Galería" variant="secondary" onPress={() => void chooseMealPhoto("library")} loading={loading} /></View>
+        </View>
+        {estimatePhoto ? <View style={{ gap: 6 }}>
+          <Image source={{ uri: estimatePhoto.uri }} style={{ width: "100%", height: 190, borderRadius: 12, backgroundColor: colors.surfaceRaised }} resizeMode="cover" />
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <Muted numberOfLines={1}>{estimatePhoto.fileName ?? "Foto seleccionada"}</Muted>
+            <Text onPress={() => { setEstimatePhoto(null); setEstimateResult(null); }} style={{ color: colors.danger, fontWeight: "800", padding: 6 }}>Quitar foto</Text>
+          </View>
+        </View> : null}
+        {estimateCapabilities?.photo === false ? <Muted>El servidor no tiene activada la estimación visual. Puedes seguir usando la estimación por descripción.</Muted> : null}
+        <AppButton title={loading ? "Estimando…" : "Estimar nutrientes"} onPress={() => void estimateFood()} loading={loading} disabled={!estimateDescription.trim() && !estimatePhoto} variant="secondary" />
         {estimateResult ? <View style={{ gap: 8 }}>
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>{estimateResult.name}</Text>
           <Text style={{ color: colors.accent, fontWeight: "800" }}>{fmt(estimateResult.total_grams)} g · {fmt(estimateResult.per_100g.kcal_per_100g * estimateResult.total_grams / 100)} kcal estimadas</Text>
@@ -611,13 +687,14 @@ export default function NutritionScreen() {
       </Panel>
       <SectionTitle title="Buscar código de barras" />
       <Panel>
-        <Field label="Código EAN/UPC" value={barcode} onChangeText={setBarcode} keyboardType="number-pad" placeholder="Introduce el código del envase" />
-        <AppButton title="Consultar código" onPress={() => void findBarcode()} loading={loading} disabled={!barcode.trim()} variant="secondary" />
+        <AppButton title="Abrir escáner de cámara" onPress={() => setBarcodeScannerVisible(true)} variant="secondary" />
+        <Field label="O introduce el código EAN/UPC" value={barcode} onChangeText={setBarcode} keyboardType="number-pad" placeholder="Código del envase" />
+        <AppButton title="Consultar código" onPress={() => void findBarcode()} loading={loading} disabled={!barcode.trim()} variant="quiet" />
         {barcodeResult ? <View style={{ gap: 6 }}>
           <Text style={{ color: colors.text, fontWeight: "800" }}>{barcodeResult.food?.name ?? barcodeResult.name ?? "Producto encontrado"}</Text>
           {barcodeResult.food ? <AppButton title={"Añadir " + barcodeResult.food.name} onPress={() => void addFood(barcodeResult.food!)} /> : null}
         </View> : null}
-        <Muted>La consulta manual está disponible. El escaneo directo con la cámara requiere integrar el módulo de cámara nativo.</Muted>
+        <Muted>El escáner detecta EAN/UPC y códigos de barras habituales. Si no se reconoce, puedes introducir los dígitos manualmente.</Muted>
       </Panel>
       <SectionTitle title="Comidas registradas" action={(data?.entries?.length ?? 0) + " registros"} />
       <Panel>
@@ -802,5 +879,6 @@ export default function NutritionScreen() {
       </Panel>
       <Muted>Las recetas del catálogo se pueden copiar a tu cuenta. La edición detallada de ingredientes y pasos queda disponible en la versión web; desde móvil puedes crear recetas nuevas, consultarlas y registrar raciones.</Muted>
     </> : null}
+    <BarcodeScanner visible={barcodeScannerVisible} onClose={() => setBarcodeScannerVisible(false)} onScanned={code => { setBarcodeScannerVisible(false); void lookupBarcode(code); }} />
   </Screen>;
 }
