@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Alert, Pressable, Text, View } from "react-native";
-import { api, type DashboardDay, type FoodSearchResult } from "@/lib/api";
+import { api, apiUpload, type DashboardDay, type FoodSearchResult } from "@/lib/api";
 import { localDateISO, formatKcal, clampPercent } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
 import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, ProgressBar, Screen, SectionTitle } from "@/components/ui";
@@ -21,6 +21,16 @@ type RecipeDetail = RecipeSummary & {
 };
 type RecipeDraftIngredient = { food: FoodSearchResult; grams: string };
 type BarcodeResult = { status: string; food?: FoodSearchResult | null; name?: string | null; brand?: string | null };
+type FoodEstimate = {
+  name: string; items: Array<{
+    name: string; grams: number; kcal_per_100g: number; protein_g_per_100g: number;
+    carbs_g_per_100g: number; sugars_g_per_100g: number; fat_g_per_100g: number;
+    sat_fat_g_per_100g: number; fiber_g_per_100g: number; sodium_mg_per_100g: number;
+    confidence: "low" | "medium";
+  }>;
+  assumptions: string[]; total_grams: number; confidence: "low" | "medium";
+  per_100g: Record<string, number>;
+};
 
 const meals: Array<{ value: Meal; label: string }> = [
   { value: "breakfast", label: "Desayuno" }, { value: "mid_morning", label: "Media mañana" },
@@ -45,6 +55,8 @@ export default function NutritionScreen() {
   const [meal, setMeal] = useState<Meal>("lunch");
   const [barcode, setBarcode] = useState("");
   const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
+  const [estimateDescription, setEstimateDescription] = useState("");
+  const [estimateResult, setEstimateResult] = useState<FoodEstimate | null>(null);
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDetail | null>(null);
   const [recipeEditName, setRecipeEditName] = useState("");
@@ -146,6 +158,41 @@ export default function NutritionScreen() {
         })();
       } },
     ]);
+  }
+
+  async function estimateFood() {
+    if (!token || !estimateDescription.trim()) return;
+    const form = new FormData();
+    form.append("description", estimateDescription.trim());
+    form.append("method", "description");
+    setLoading(true); setError(""); setEstimateResult(null);
+    try {
+      setEstimateResult(await apiUpload<FoodEstimate>("/foods/estimate", form, token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo estimar la comida.");
+    } finally { setLoading(false); }
+  }
+
+  async function confirmEstimate() {
+    if (!token || !estimateResult) return;
+    const values = estimateResult.per_100g;
+    setLoading(true); setError(""); setNotice("");
+    try {
+      await api("/foods/estimate-log", token, { method: "POST", body: {
+        name: estimateResult.name, grams: estimateResult.total_grams, log_date: date, meal,
+        method: "description", description: estimateDescription,
+        kcal: values.kcal_per_100g, protein_g: values.protein_g_per_100g,
+        carbs_g: values.carbs_g_per_100g, sugars_g: values.sugars_g_per_100g,
+        fat_g: values.fat_g_per_100g, sat_fat_g: values.sat_fat_g_per_100g,
+        fiber_g: values.fiber_g_per_100g, sodium_mg: values.sodium_mg_per_100g,
+        components: estimateResult.items,
+      } });
+      setEstimateResult(null); setEstimateDescription("");
+      await load();
+      setNotice("Comida estimada revisada y registrada en tu diario.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo confirmar la estimación.");
+    } finally { setLoading(false); }
   }
 
   async function findBarcode() {
@@ -354,6 +401,24 @@ export default function NutritionScreen() {
           <Muted>{food.brand ? food.brand + " · " : ""}{Math.round(food.kcal)} kcal / 100 g · {Math.round(food.protein_g)} g proteína</Muted>
           <Text style={{ color: colors.accent, fontWeight: "800", fontSize: 12 }}>Añadir {grams} g</Text>
         </Pressable>)}
+      </Panel>
+      <SectionTitle title="Estimar comida con IA" />
+      <Panel>
+        <Muted>Describe el plato y la IA propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la estimación antes de guardarla.</Muted>
+        <Field label="Descripción de la comida" value={estimateDescription} onChangeText={setEstimateDescription} multiline numberOfLines={3} maxLength={2000} placeholder="Ej. Un plato de arroz con pollo, verduras y aceite de oliva…" />
+        <AppButton title="Estimar nutrientes" onPress={() => void estimateFood()} loading={loading} disabled={!estimateDescription.trim()} variant="secondary" />
+        {estimateResult ? <View style={{ gap: 8 }}>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>{estimateResult.name}</Text>
+          <Text style={{ color: colors.accent, fontWeight: "800" }}>{fmt(estimateResult.total_grams)} g · {fmt(estimateResult.per_100g.kcal_per_100g * estimateResult.total_grams / 100)} kcal estimadas</Text>
+          {estimateResult.items.map((item, index) => <View key={index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
+            <Text style={{ color: colors.text, fontWeight: "700" }}>{item.name} · {fmt(item.grams)} g</Text>
+            <Muted>{fmt(item.kcal_per_100g)} kcal/100 g · confianza {item.confidence === "medium" ? "media" : "baja"}</Muted>
+          </View>)}
+          {estimateResult.assumptions.map((item, index) => <Muted key={index}>• {item}</Muted>)}
+          <Muted>La estimación es orientativa, no equivale a un análisis de laboratorio.</Muted>
+          <AppButton title="Confirmar y registrar en el diario" onPress={() => void confirmEstimate()} loading={loading} />
+          <AppButton title="Descartar estimación" onPress={() => setEstimateResult(null)} variant="quiet" />
+        </View> : null}
       </Panel>
       <SectionTitle title="Buscar código de barras" />
       <Panel>
