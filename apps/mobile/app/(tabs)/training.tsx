@@ -134,6 +134,8 @@ export default function TrainingScreen() {
 
   async function refreshCatalog() {
     if (!token) return;
+    setBusy(true);
+    setError("");
     try {
       const params = new URLSearchParams();
       params.set("include_secondary", includeSecondary);
@@ -143,8 +145,11 @@ export default function TrainingScreen() {
       if (equipmentFilter) params.set("equipment", equipmentFilter);
       setCatalog(await api<Exercise[]>("/exercises?" + params.toString(), token));
       setCatalogVisible(true);
+      setCatalogFiltersVisible(false);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo buscar en el catálogo.");
+    } finally {
+      setBusy(false);
     }
   }
 
