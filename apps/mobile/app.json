@@ -41,6 +41,14 @@
           "enableBackgroundRecording": false,
           "enableBackgroundPlayback": false
         }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "SmartFit necesita acceder a tu ubicación mientras registras una ruta de andar o correr.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false
+        }
       ]
     ],
     "experiments": {
