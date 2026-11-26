@@ -1,11 +1,54 @@
 {
-  "expo":{
-    "name":"SmartFit","slug":"smartfit-mobile","scheme":"smartfit","version":"0.1.0",
-    "orientation":"portrait","userInterfaceStyle":"dark","newArchEnabled":true,
-    "plugins":["expo-router",["expo-secure-store",{"configureAndroidBackup":true,"faceIDPermission":"Permite a SmartFit proteger tu sesión."}]],
-    "experiments":{"typedRoutes":true},
-    "ios":{"supportsTablet":true,"bundleIdentifier":"com.smartfit.mobile"},
-    "android":{"package":"com.smartfit.mobile","adaptiveIcon":{"backgroundColor":"#101914"}},
-    "web":{"bundler":"metro"}
+  "expo": {
+    "name": "SmartFit",
+    "slug": "smartfit-mobile",
+    "scheme": "smartfit",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "plugins": [
+      "expo-router",
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": true,
+          "faceIDPermission": "Permite a SmartFit proteger tu sesión."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "SmartFit necesita acceder a la cámara para escanear códigos de barras y fotografiar comidas.",
+          "microphonePermission": false,
+          "recordAudioAndroid": false,
+          "barcodeScannerEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "SmartFit necesita acceder a tus fotos para estimar comidas.",
+          "cameraPermission": "SmartFit necesita acceder a la cámara para fotografiar comidas.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.smartfit.mobile"
+    },
+    "android": {
+      "package": "com.smartfit.mobile",
+      "adaptiveIcon": {
+        "backgroundColor": "#101914"
+      }
+    },
+    "web": {
+      "bundler": "metro"
+    }
   }
 }
