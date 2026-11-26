@@ -38,8 +38,9 @@ export function MuscleMap({ muscles }: Props) {
     }]));
     const max = Math.max(1, ...Object.values(values).map(value => value.sets));
     const groups: Record<string, number> = {};
-    for (const [svgId, keys] of Object.entries(muscleMapTargets)) {
-      groups[svgId] = Math.max(0, ...keys.map(key => values[key]?.sets ?? 0));
+    for (const [groupKey, svgIds] of Object.entries(muscleMapTargets)) {
+      const load = values[groupKey]?.sets ?? 0;
+      for (const svgId of svgIds) groups[svgId] = Math.max(groups[svgId] ?? 0, load);
     }
     return { values, max, groups };
   }, [muscles]);
