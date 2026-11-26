@@ -10,6 +10,7 @@ import { colors } from "@/theme";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 type Meal = "auto" | "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
+type FrequentFood = { food: FoodSearchResult; times: number; typical_grams: number; last_logged?: string };
 type OwnedFoodUnit = { id: number; food_id: number; unit_name: string; unit_name_plural?: string | null; grams_per_unit: number; description?: string | null };
 type FoodServing = OwnedFoodUnit;
 type OwnedFood = {
@@ -70,6 +71,7 @@ export default function NutritionScreen() {
   const [section, setSection] = useState<"diary" | "recipes" | "foods" | "catalog">("diary");
   const [date, setDate] = useState(localDateISO());
   const [data, setData] = useState<DashboardDay | null>(null);
+  const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [query, setQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState<"generic" | "openfoodfacts">("generic");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
@@ -126,7 +128,12 @@ export default function NutritionScreen() {
     if (!token) return;
     try {
       setError("");
-      setData(await api<DashboardDay>("/dashboard/day?date=" + encodeURIComponent(date), token));
+      const [day, frequent] = await Promise.all([
+        api<DashboardDay>("/dashboard/day?date=" + encodeURIComponent(date), token),
+        api<FrequentFood[]>("/logs/frequent?limit=8&days=60", token),
+      ]);
+      setData(day);
+      setFrequentFoods(frequent);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cargar el diario nutricional.");
     }
@@ -957,6 +964,19 @@ export default function NutritionScreen() {
           {barcodeResult.food ? <AppButton title={"Añadir " + barcodeResult.food.name} onPress={() => void addFood(barcodeResult.food!)} /> : null}
         </View> : null}
         <Muted>El escáner detecta EAN/UPC y códigos de barras habituales. Si no se reconoce, puedes introducir los dígitos manualmente.</Muted>
+      </Panel>
+      <SectionTitle title="Tus alimentos habituales" action={frequentFoods.length + " favoritos"} />
+      <Panel>
+        {frequentFoods.length ? frequentFoods.map(item => <Pressable key={item.food.id} onPress={() => {
+          setGrams(String(Math.round(item.typical_grams)));
+          void openFoodForLogging(item.food);
+        }} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 9 }}>
+          <View style={{ flex: 1, gap: 3 }}>
+            <Text style={{ color: colors.text, fontWeight: "800" }}>{item.food.name}</Text>
+            <Muted>{item.times} registros · ración habitual {fmt(item.typical_grams)} g</Muted>
+          </View>
+          <Text style={{ color: colors.accent, fontWeight: "900" }}>＋ Añadir</Text>
+        </Pressable>) : <Muted>Cuando repitas alimentos, aparecerán aquí para registrarlos rápidamente.</Muted>}
       </Panel>
       <SectionTitle title="Comidas registradas" action={(data?.entries?.length ?? 0) + " registros"} />
       <Panel>
