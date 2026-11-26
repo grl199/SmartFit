@@ -131,7 +131,8 @@ export function RouteMapPreview({ points, initiallyVisible = false, height = 220
 }) {
   const [visible,setVisible] = useState(initiallyVisible);
   const [failed,setFailed] = useState(false);
-  const webViewRef = useRef<WebView|null>(null);
+  const webViewRef = useRef<any>(null);
+  const MapWebView = WebView as unknown as React.ComponentType<any>;
   const loadedRef = useRef(false);
   const pointsRef = useRef(points);
   pointsRef.current = points;
@@ -156,7 +157,7 @@ export function RouteMapPreview({ points, initiallyVisible = false, height = 220
     </View>;
   }
   return <View style={{height,overflow:"hidden",borderRadius:12,borderWidth:1,borderColor:colors.border}}>
-    <WebView
+    <MapWebView
       ref={webViewRef}
       source={{html:ROUTE_MAP_HTML,baseUrl:"https://smartfit.local"}}
       originWhitelist={["*"]}
@@ -169,7 +170,7 @@ export function RouteMapPreview({ points, initiallyVisible = false, height = 220
       style={{flex:1,backgroundColor:colors.surface}}
     />
     <View style={{position:"absolute",right:8,top:8}}>
-      <AppButton title="Ocultar mapa" size="sm" variant="secondary" onPress={() => setVisible(false)}/>
+      <AppButton title="Ocultar mapa" variant="secondary" onPress={() => setVisible(false)}/>
     </View>
   </View>;
 }
