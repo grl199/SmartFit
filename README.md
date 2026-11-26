@@ -245,3 +245,8 @@ carga batch de USDA FoodData Central y otras bases en CSV (`python -m app.ingest
 **Cálculo energético** — edad, metabolismo basal y gasto total por código (`GET /profile/energy`).
 
 Pendiente: app Android para Health Connect / Samsung Health, OAuth de Google Health API, BEDCA, vídeos/imágenes de ejercicios con licencia, Alembic.
+
+
+## Despliegue en Google Cloud
+
+Los servicios web y backend se despliegan de forma independiente en Cloud Run. La app Android utiliza un tercer trigger de Cloud Build que inicia una compilación firmada de Expo EAS. Consulta los pasos, secretos y configuración en [Despliegue móvil con Cloud Build y EAS](docs/deployment/mobile-cloud-build.md).
