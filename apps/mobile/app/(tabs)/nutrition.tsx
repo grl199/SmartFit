@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, Image, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Image, Linking, Platform, Pressable, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { api, apiUpload, type DashboardDay, type FoodSearchResult } from "@/lib/api";
@@ -11,6 +11,12 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 type Meal = "auto" | "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
 type FrequentFood = { food: FoodSearchResult; times: number; typical_grams: number; last_logged?: string };
+type FoodDetail = FoodSearchResult & {
+  source?: string; user_id?: number | null; barcode?: string | null; image_url?: string | null;
+  nutriscore_grade?: string | null; nova_group?: number | null; ecoscore_grade?: string | null;
+  serving_size?: string | null; labels?: string[]; allergens?: string[]; ingredients?: string | null;
+  categories?: string[]; attribution?: string | null; license?: string | null;
+};
 type OwnedFoodUnit = { id: number; food_id: number; unit_name: string; unit_name_plural?: string | null; grams_per_unit: number; description?: string | null };
 type FoodServing = OwnedFoodUnit;
 type OwnedFood = {
@@ -84,6 +90,7 @@ export default function NutritionScreen() {
   const [foodSearchSource, setFoodSearchSource] = useState<"generic" | "openfoodfacts">("generic");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | null>(null);
+  const [selectedFoodDetail, setSelectedFoodDetail] = useState<FoodDetail | null>(null);
   const [foodServings, setFoodServings] = useState<FoodServing[]>([]);
   const [selectedFoodUnit, setSelectedFoodUnit] = useState("grams");
   const [foodQuantity, setFoodQuantity] = useState("100");
@@ -371,15 +378,38 @@ export default function NutritionScreen() {
   async function openFoodForLogging(food: FoodSearchResult) {
     if (!token) return;
     setSelectedFood(food);
+    setSelectedFoodDetail(null);
     setFoodQuantity(grams);
     setSelectedFoodUnit("grams");
     setFoodServings([]);
     setError("");
     try {
-      setFoodServings(await api<FoodServing[]>("/foods/" + food.id + "/servings", token));
+      const [detail, units] = await Promise.all([
+        api<FoodDetail>("/foods/" + food.id, token),
+        api<FoodServing[]>("/foods/" + food.id + "/servings", token),
+      ]);
+      setSelectedFoodDetail(detail);
+      setFoodServings(units);
+      if (detail.serving_g) setFoodQuantity(String(detail.serving_g));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "No se pudieron cargar las unidades de este alimento.");
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar los detalles de este alimento.");
     }
+  }
+
+  async function copySelectedFood() {
+    if (!token || !selectedFood) return;
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const copy = await api<OwnedFood>("/foods/" + selectedFood.id + "/copy", token, { method: "POST", body: {} });
+      setSelectedFood(null);
+      setSelectedFoodDetail(null);
+      setSection("foods");
+      await loadOwnedFoods();
+      await editOwnedFood(copy);
+      setNotice("Copia personal creada. El alimento original permanece intacto.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo crear una copia del alimento.");
+    } finally { setLoading(false); }
   }
 
   async function addSelectedFood() {
@@ -942,6 +972,20 @@ export default function NutritionScreen() {
         </Pressable>)}
         {selectedFood ? <View style={{ borderTopWidth: 1, borderTopColor: colors.accent, paddingTop: 12, gap: 8 }}>
           <SectionTitle title={selectedFood.name} action="Registrar ingesta" />
+          {selectedFoodDetail?.image_url ? <Image source={{ uri: selectedFoodDetail.image_url }} style={{ width: "100%", height: 150, borderRadius: 12, backgroundColor: colors.surfaceRaised }} resizeMode="contain" /> : null}
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {selectedFoodDetail?.nutriscore_grade ? <Muted>Nutri-Score {selectedFoodDetail.nutriscore_grade.toUpperCase()}</Muted> : null}
+            {selectedFoodDetail?.nova_group ? <Muted>NOVA {selectedFoodDetail.nova_group}</Muted> : null}
+            {selectedFoodDetail?.ecoscore_grade ? <Muted>Eco-Score {selectedFoodDetail.ecoscore_grade.toUpperCase()}</Muted> : null}
+          </View>
+          {selectedFoodDetail?.serving_size ? <Muted>Ración indicada: {selectedFoodDetail.serving_size}</Muted> : null}
+          {selectedFoodDetail?.labels?.length ? <Muted>Etiquetas: {selectedFoodDetail.labels.join(", ")}</Muted> : null}
+          {selectedFoodDetail?.allergens?.length ? <Muted>Alérgenos: {selectedFoodDetail.allergens.join(", ")}</Muted> : null}
+          {selectedFoodDetail?.ingredients ? <Muted>Ingredientes: {selectedFoodDetail.ingredients}</Muted> : null}
+          {selectedFoodDetail?.source === "openfoodfacts" && selectedFoodDetail.barcode
+            ? <Text onPress={() => void Linking.openURL("https://world.openfoodfacts.org/product/" + encodeURIComponent(selectedFoodDetail.barcode!))} style={{ color: colors.accent, fontWeight: "800" }}>Ver ficha original en Open Food Facts ↗</Text>
+            : null}
+          {selectedFoodDetail?.user_id == null ? <AppButton title="Crear mi versión editable" variant="quiet" onPress={() => void copySelectedFood()} loading={loading} /> : null}
           <Text style={{ color: colors.text, fontWeight: "700" }}>Unidad de medida</Text>
           <ChoiceRow value={selectedFoodUnit} onChange={setSelectedFoodUnit} options={[
             { value: "grams", label: "Gramos" },
