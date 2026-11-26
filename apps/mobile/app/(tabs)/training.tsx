@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Linking, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Modal, Pressable, ScrollView, Text, View } from "react-native";
 import { api } from "@/lib/api";
 import { dateLabel, localDateISO } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
@@ -70,6 +70,10 @@ export default function TrainingScreen() {
   const [muscleFilter, setMuscleFilter] = useState("");
   const [equipmentFilter, setEquipmentFilter] = useState("");
   const [includeSecondary, setIncludeSecondary] = useState("true");
+  const [catalogFiltersVisible, setCatalogFiltersVisible] = useState(false);
+  const [catalogVisible, setCatalogVisible] = useState(false);
+  const [showSessionDetails, setShowSessionDetails] = useState(false);
+  const [showCreateExercise, setShowCreateExercise] = useState(false);
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exerciseContent, setExerciseContent] = useState<Content | null>(null);
   const [exerciseHistory, setExerciseHistory] = useState<ExerciseHistory>([]);
@@ -138,8 +142,18 @@ export default function TrainingScreen() {
       if (muscleFilter) params.set("muscles", muscleFilter);
       if (equipmentFilter) params.set("equipment", equipmentFilter);
       setCatalog(await api<Exercise[]>("/exercises?" + params.toString(), token));
+      setCatalogVisible(true);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo buscar en el catálogo.");
+    }
+  }
+
+  function changeCategory(next: string) {
+    setCategory(next);
+    setCatalogVisible(false);
+    if (next === "strength") {
+      setKindFilter("strength");
+      setCatalogFiltersVisible(true);
     }
   }
 
@@ -368,67 +382,122 @@ export default function TrainingScreen() {
     <ErrorMessage message={error} />
     {notice ? <Text style={{ color: colors.accent, fontSize: 13 }}>{notice}</Text> : null}
     {loading ? <ActivityIndicator color={colors.accent} /> : null}
+    <Modal
+      visible={catalogFiltersVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setCatalogFiltersVisible(false)}
+    >
+      <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.62)", justifyContent: "flex-end", padding: 12 }}>
+        <View style={{ maxHeight: "88%", backgroundColor: colors.surface, borderColor: colors.border, borderWidth: 1, borderRadius: 22, padding: 16, gap: 12 }}>
+          <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+            <View style={{ flex: 1 }}>
+              <Text style={{ color: colors.accent, fontSize: 11, fontWeight: "900" }}>PREPARAR CATÁLOGO</Text>
+              <Text style={{ color: colors.text, fontSize: 20, fontWeight: "900" }}>¿Qué quieres entrenar?</Text>
+            </View>
+            <Pressable onPress={() => setCatalogFiltersVisible(false)}><Text style={{ color: colors.muted, fontWeight: "900", padding: 8 }}>✕</Text></Pressable>
+          </View>
+          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, paddingBottom: 8 }}>
+            <Field label="Buscar ejercicio (opcional)" value={query} onChangeText={setQuery} placeholder="Press banca, sentadilla…" />
+            <Text style={{ color: colors.text, fontWeight: "800" }}>Tipo de ejercicio</Text>
+            <ChoiceRow value={kindFilter} onChange={setKindFilter} options={kindFilterOptions} />
+            <Text style={{ color: colors.text, fontWeight: "800" }}>Grupo muscular</Text>
+            <ChoiceRow value={muscleFilter} onChange={setMuscleFilter} options={muscleFilterOptions} />
+            <Text style={{ color: colors.text, fontWeight: "800" }}>Equipamiento</Text>
+            <ChoiceRow value={equipmentFilter} onChange={setEquipmentFilter} options={equipmentFilterOptions} />
+            <Text style={{ color: colors.text, fontWeight: "800" }}>Incluir músculos secundarios</Text>
+            <ChoiceRow value={includeSecondary} onChange={setIncludeSecondary} options={[
+              { value: "true", label: "Sí" }, { value: "false", label: "Solo principal" },
+            ]} />
+          </ScrollView>
+          <AppButton title="Ver ejercicios disponibles" onPress={() => {
+            setCatalogFiltersVisible(false);
+            void refreshCatalog();
+          }} loading={busy} />
+          <AppButton title="Cancelar" onPress={() => setCatalogFiltersVisible(false)} variant="quiet" />
+        </View>
+      </View>
+    </Modal>
 
     {tab === "session" ? <>
-      <Panel>
-        <SectionTitle title="Datos de la sesión" />
-        <Field label="Nombre" value={name} onChangeText={setName} placeholder="Entrenamiento" />
-        <Field label="Fecha (AAAA-MM-DD)" value={date} onChangeText={setDate} placeholder={localDateISO()} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo de actividad</Text>
-        <ChoiceRow value={category} onChange={setCategory} options={categories} />
-        {drafts.length === 0 ? <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" /> : <Muted>La duración total se calculará sumando los minutos de cada ejercicio.</Muted>}
-        {isCardio ? <>
-          <Field label="Distancia (km)" value={distance} onChangeText={setDistance} keyboardType="decimal-pad" placeholder="Ej. 5,2" />
-          <Field label="Desnivel positivo (m)" value={elevation} onChangeText={setElevation} keyboardType="number-pad" />
-          <Field label="Pasos" value={steps} onChangeText={setSteps} keyboardType="number-pad" />
+      {!selectedExercise ? <>
+        <Panel>
+          <SectionTitle title="Datos de la sesión" />
+          <Field label="Nombre" value={name} onChangeText={setName} placeholder="Entrenamiento" />
+          <Field label="Fecha (AAAA-MM-DD)" value={date} onChangeText={setDate} placeholder={localDateISO()} />
+          <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo de actividad</Text>
+          <ChoiceRow value={category} onChange={changeCategory} options={categories} />
+          {category === "strength" ? <Muted>Primero define qué tipo de ejercicios quieres ver. Después podrás seleccionar uno para abrir su ficha.</Muted> : null}
+          {isCardio ? <>
+            <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
+            <Field label="Distancia (km)" value={distance} onChangeText={setDistance} keyboardType="decimal-pad" placeholder="Ej. 5,2" />
+            <Field label="Desnivel positivo (m)" value={elevation} onChangeText={setElevation} keyboardType="number-pad" />
+            <Field label="Pasos" value={steps} onChangeText={setSteps} keyboardType="number-pad" />
+            <Field label="Frecuencia cardiaca media (ppm)" value={heartRate} onChangeText={setHeartRate} keyboardType="number-pad" placeholder="Opcional" />
+            <Field label="Notas" value={notes} onChangeText={setNotes} multiline numberOfLines={3} maxLength={1000} placeholder="Sensaciones, intensidad o comentarios…" />
+            <Muted>Las métricas de cardio se registran aquí; para rutas GPS utiliza la pestaña GPS.</Muted>
+          </> : <>
+            <Pressable onPress={() => setShowSessionDetails(value => !value)} style={{ paddingVertical: 8 }}>
+              <Text style={{ color: colors.accent, fontWeight: "800" }}>{showSessionDetails ? "− Ocultar detalles adicionales" : "+ Detalles adicionales"}</Text>
+            </Pressable>
+            {showSessionDetails ? <>
+              {drafts.length === 0
+                ? <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
+                : <Muted>La duración se calculará sumando el tiempo dedicado a cada ejercicio.</Muted>}
+              <Field label="Frecuencia cardiaca media (ppm)" value={heartRate} onChangeText={setHeartRate} keyboardType="number-pad" placeholder="Opcional" />
+              <Field label="Notas" value={notes} onChangeText={setNotes} multiline numberOfLines={3} maxLength={1000} placeholder="Sensaciones, intensidad o comentarios…" />
+            </> : null}
+          </>}
+          {!isCardio ? <AppButton
+            title={catalogVisible ? "Cambiar filtros de ejercicios" : "Configurar filtros y elegir ejercicios"}
+            onPress={() => { if (category === "strength") setKindFilter("strength"); setCatalogFiltersVisible(true); }}
+            variant="secondary"
+          /> : null}
+          {drafts.length > 0 ? <Muted>{drafts.length} ejercicios preparados para esta sesión.</Muted> : null}
+        </Panel>
+
+        {catalogVisible && !isCardio ? <>
+          <SectionTitle title="Ejercicios disponibles" action={catalog.length + " resultados"} />
+          <Panel>
+            {catalog.slice(0, 40).map(exercise => <Pressable key={exercise.id}
+              onPress={() => void showExercise(exercise)}
+              style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10, paddingVertical: 12, borderTopWidth: 1, borderColor: colors.border }}>
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={{ color: colors.text, fontWeight: "900" }}>{exercise.name}</Text>
+                <Muted>{exercise.primary_muscle.replaceAll("_", " ")} · {exercise.equipment.join(", ")}</Muted>
+                <Text style={{ color: colors.accent, fontWeight: "800", fontSize: 12 }}>Abrir ficha y animación 3D ›</Text>
+              </View>
+              <Text style={{ color: colors.accent, fontSize: 22 }}>›</Text>
+            </Pressable>)}
+            {!catalog.length ? <Muted>No hay ejercicios con estos filtros. Prueba otra combinación.</Muted> : null}
+            <AppButton title="Modificar filtros" onPress={() => setCatalogFiltersVisible(true)} variant="quiet" />
+            <Pressable onPress={() => setShowCreateExercise(value => !value)} style={{ paddingVertical: 9 }}>
+              <Text style={{ color: colors.accent, fontWeight: "800" }}>{showCreateExercise ? "− Ocultar creación de ejercicio" : "+ Crear ejercicio propio"}</Text>
+            </Pressable>
+            {showCreateExercise ? <>
+              <Field label="Nombre del ejercicio" value={newExerciseName} onChangeText={setNewExerciseName} placeholder="Ej. Press inclinado con mancuernas" />
+              <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo</Text>
+              <ChoiceRow value={newExerciseKind} onChange={setNewExerciseKind} options={[
+                { value: "strength", label: "Fuerza" }, { value: "full_body", label: "Cuerpo entero" }, { value: "stretching", label: "Estiramiento" },
+              ]} />
+              <Text style={{ color: colors.text, fontWeight: "700" }}>Músculo principal</Text>
+              <ChoiceRow value={newExerciseMuscle} onChange={setNewExerciseMuscle} options={muscleOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
+              <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
+              <ChoiceRow value={newExerciseEquipment} onChange={setNewExerciseEquipment} options={equipmentOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
+              <AppButton title="Crear ejercicio" onPress={() => void createCustomExercise()} loading={busy} disabled={!newExerciseName.trim()} variant="secondary" />
+              <Muted>El ejercicio se guarda en tu catálogo privado y se añade a esta sesión.</Muted>
+            </> : null}
+          </Panel>
         </> : null}
-        <Field label="Frecuencia cardiaca media (ppm)" value={heartRate} onChangeText={setHeartRate} keyboardType="number-pad" placeholder="Opcional" />
-        <Field label="Notas" value={notes} onChangeText={setNotes} multiline numberOfLines={3} maxLength={1000} placeholder="Sensaciones, intensidad o comentarios…" />
-        {isCardio ? <Muted>En esta versión puedes introducir manualmente las métricas de la actividad. El seguimiento GPS en directo de la web aún requiere adaptación nativa.</Muted> : null}
-      </Panel>
-      <SectionTitle title="Añadir ejercicios" action={drafts.length + " ejercicios"} />
-      <Panel>
-        <Field label="Buscar en el catálogo" value={query} onChangeText={setQuery} placeholder="Press banca, sentadilla…" returnKeyType="search" onSubmitEditing={() => void refreshCatalog()} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo de ejercicio</Text>
-        <ChoiceRow value={kindFilter} onChange={setKindFilter} options={kindFilterOptions} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Grupo muscular</Text>
-        <ChoiceRow value={muscleFilter} onChange={setMuscleFilter} options={muscleFilterOptions} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
-        <ChoiceRow value={equipmentFilter} onChange={setEquipmentFilter} options={equipmentFilterOptions} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Coincidir con músculos secundarios</Text>
-        <ChoiceRow value={includeSecondary} onChange={setIncludeSecondary} options={[{ value: "true", label: "Sí" }, { value: "false", label: "Solo principal" }]} />
-        <AppButton title="Aplicar filtros" onPress={() => void refreshCatalog()} variant="secondary" />
-        {catalog.slice(0, 30).map(exercise => <View key={exercise.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 }}>
-          <View style={{ flex: 1, gap: 2 }}>
-            <Text style={{ color: colors.text, fontWeight: "800" }}>{exercise.name}</Text>
-            <Muted>{exercise.primary_muscle.replaceAll("_", " ")} · {exercise.equipment.join(", ")}</Muted>
-          </View>
-          <View style={{ gap: 6 }}>
-            <AppButton title="＋ Añadir" onPress={() => addExercise(exercise)} variant="quiet" />
-            <AppButton title="Ver ficha + animación 3D" onPress={() => void showExercise(exercise)} variant="quiet" />
-          </View>
-        </View>)}
-        {catalog.length === 0 ? <Muted>No hay resultados. Prueba otra búsqueda.</Muted> : null}
-      </Panel>
-      <Panel>
-        <SectionTitle title="Crear ejercicio propio" />
-        <Field label="Nombre del ejercicio" value={newExerciseName} onChangeText={setNewExerciseName} placeholder="Ej. Press inclinado con mancuernas" />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo</Text>
-        <ChoiceRow value={newExerciseKind} onChange={setNewExerciseKind} options={[
-          { value: "strength", label: "Fuerza" }, { value: "full_body", label: "Cuerpo entero" }, { value: "stretching", label: "Estiramiento" },
-        ]} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Músculo principal</Text>
-        <ChoiceRow value={newExerciseMuscle} onChange={setNewExerciseMuscle} options={muscleOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
-        <ChoiceRow value={newExerciseEquipment} onChange={setNewExerciseEquipment} options={equipmentOptions.map(value => ({ value, label: value.replaceAll("_", " ") }))} />
-        <AppButton title="Crear ejercicio" onPress={() => void createCustomExercise()} loading={busy} disabled={!newExerciseName.trim()} variant="secondary" />
-        <Muted>El ejercicio se guarda en tu catálogo privado.</Muted>
-      </Panel>
+      </> : null}
+
       {selectedExercise ? <Panel>
+        <AppButton title="← Volver a ejercicios" onPress={() => setSelectedExercise(null)} variant="quiet" />
         <SectionTitle title={selectedExercise.name} />
         <SectionTitle title="Animación interactiva 3D" />
         <ExerciseAnimation exerciseName={selectedExercise.name} />
         <Muted>Una repetición en bucle. Arrastra para girar el modelo; puedes pausar o activar el giro 360° desde los controles de la animación.</Muted>
+        <AppButton title="Añadir a esta sesión" onPress={() => { addExercise(selectedExercise); setSelectedExercise(null); }} loading={busy} />
         {exerciseContent?.description ? <Muted>{exerciseContent.description}</Muted> : <Muted>Ficha de ejercicio</Muted>}
         {exerciseContent?.start_position ? <Text style={{ color: colors.text, fontWeight: "700" }}>Posición inicial: {exerciseContent.start_position}</Text> : null}
         {exerciseContent?.instructions?.map((instruction, index) => <Muted key={index}>{index + 1}. {instruction}</Muted>)}
@@ -451,6 +520,7 @@ export default function TrainingScreen() {
         </View>)}
         <Text onPress={() => setSelectedExercise(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar ficha</Text>
       </Panel> : null}
+      {!selectedExercise ? <>
       {drafts.map(item => <Panel key={item.exercise.id}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ color: colors.text, fontWeight: "900", flex: 1 }}>{item.exercise.name}</Text>
@@ -472,6 +542,7 @@ export default function TrainingScreen() {
         <AppButton title="+ Añadir serie" onPress={() => setDrafts(current => current.map(entry => entry.exercise.id === item.exercise.id ? { ...entry, sets: [...entry.sets, emptySet()] } : entry))} variant="quiet" />
       </Panel>)}
       <AppButton title="Guardar sesión" onPress={() => void saveSession()} loading={busy} />
+      </> : null}
     </> : null}
 
     {tab === "plan" ? <>
