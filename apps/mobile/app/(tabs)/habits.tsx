@@ -29,6 +29,12 @@ type Connection = {
 };
 const fmt = (value: number | null | undefined) => value == null ? "—" : Math.round(value).toLocaleString("es-ES");
 const scoreOptions = ["1", "2", "3", "4", "5"].map(value => ({ value, label: value }));
+function shiftDay(value: string, amount: number) {
+  const parts = value.split("-").map(Number);
+  const day = new Date(parts[0], parts[1] - 1, parts[2], 12);
+  day.setDate(day.getDate() + amount);
+  return [day.getFullYear(), String(day.getMonth() + 1).padStart(2, "0"), String(day.getDate()).padStart(2, "0")].join("-");
+}
 
 export default function HabitsScreen() {
   const { token } = useAuth();
@@ -194,8 +200,12 @@ export default function HabitsScreen() {
   return <Screen>
     <PageTitle eyebrow="Hábitos y bienestar" title="Cuida lo que sostiene tu progreso" subtitle="Hidratación, pasos y estado de ánimo. Los registros se sincronizan con tu cuenta." />
     <Panel>
-      <Field label="Día seleccionado (AAAA-MM-DD)" value={date} onChangeText={setDate} placeholder="2026-11-26" />
-      <Muted>Los registros futuros no están permitidos. Hoy es {today}.</Muted>
+      <Text style={{ color: colors.text, fontWeight: "800", fontSize: 16 }}>Día seleccionado · {date}</Text>
+      <View style={{ flexDirection: "row", gap: 8 }}>
+        <View style={{ flex: 1 }}><AppButton title="← Día anterior" onPress={() => setDate(value => shiftDay(value, -1))} variant="secondary" /></View>
+        <View style={{ flex: 1 }}><AppButton title="Volver a hoy" onPress={() => setDate(today)} variant="quiet" disabled={date === today} /></View>
+      </View>
+      <Muted>Los registros futuros no están permitidos.</Muted>
     </Panel>
     {loading ? <ActivityIndicator color={colors.accent} /> : null}
     <ErrorMessage message={error} />
