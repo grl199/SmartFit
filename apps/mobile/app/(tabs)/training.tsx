@@ -526,7 +526,7 @@ export default function TrainingScreen() {
         </View>)}
         <Text onPress={() => setSelectedExercise(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar ficha</Text>
       </Panel> : null}
-      {!selectedExercise ? <>
+      {!selectedExercise && !isCardio ? <>
       {drafts.map(item => <Panel key={item.exercise.id}>
         <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
           <Text style={{ color: colors.text, fontWeight: "900", flex: 1 }}>{item.exercise.name}</Text>
