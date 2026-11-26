@@ -9,7 +9,7 @@ import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Pro
 import { colors } from "@/theme";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
-type Meal = "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
+type Meal = "auto" | "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
 type OwnedFoodUnit = { id: number; food_id: number; unit_name: string; unit_name_plural?: string | null; grams_per_unit: number; description?: string | null };
 type FoodServing = OwnedFoodUnit;
 type OwnedFood = {
@@ -54,7 +54,7 @@ type FoodEstimate = {
 };
 
 const meals: Array<{ value: Meal; label: string }> = [
-  { value: "breakfast", label: "Desayuno" }, { value: "mid_morning", label: "Media mañana" },
+  { value: "auto", label: "Automático" }, { value: "breakfast", label: "Desayuno" }, { value: "mid_morning", label: "Media mañana" },
   { value: "lunch", label: "Comida" }, { value: "snack", label: "Merienda" }, { value: "dinner", label: "Cena" },
 ];
 function shiftDay(value: string, amount: number) {
@@ -355,8 +355,8 @@ export default function NutritionScreen() {
     setLoading(true); setError(""); setNotice("");
     try {
       const body = usingUnit
-        ? { food_id: selectedFood.id, serving_id: Number(selectedFoodUnit), quantity, meal, log_date: date }
-        : { food_id: selectedFood.id, grams: quantity, meal, log_date: date };
+        ? { food_id: selectedFood.id, serving_id: Number(selectedFoodUnit), quantity, meal: meal === "auto" ? null : meal, log_date: date }
+        : { food_id: selectedFood.id, grams: quantity, meal: meal === "auto" ? null : meal, log_date: date };
       await api("/logs", token, { method: "POST", body });
       setSelectedFood(null); setFoodServings([]); setFoodQuantity("100");
       setResults([]); setQuery("");
@@ -376,7 +376,7 @@ export default function NutritionScreen() {
     }
     setLoading(true); setError(""); setNotice("");
     try {
-      await api("/logs", token, { method: "POST", body: { food_id: food.id, grams: quantity, meal, log_date: date } });
+      await api("/logs", token, { method: "POST", body: { food_id: food.id, grams: quantity, meal: meal === "auto" ? null : meal, log_date: date } });
       setResults([]); setQuery("");
       await load();
       setNotice("Alimento registrado.");
@@ -538,7 +538,7 @@ export default function NutritionScreen() {
     setLoading(true); setError(""); setNotice("");
     try {
       await api("/foods/estimate-log", token, { method: "POST", body: {
-        name: estimateResult.name, grams: estimateResult.total_grams, log_date: date, meal,
+        name: estimateResult.name, grams: estimateResult.total_grams, log_date: date, meal: meal === "auto" ? null : meal,
         method: estimateResult.method ?? (estimatePhoto ? "photo" : "description"), description: estimateDescription,
         kcal: values.kcal_per_100g, protein_g: values.protein_g_per_100g,
         carbs_g: values.carbs_g_per_100g, sugars_g: values.sugars_g_per_100g,
@@ -725,7 +725,7 @@ export default function NutritionScreen() {
     }
     setLoading(true); setError(""); setNotice("");
     try {
-      await api("/recipes/" + recipe.id + "/log", token, { method: "POST", body: { servings: count, meal, log_date: date } });
+      await api("/recipes/" + recipe.id + "/log", token, { method: "POST", body: { servings: count, meal: meal === "auto" ? null : meal, log_date: date } });
       setSection("diary");
       await load();
       setNotice("Ración registrada en tu diario.");
