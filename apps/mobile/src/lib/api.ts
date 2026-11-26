@@ -85,9 +85,19 @@ export async function apiUpload<T>(path: string, formData: FormData, token: stri
 export type TokenResponse = SessionResponse;
 export type DashboardDay = {
   date: string;
-  totals: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number };
-  targets: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number; water_ml?: number | null; workouts_per_week?: number };
-  entries: Array<{ id: number; time: string; meal: string; food: string; grams: number; kcal: number; protein_g: number; carbs_g: number; fat_g: number }>;
+  totals: {
+    kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
+    sat_fat_g: number; fiber_g: number; sodium_mg: number;
+  };
+  targets: {
+    kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number;
+    water_ml?: number | null; workouts_per_week?: number;
+  };
+  entries: Array<{
+    id: number; time: string; meal: string; food: string; brand?: string | null; grams: number;
+    kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
+    sat_fat_g: number; fiber_g: number; sodium_mg: number;
+  }>;
   workouts: Array<{ id: number; kind: string; duration_min: number; kcal_burned?: number | null }>;
   water_ml: number;
 };
