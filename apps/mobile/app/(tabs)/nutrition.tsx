@@ -79,7 +79,7 @@ function shiftDay(value: string, amount: number) {
   day.setDate(day.getDate() + amount);
   return [day.getFullYear(), String(day.getMonth() + 1).padStart(2, "0"), String(day.getDate()).padStart(2, "0")].join("-");
 }
-const normalizeFoodQuery = (value: string) => value.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
+const normalizeFoodQuery = (value: string) => value.toLocaleLowerCase("es").normalize("NFD").replace(/[\u0300-\u036f]/g, "");
 const fmt = (value: number | null | undefined) => value == null ? "—" : Math.round(value).toLocaleString("es-ES");
 
 export default function NutritionScreen() {
@@ -1243,7 +1243,7 @@ export default function NutritionScreen() {
     {section === "catalog" ? <>
       <SectionTitle title="Catálogo de alimentos" action={catalogSections.reduce((sum, item) => sum + item.count, 0) + " alimentos"} />
       <Muted>Explora alimentos por categoría y añádelos al diario con la cantidad y comida seleccionadas.</Muted>
-      <Field label="Filtrar esta categoría" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Buscar por nombre…" />
+      <Field label="Buscar alimentos en todas las categorías" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Ej. lentejas, café, arroz…" />
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
       <View style={{ gap: 8 }}>
         {filteredCatalogSections.map(item => {
