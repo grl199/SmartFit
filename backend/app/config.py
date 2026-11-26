@@ -8,12 +8,15 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://health:health@localhost:5432/health"
     timezone: str = "Europe/Madrid"
+    cors_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
 
     # --- Autenticación ---
     # Clave para firmar los JWT. Genera una con: python -c "import secrets; print(secrets.token_urlsafe(48))"
     # Si falta, se genera una aleatoria al arrancar (las sesiones se pierden en cada reinicio).
     secret_key: str | None = None
-    token_ttl_hours: int = 12
+    token_ttl_hours: int = 12  # compatibilidad con clientes anteriores
+    access_token_ttl_minutes: int = 15
+    refresh_token_ttl_days: int = 30
     allow_registration: bool = True
     # Credenciales para el usuario 1 ya existente (solo se aplican si aún no tiene contraseña).
     bootstrap_username: str | None = None

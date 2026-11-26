@@ -8,8 +8,8 @@ NUTRIENT_LABELS = {"kcal": "kcal", "protein_g": "Proteína (g)", "carbs_g": "Hid
                    "sugars_g": "Azúcares (g)", "sat_fat_g": "Saturadas (g)", "fiber_g": "Fibra (g)"}
 
 
-def quick_add_bar(limit: int = 12, per_row: int = 4) -> None:
-    """Barra de alimentos habituales: un clic = registrar la cantidad típica."""
+def quick_add_bar(limit: int = 12, per_row: int = 4, log_date: str | None = None, meal: str | None = None) -> None:
+    """Barra de alimentos habituales: registra la ración típica en la fecha seleccionada."""
     items = api.get("/logs/frequent", limit=limit) or []
     if not items:
         st.caption("Aquí aparecerán tus alimentos más habituales para re-registrarlos con un clic.")
@@ -19,7 +19,7 @@ def quick_add_bar(limit: int = 12, per_row: int = 4) -> None:
             f = it["food"]
             if col.button(f"{f['name'][:22]} · {it['typical_grams']:.0f} g", key=f"qa_{f['id']}",
                           width="stretch", help=f"{it['times']} veces en los últimos 60 días"):
-                if api.post("/logs", json={"food_id": f["id"], "grams": it["typical_grams"]}):
+                if api.post("/logs", json={"food_id": f["id"], "grams": it["typical_grams"], "log_date": log_date, "meal": meal}):
                     st.toast(f"Añadido: {f['name']} ({it['typical_grams']:.0f} g)", icon="✅")
                     st.rerun()
 

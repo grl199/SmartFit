@@ -45,10 +45,23 @@ class User(Base):
         String(255), comment="Hash argon2id de la contraseña. NULL = cuenta sin credenciales (no puede iniciar sesión).")
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default=text("false"),
-        comment="TRUE cuando el usuario completó el perfil inicial y la IA generó sus objetivos. "
+        comment="TRUE cuando se completó el perfil inicial y se generaron objetivos personalizados o provisionales. "
                 "Mientras sea FALSE la API bloquea el resto de funciones.")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), comment="Fecha de alta de la cuenta.")
+
+
+class AuthSession(Base):
+    __tablename__ = "auth_sessions"
+    __table_args__ = {
+        "comment": "Sesiones de autenticación con refresh token rotatorio. Revocar una sesión invalida también sus JWT de acceso.",
+    }
+    id: Mapped[str] = mapped_column(String(32), primary_key=True, comment="Identificador aleatorio de la sesión (sid incluido en el JWT).")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario propietario de la sesión.")
+    refresh_token_hash: Mapped[str] = mapped_column(String(64), comment="SHA-256 del refresh token vigente; el secreto en claro nunca se almacena.")
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True, comment="Caducidad absoluta de la sesión renovable.")
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), comment="Fecha de revocación; NULL mientras la sesión está activa.")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación de la sesión.")
 
 
 class UserProfile(Base):
@@ -177,6 +190,16 @@ class Food(Base):
         return (self.extra or {}).get("original_name")
 
     @property
+    def source_url(self) -> str | None:
+        """Enlace directo a la ficha de la fuente externa cuando existe."""
+        explicit = (self.extra or {}).get("source_url")
+        if explicit:
+            return str(explicit)
+        if self.source == "openfoodfacts" and self.barcode:
+            return f"https://world.openfoodfacts.org/product/{self.barcode}"
+        return None
+
+    @property
     def confirmed_by(self) -> int | None:
         return (self.extra or {}).get("confirmed_by")
 
@@ -192,6 +215,14 @@ class Food(Base):
     def categories(self) -> list[str]:
         return list((self.extra or {}).get("categories") or [])
 
+    @property
+    def labels(self) -> list[str]:
+        return list((self.extra or {}).get("labels") or [])
+
+    @property
+    def serving_size(self) -> str | None:
+        return (self.extra or {}).get("serving_size")
+
 
 class FoodLog(Base):
     __tablename__ = "food_logs"
@@ -203,7 +234,7 @@ class FoodLog(Base):
     logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="Instante en que se registró la ingesta.")
     log_date: Mapped[date] = mapped_column(Date, index=True, comment="Día local del usuario al que se imputa la ingesta (zona horaria de la app).")
     grams: Mapped[float] = mapped_column(Float, comment="Cantidad consumida, en gramos.")
-    meal: Mapped[str] = mapped_column(String(20), comment="Comida del día: 'breakfast' | 'lunch' | 'snack' | 'dinner'.")
+    meal: Mapped[str] = mapped_column(String(20), comment="Comida del día: desayuno | almuerzo | comida | merienda | cena.")
     kcal: Mapped[float] = _nutr("Energía", "kcal", False)
     protein_g: Mapped[float] = _nutr("Proteínas", "g", False)
     carbs_g: Mapped[float] = _nutr("Hidratos de carbono totales", "g", False)
@@ -222,7 +253,13 @@ class Workout(Base):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario que entrenó.")
     performed_on: Mapped[date] = mapped_column(Date, index=True, comment="Día en que se realizó el entrenamiento.")
     kind: Mapped[str] = mapped_column(String(100), comment="Tipo de entrenamiento en texto libre (fuerza, running, bici...).")
-    duration_min: Mapped[int] = mapped_column(Integer, comment="Duración en minutos.")
+    duration_min: Mapped[int] = mapped_column(Integer, comment="Duración total de la sesión en minutos (suma de los tiempos por ejercicio cuando se registran).")
+    exercise_durations_min: Mapped[dict] = mapped_column(
+        JSONB, default=dict, server_default=text("'{}'::jsonb"),
+        comment="Minutos dedicados a cada ejercicio en esta sesión. Claves = exercise_id como texto; la suma define duration_min cuando existe.")
+    route_points: Mapped[list] = mapped_column(
+        JSONB, default=list, server_default=text("'[]'::jsonb"),
+        comment="Puntos GPS de una actividad de andar/correr. Cada punto contiene latitud, longitud, altitud, precisión y fecha.")
     category: Mapped[str | None] = mapped_column(
         String(20), comment="Categoría de la sesión (Cardio = walking/running/sport). Valores: 'strength' | 'walking' | 'running' | 'sport' | 'full_body' | 'stretching'.")
     kcal_burned: Mapped[float | None] = mapped_column(Float, comment="Energía gastada en la sesión, en kcal (estimada por la IA o introducida a mano).")
@@ -235,6 +272,23 @@ class Workout(Base):
     steps: Mapped[int | None] = mapped_column(Integer, comment="Número de pasos (andar).")
     avg_hr_bpm: Mapped[int | None] = mapped_column(Integer, comment="Frecuencia cardiaca media en pulsaciones por minuto (opcional).")
     notes: Mapped[str | None] = mapped_column(Text, comment="Notas libres sobre la sesión.")
+
+
+class ActivityDraft(Base):
+    __tablename__ = "activity_drafts"
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_id", name="uq_activity_drafts_user_client"),
+        {"comment": "Recorrido GPS de andar/correr en curso; permite recuperar una ruta tras una interrupción."},
+    )
+    id: Mapped[int] = mapped_column(primary_key=True, comment="Identificador del borrador.")
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True, comment="Usuario que está grabando.")
+    client_id: Mapped[str] = mapped_column(String(64), comment="Identificador generado por el cliente para reenvíos idempotentes.")
+    kind: Mapped[str] = mapped_column(String(100), comment="Título de la actividad.")
+    category: Mapped[str] = mapped_column(String(20), comment="'walking' | 'running'.")
+    performed_on: Mapped[date | None] = mapped_column(Date, comment="Día indicado para la actividad.")
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), comment="Instante de inicio del seguimiento.")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), comment="Último envío de puntos.")
+    points: Mapped[list] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"), comment="Puntos GPS recibidos, ordenados por fecha.")
 
 
 class Exercise(Base):
@@ -411,6 +465,7 @@ class Recipe(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), index=True, comment="Propietario. NULL = receta del sistema.")
     name: Mapped[str] = mapped_column(String(200), comment="Nombre de la receta.")
     description: Mapped[str | None] = mapped_column(Text, comment="Descripción o notas.")
+    steps: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list, comment="Pasos ordenados para preparar la receta.")
     serving_count: Mapped[float] = mapped_column(Float, default=1, comment="Raciones que salen de la cantidad total de ingredientes.")
     food_id: Mapped[int | None] = mapped_column(ForeignKey("foods.id"), comment="Alimento sombra (por 100 g de plato terminado).")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), comment="Fecha de creación.")
@@ -425,6 +480,9 @@ class RecipeIngredient(Base):
     recipe_id: Mapped[int] = mapped_column(ForeignKey("recipes.id"), index=True, comment="Receta.")
     food_id: Mapped[int] = mapped_column(ForeignKey("foods.id"), comment="Alimento ingrediente.")
     quantity_g: Mapped[float] = mapped_column(Float, comment="Gramos del ingrediente en la receta completa.")
+    unit_name: Mapped[str] = mapped_column(String(40), default="g", server_default=text("'g'"), comment="Unidad elegida al introducir el ingrediente; cálculo interno siempre en gramos.")
+    quantity: Mapped[float | None] = mapped_column(Float, comment="Cantidad en la unidad mostrada (p. ej. 2 cucharadas).")
+    grams_per_unit: Mapped[float | None] = mapped_column(Float, comment="Equivalencia editable en gramos por unidad.")
     food: Mapped[Food] = relationship(lazy="joined")
 
 

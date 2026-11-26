@@ -33,6 +33,8 @@ _COLUMNS = [
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS met DOUBLE PRECISION",
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS intensity VARCHAR(10)",
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS kcal_note TEXT",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS exercise_durations_min JSONB NOT NULL DEFAULT '{}'::jsonb",
+    "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS route_points JSONB NOT NULL DEFAULT '[]'::jsonb",
     "CREATE UNIQUE INDEX IF NOT EXISTS uq_exercises_owner_name ON exercises (coalesce(user_id, 0), lower(name))",
     # Andar/correr: métricas
     "ALTER TABLE workouts ADD COLUMN IF NOT EXISTS distance_km DOUBLE PRECISION",
@@ -61,6 +63,10 @@ _COLUMNS = [
     # Objetivos de agua y pasos
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS water_ml INTEGER NOT NULL DEFAULT 2000",
     "ALTER TABLE user_targets ADD COLUMN IF NOT EXISTS steps_goal INTEGER NOT NULL DEFAULT 8000",
+    "ALTER TABLE recipes ADD COLUMN IF NOT EXISTS steps JSONB NOT NULL DEFAULT '[]'::jsonb",
+    "ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS unit_name VARCHAR(40) NOT NULL DEFAULT 'g'",
+    "ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS quantity DOUBLE PRECISION",
+    "ALTER TABLE recipe_ingredients ADD COLUMN IF NOT EXISTS grams_per_unit DOUBLE PRECISION",
     # Taxonomía nueva: sin «oblicuos» (se funden con abdominales) y sesiones reagrupadas
     "UPDATE exercises SET primary_muscle = 'abs' WHERE primary_muscle = 'obliques'",
     """UPDATE exercises SET secondary_muscles = (

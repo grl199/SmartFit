@@ -16,23 +16,36 @@ TARGET_FIELDS = ("kcal", "protein_g", "carbs_g", "fat_g", "fiber_g")
 def scale(food, grams: float) -> dict[str, float]:
     """Nutrientes consumidos = valor_por_100g * gramos / 100."""
     k = grams / 100
-    return {n: round((getattr(food, n) or 0) * k, 2) for n in NUTRIENTS}
+    values = {}
+    for nutrient in NUTRIENTS:
+        per_100g = float(getattr(food, nutrient) or 0)
+        # Defensive repair for legacy imports that stored sodium in µg or multiplied mg by 1000.
+        if nutrient == "sodium_mg" and per_100g > 10000:
+            per_100g /= 1000
+        values[nutrient] = round(per_100g * k, 3 if nutrient == "sodium_mg" else 2)
+    return values
 
 
 def guess_meal(hour: int) -> str:
-    return "breakfast" if hour < 11 else "lunch" if hour < 16 else "snack" if hour < 19 else "dinner"
+    """Clasifica automáticamente en las cinco comidas del día."""
+    return (
+        "breakfast" if hour < 10
+        else "mid_morning" if hour < 12
+        else "lunch" if hour < 16
+        else "snack" if hour < 19
+        else "dinner"
+    )
 
 
 def create_log(db: Session, user_id: int, food: Food, grams: float,
                meal: str | None = None, log_date: date | None = None, nutrients: dict[str, float] | None = None) -> FoodLog:
     """`nutrients` permite guardar una instantánea ya calculada (recetas con ingredientes modificados); si no, se escala por 100 g."""
     now = now_local()
-    if log_date and log_date != now.date():
-        logged_at = datetime.combine(log_date, time(12, 0), tzinfo=now.tzinfo)
-    else:
-        logged_at, log_date = now, now.date()
+    # Preserve the date chosen in the diary; logged_at is only the timestamp.
+    entry_date = log_date if log_date is not None else now.date()
+    logged_at = now if entry_date == now.date() else datetime.combine(entry_date, time(12, 0), tzinfo=now.tzinfo)
     log = FoodLog(
-        user_id=user_id, food_id=food.id, logged_at=logged_at, log_date=log_date, grams=grams,
+        user_id=user_id, food_id=food.id, logged_at=logged_at, log_date=entry_date, grams=grams,
         meal=meal or guess_meal(logged_at.hour), **(nutrients or scale(food, grams)),
     )
     db.add(log)
@@ -50,31 +63,37 @@ def _like(token: str) -> str:
     return "%" + token.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
 
 
-FUZZY_THRESHOLD = 0.45  # word_similarity mínima para la búsqueda tolerante
+FUZZY_THRESHOLD = 0.55  # similitud trigramas más permisiva para marcas, variantes y erratas
 
 
-def search_foods(db: Session, user_id: int, query: str, limit: int = 10, fuzzy: bool = True) -> list[Food]:
-    """1) Todos los términos deben aparecer en nombre/marca/nombre original/denominación (sin acentos ni mayúsculas).
-    2) Si quedan huecos, búsqueda TOLERANTE por trigramas: casa variantes ortográficas y entre idiomas
-       («pistacho» ~ «pistacchio», «avellana» ~ «nocciola» no, pero sí las erratas y las raíces comunes).
-    Los alimentos que el usuario ya ha consumido salen primero; ve los compartidos y los suyos (nunca los de otros)."""
+def search_foods(
+    db: Session, user_id: int, query: str, limit: int = 10, fuzzy: bool = True, source: str = "all",
+) -> list[Food]:
+    """Busca alimentos (no recetas) y permite separar SmartFit, alimentos propios y Open Food Facts."""
     q_norm = _norm(query).strip()
     tokens = q_norm.split()
     if not tokens:
         return []
-    visible = or_(Food.user_id.is_(None), Food.user_id == user_id)
+    if source == "catalog":
+        scope = (Food.user_id.is_(None), Food.source == "catalog")
+    elif source == "mine":
+        scope = (Food.user_id == user_id, Food.source != "recipe")
+    elif source == "openfoodfacts":
+        scope = (Food.user_id.is_(None), Food.source == "openfoodfacts")
+    else:
+        scope = (or_(Food.user_id.is_(None), Food.user_id == user_id), Food.source != "recipe")
     used = (select(FoodLog.food_id, func.count().label("n")).where(FoodLog.user_id == user_id)
             .group_by(FoodLog.food_id).subquery())
     exact = list(db.scalars(
         select(Food).outerjoin(used, used.c.food_id == Food.id)
-        .where(visible, *[Food.search_text.ilike(_like(t), escape="\\") for t in tokens])
-        .order_by(func.coalesce(used.c.n, 0).desc(), (func.coalesce(Food.user_id, 0) == user_id).desc(), func.length(Food.name)).limit(limit)))   # primero lo que ya usas, luego lo tuyo
+        .where(*scope, *[Food.search_text.ilike(_like(t), escape="\\") for t in tokens])
+        .order_by(func.coalesce(used.c.n, 0).desc(), (func.coalesce(Food.user_id, 0) == user_id).desc(), func.length(Food.name)).limit(limit)))
     if not fuzzy or len(exact) >= limit or len(q_norm) < 4:
         return exact
     db.execute(text(f"SET LOCAL pg_trgm.word_similarity_threshold = {FUZZY_THRESHOLD}"))
     seen = [f.id for f in exact]
     similar = db.scalars(
-        select(Food).where(visible, Food.search_text.op("%>")(q_norm), Food.id.not_in(seen or [0]))
+        select(Food).where(*scope, Food.search_text.op("%>")(q_norm), Food.id.not_in(seen or [0]))
         .order_by(func.word_similarity(q_norm, Food.search_text).desc(), func.length(Food.name)).limit(limit - len(exact)))
     return exact + list(similar)
 
@@ -165,7 +184,8 @@ def day_overview(db: Session, user_id: int, day: date) -> dict:
         "entries": [{
             "id": l.id, "time": l.logged_at.astimezone(ZoneInfo(get_settings().timezone)).strftime("%H:%M"),
             "meal": l.meal, "food": l.food.name, "brand": l.food.brand, "grams": l.grams,
-            "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "fat_g": l.fat_g,
+            "kcal": l.kcal, "protein_g": l.protein_g, "carbs_g": l.carbs_g, "sugars_g": l.sugars_g,
+            "fat_g": l.fat_g, "sat_fat_g": l.sat_fat_g, "fiber_g": l.fiber_g, "sodium_mg": l.sodium_mg,
         } for l in logs],
         "workouts": _workouts_with_exercises(db, user_id, day),
         "water_ml": water_ml_on(db, user_id, day),

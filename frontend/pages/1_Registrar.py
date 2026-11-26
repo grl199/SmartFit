@@ -23,7 +23,7 @@ meal = c2.selectbox("Comida", [None, *MEALS], format_func=lambda m: "Automática
 kw = {"log_date": log_date.isoformat(), "meal": meal}
 
 with st.expander("⭐ Habituales", expanded=True):
-    quick_add_bar()
+    quick_add_bar(log_date=kw["log_date"], meal=kw["meal"])
 
 tab_search, tab_recipe, tab_mine, tab_scan, tab_manual, tab_estimate = st.tabs(["🔎 Buscar", "🍳 Recetas", "👤 Mis alimentos", "📷 Código", "✍️ Crear manual", "✨ Estimar con IA"])
 

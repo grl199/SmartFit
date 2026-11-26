@@ -5,8 +5,9 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 
 from .clock import age_on
+from .services.route import route_metrics
 
-Meal = Literal["breakfast", "lunch", "snack", "dinner"]
+Meal = Literal["breakfast", "mid_morning", "lunch", "snack", "dinner"]
 
 
 class FoodBase(BaseModel):
@@ -33,6 +34,7 @@ class FoodOut(FoodBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
     source: str
+    source_url: str | None = None
     # Metadatos de Open Food Facts (None / vacío si no constan)
     image_url: str | None = None
     nutriscore_grade: str | None = None
@@ -42,6 +44,8 @@ class FoodOut(FoodBase):
     allergens: list[str] = []
     ingredients: str | None = None
     categories: list[str] = []
+    labels: list[str] = []
+    serving_size: str | None = None
     generic_name: str | None = None      # «Denominación general» en español
     original_name: str | None = None     # nombre original de OFF si se limpió o tradujo
     barcode_ambiguous: bool = False      # código de uso restringido de tienda (puede repetirse entre productos)
@@ -102,6 +106,12 @@ class LogCreate(BaseModel):
         return self
 
 
+class LogUpdate(BaseModel):
+    """Edición de una ingesta: recalcula su instantánea nutricional desde el alimento."""
+    grams: float = Field(gt=0, le=5000)
+    meal: Meal
+
+
 class LogOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -113,8 +123,11 @@ class LogOut(BaseModel):
     kcal: float
     protein_g: float
     carbs_g: float
+    sugars_g: float
     fat_g: float
+    sat_fat_g: float
     fiber_g: float
+    sodium_mg: float
 
 
 class FrequentFood(BaseModel):
@@ -216,6 +229,17 @@ class TokenOut(BaseModel):
     user: UserOut
 
 
+class RefreshSessionIn(BaseModel):
+    refresh_token: str = Field(min_length=32, max_length=256)
+
+
+class WebSessionOut(BaseModel):
+    access_token: str
+    refresh_token: str
+    token_type: str = "bearer"
+    user: UserOut
+
+
 class DeleteAccountIn(BaseModel):
     password: str
 
@@ -268,11 +292,42 @@ class SetOut(BaseModel):
     rpe: float | None = None
 
 
+class RoutePointIn(BaseModel):
+    lat: float = Field(ge=-90, le=90)
+    lng: float = Field(ge=-180, le=180)
+    altitude_m: float | None = Field(None, ge=-1000, le=10000)
+    accuracy_m: float | None = Field(None, ge=0, le=10000)
+    recorded_at: datetime
+
+
+class ActivityDraftIn(BaseModel):
+    """Metadatos y lote de puntos de un recorrido GPS en curso."""
+    kind: str = Field(min_length=1, max_length=100)
+    category: Literal["walking", "running"]
+    performed_on: date | None = None
+    started_at: datetime
+    points: list[RoutePointIn] = Field(default_factory=list, max_length=1000)
+
+
+class ActivityDraftOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    client_id: str
+    kind: str
+    category: Literal["walking", "running"]
+    performed_on: date | None = None
+    started_at: datetime
+    updated_at: datetime
+    points: list[RoutePointIn] = Field(default_factory=list)
+    point_count: int = 0
+
+
 class WorkoutIn(BaseModel):
     performed_on: date | None = None
     kind: str = Field(min_length=1, max_length=100, description="Título de la sesión")
     category: WorkoutCategory | None = None
     duration_min: int = Field(gt=0, le=600)
+    exercise_durations_min: dict[int, int] = Field(default_factory=dict, description="Minutos totales dedicados a cada ejercicio; la suma sustituye duration_min.")
+    route_points: list[RoutePointIn] = Field(default_factory=list, max_length=10000)
     kcal_burned: float | None = Field(None, ge=0, le=10000, description="Si se indica, no se estima con IA")
     distance_km: float | None = Field(None, gt=0, le=500)
     elevation_gain_m: float | None = Field(None, ge=0, le=10000)
@@ -281,6 +336,31 @@ class WorkoutIn(BaseModel):
     notes: str | None = Field(None, max_length=1000)
     sets: list[SetIn] = Field(default=[], max_length=300)
     estimate_calories: bool = True
+    draft_id: str | None = Field(None, pattern=r"^[A-Za-z0-9_-]{8,64}$", description="Borrador GPS que se convierte en esta sesión.")
+
+    @model_validator(mode="after")
+    def total_duration_from_exercises(self):
+        if self.route_points and self.category not in {"walking", "running"}:
+            raise ValueError("La ruta GPS solo se puede guardar en sesiones de andar o correr.")
+        if len(self.route_points) > 1:
+            metrics = route_metrics(self.route_points)
+            if metrics["distance_km"] > 0:
+                self.distance_km = round(metrics["distance_km"], 3)
+            if metrics["elevation_gain_m"] > 0:
+                self.elevation_gain_m = round(metrics["elevation_gain_m"])
+        if not self.exercise_durations_min:
+            return self
+        exercise_ids = {item.exercise_id for item in self.sets}
+        duration_ids = set(self.exercise_durations_min)
+        if duration_ids != exercise_ids:
+            raise ValueError("Indica el tiempo de todos los ejercicios de la sesión.")
+        if any(minutes < 1 or minutes > 600 for minutes in self.exercise_durations_min.values()):
+            raise ValueError("Cada ejercicio debe tener entre 1 y 600 minutos.")
+        total = sum(self.exercise_durations_min.values())
+        if total > 600:
+            raise ValueError("La duración total del entrenamiento no puede superar 600 minutos.")
+        self.duration_min = total
+        return self
 
 
 class WorkoutOut(BaseModel):
@@ -290,6 +370,8 @@ class WorkoutOut(BaseModel):
     kind: str
     category: str | None = None
     duration_min: int
+    exercise_durations_min: dict[int, int] = Field(default_factory=dict)
+    route_points: list[dict] = Field(default_factory=list)
     kcal_burned: float | None = None
     kcal_source: str | None = None
     met: float | None = None
@@ -318,6 +400,7 @@ class WorkoutExerciseOut(BaseModel):
     exercise: str
     primary_muscle: str
     sets: list[dict]
+    duration_min: int | None = None
 
 
 class ExerciseFeedbackOut(BaseModel):

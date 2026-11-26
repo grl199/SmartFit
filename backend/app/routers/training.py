@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from ..db import get_db
 from ..deps import current_user_id
-from ..models import BodyMetric, Exercise, Workout, WorkoutSet
+from ..models import ActivityDraft, BodyMetric, Exercise, Workout, WorkoutSet
 from ..schemas import (
     ExerciseFeedbackOut, ExerciseIn, ExerciseOut, LastSessionOut, WeightIn, WeightOut, WorkoutDetail, WorkoutExerciseOut, WorkoutIn,
 )
@@ -41,7 +41,11 @@ def _details(db: Session, workouts: list[Workout], with_feedback: bool = False) 
     out = []
     for w in workouts:
         d = WorkoutDetail.model_validate(w)
-        d.exercises = [WorkoutExerciseOut(**g) for g in tsvc.workout_sets_summary(by_workout[w.id])]
+        duration_map = w.exercise_durations_min or {}
+        exercise_groups = tsvc.workout_sets_summary(by_workout[w.id])
+        for group in exercise_groups:
+            group["duration_min"] = duration_map.get(str(group["exercise_id"]))
+        d.exercises = [WorkoutExerciseOut(**g) for g in exercise_groups]
         if with_feedback:
             d.feedback = _safe_feedback(db, w)
         out.append(d)
@@ -141,8 +145,12 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
         if ex_ids - valid:
             raise HTTPException(422, f"Ejercicios no válidos: {sorted(ex_ids - valid)}")
     w = Workout(user_id=uid, performed_on=body.performed_on or today_local(), kind=body.kind.strip(), category=body.category,
-                duration_min=body.duration_min, notes=body.notes, kcal_burned=body.kcal_burned,
-                distance_km=body.distance_km, elevation_gain_m=body.elevation_gain_m, steps=body.steps, avg_hr_bpm=body.avg_hr_bpm,
+                duration_min=body.duration_min,
+                exercise_durations_min={str(k): v for k, v in body.exercise_durations_min.items()},
+                route_points=[point.model_dump(mode="json") for point in body.route_points],
+                notes=body.notes, kcal_burned=body.kcal_burned,
+                distance_km=body.distance_km, elevation_gain_m=body.elevation_gain_m,
+                steps=body.steps if body.category in {"walking", "running"} else None, avg_hr_bpm=body.avg_hr_bpm,
                 kcal_source="manual" if body.kcal_burned is not None else None)
     db.add(w)
     db.flush()
@@ -152,6 +160,8 @@ def add_workout(body: WorkoutIn, bg: BackgroundTasks, db: Session = Depends(get_
         db.add(WorkoutSet(user_id=uid, workout_id=w.id, exercise_id=s.exercise_id, set_number=counters[s.exercise_id],
                           reps=s.reps, weight_kg=s.weight_kg or None, rpe=s.rpe,
                           reached_failure=s.reached_failure))
+    if body.draft_id:
+        db.execute(delete(ActivityDraft).where(ActivityDraft.user_id == uid, ActivityDraft.client_id == body.draft_id))
     db.commit()
     if body.kcal_burned is None and body.estimate_calories:
         _try_estimate(db, w)

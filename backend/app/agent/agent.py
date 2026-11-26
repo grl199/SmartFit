@@ -6,7 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..config import get_settings
-from ..llm import get_chat_client
+from ..llm import create_chat_completion, get_chat_client
 from ..models import ChatMessage, Conversation
 from ..services.images import decode_barcodes, prepare_for_llm
 from .prompts import build_system_prompt
@@ -80,7 +80,7 @@ def _run_chat_completions(client, model: str, system: str, history: list[dict],
         }
         if service_tier:
             request["service_tier"] = service_tier
-        response = client.chat.completions.create(**request)
+        response = create_chat_completion(client, request, service_tier=service_tier)
         assistant = response.choices[0].message
         calls = assistant.tool_calls or []
         if not calls:

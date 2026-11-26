@@ -94,14 +94,37 @@ def test_onboarding_retries_invalid_plan_then_succeeds(client):
         assert client.post("/onboarding", json=ONBOARDING, headers=u["headers"]).status_code == 200
 
 
-def test_onboarding_rejects_unsafe_llm_output_and_stays_incomplete(client):
+def test_login_recovers_profile_saved_before_ai_outage(client):
     u = register(client)
-    unsafe = {**GOOD_PLAN, "kcal": 900, "carbs_g": 50}  # 900 kcal: por debajo del suelo
+    with patch("app.services.plan.chat_text", side_effect=RuntimeError("AI service unavailable")):
+        response = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
+    assert response.status_code == 200, response.text
+    assert response.json()["targets"]["source"] == "fallback"
+
+    # Simulate an account left incomplete by a deployment that used the old onboarding flow.
+    from app.db import SessionLocal
+    from app.models import User
+    with SessionLocal() as db:
+        account = db.get(User, u["id"])
+        account.onboarding_completed = False
+        db.commit()
+
+    restored = client.get("/auth/me", headers=u["headers"])
+    assert restored.status_code == 200
+    assert restored.json()["onboarding_completed"] is True
+
+
+def test_onboarding_falls_back_when_ai_returns_unsafe_plan(client):
+    u = register(client)
+    unsafe = {**GOOD_PLAN, "kcal": 900, "carbs_g": 50}  # no se acepta la propuesta del modelo
     with patch("app.services.plan.chat_text", lambda m, json_mode=False: json.dumps(unsafe)):
         r = client.post("/onboarding", json=ONBOARDING, headers=u["headers"])
-    assert r.status_code == 502
-    assert client.get("/auth/me", headers=u["headers"]).json()["onboarding_completed"] is False
-    assert client.get("/profile", headers=u["headers"]).json()["goal"] == "gain_muscle"  # el perfil sí se guardó: se puede reintentar
+    assert r.status_code == 200, r.text
+    assert r.json()["targets"]["source"] == "fallback"
+    assert r.json()["targets"]["kcal"] >= 1500
+    assert client.get("/auth/me", headers=u["headers"]).json()["onboarding_completed"] is True
+    assert client.get("/dashboard/day", headers=u["headers"]).status_code == 200
+    assert client.get("/profile", headers=u["headers"]).json()["goal"] == "gain_muscle"
 
 
 def test_onboarding_validation(client):

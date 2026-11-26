@@ -85,6 +85,83 @@ def test_workout_with_sets_and_llm_calories(client, onboarded):
     assert "Sentadilla con barra" in prompt and "8x80kg" in prompt and "Peso corporal: 80.0 kg" in prompt and "Fuerza" in prompt and "Pierna" in prompt
 
 
+def test_exercise_durations_are_saved_and_summed(client, onboarded):
+    h = onboarded["headers"]
+    payload = legs_payload(client, h, exercise_durations_min={
+        str(ex_id(client, h, "Sentadilla con barra")): 15,
+        str(ex_id(client, h, "Extensión de piernas")): 10,
+    }, estimate_calories=False)
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 201, response.text
+    workout = response.json()
+    assert workout["duration_min"] == 25
+    assert workout["exercise_durations_min"] == {
+        str(ex_id(client, h, "Sentadilla con barra")): 15,
+        str(ex_id(client, h, "Extensión de piernas")): 10,
+    }
+    assert {row["exercise"]: row["duration_min"] for row in workout["exercises"]} == {
+        "Sentadilla con barra": 15,
+        "Extensión de piernas (cuádriceps)": 10,
+    }
+    stored = client.get("/workouts", headers=h).json()[0]
+    assert stored["duration_min"] == 25
+
+
+def test_exercise_durations_must_cover_every_exercise(client, onboarded):
+    h = onboarded["headers"]
+    squat_id = ex_id(client, h, "Sentadilla con barra")
+    payload = legs_payload(client, h, exercise_durations_min={str(squat_id): 15}, estimate_calories=False)
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 422
+
+
+def test_gps_route_is_saved_and_calculates_distance(client, onboarded):
+    h = onboarded["headers"]
+    payload = {
+        "kind": "Carrera GPS", "category": "running", "duration_min": 2,
+        "route_points": [
+            {"lat": 40.4168, "lng": -3.7038, "altitude_m": 650, "accuracy_m": 5, "recorded_at": "2026-11-25T12:00:00Z"},
+            {"lat": 40.4178, "lng": -3.7038, "altitude_m": 655, "accuracy_m": 4, "recorded_at": "2026-11-25T12:02:00Z"},
+        ],
+        "estimate_calories": False,
+    }
+    response = client.post("/workouts", headers=h, json=payload)
+    assert response.status_code == 201, response.text
+    workout = response.json()
+    assert workout["distance_km"] == 0.111
+    assert workout["elevation_gain_m"] == 5
+    assert len(workout["route_points"]) == 2
+    stored = client.get("/workouts", headers=h).json()[0]
+    assert len(stored["route_points"]) == 2
+
+
+def test_gps_route_is_rejected_for_strength(client, onboarded):
+    h = onboarded["headers"]
+    payload = {
+        "kind": "Fuerza", "category": "strength", "duration_min": 30,
+        "route_points": [{"lat": 40.4168, "lng": -3.7038, "recorded_at": "2026-11-25T12:00:00Z"}],
+        "estimate_calories": False,
+    }
+    assert client.post("/workouts", headers=h, json=payload).status_code == 422
+
+
+def test_steps_are_kept_only_for_walking_and_running(client, onboarded):
+    h = onboarded["headers"]
+    for category in ("strength", "sport", "full_body", "stretching"):
+        response = client.post("/workouts", headers=h, json={
+            "kind": "Sesión", "category": category, "duration_min": 20, "steps": 5000,
+            "estimate_calories": False,
+        })
+        assert response.status_code == 201, response.text
+        assert response.json()["steps"] is None
+    walking = client.post("/workouts", headers=h, json={
+        "kind": "Paseo", "category": "walking", "duration_min": 20, "steps": 5000,
+        "estimate_calories": False,
+    })
+    assert walking.status_code == 201, walking.text
+    assert walking.json()["steps"] == 5000
+
+
 def test_calories_scale_with_weight_and_duration_in_code(client, onboarded):
     """La IA solo decide el MET; kcal = MET x kg x horas lo calcula el código."""
     h = onboarded["headers"]

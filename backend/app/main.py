@@ -2,6 +2,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import func, select
 
 from . import enums
@@ -9,7 +10,7 @@ from .config import get_settings
 from .db import SessionLocal, init_db
 from .deps import require_onboarded
 from .models import User
-from .routers import auth, chat, dashboard, foods, habits, insights, logs, plan, profile, recipes, training
+from .routers import activity_drafts, auth, chat, dashboard, foods, habits, insights, logs, plan, profile, recipes, training
 from .security import hash_password
 from .services.exercise_catalog import seed_catalog
 from .services.exercise_content import seed_content
@@ -51,12 +52,19 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="SmartFit API", version="0.2.0", lifespan=lifespan)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Públicas / solo autenticadas: auth (login, registro) y perfil (incluye el onboarding).
 app.include_router(auth.router)
 app.include_router(profile.router)
 # Resto: requieren sesión Y onboarding completado.
-for r in (foods.router, logs.router, dashboard.router, training.router, plan.router, recipes.router, habits.router, insights.router, chat.router):
+for r in (foods.router, logs.router, dashboard.router, training.router, activity_drafts.router, plan.router, recipes.router, habits.router, insights.router, chat.router):
     app.include_router(r, dependencies=[Depends(require_onboarded)])
 
 
