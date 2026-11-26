@@ -1,4 +1,4 @@
-import * as SecureStore from "expo-secure-store";
+import { TokenStorage } from "./token-storage";
 import type { components } from "@smartfit/contracts";
 import { ApiError, apiRequest, type ApiRequestOptions } from "@smartfit/api-client";
 
@@ -19,19 +19,19 @@ let refreshInFlight: Promise<SessionResponse | null> | null = null;
 async function refreshSession(): Promise<SessionResponse | null> {
   if (!refreshInFlight) {
     refreshInFlight = (async () => {
-      const refreshToken = await SecureStore.getItemAsync(REFRESH_KEY);
+      const refreshToken = await TokenStorage.getItemAsync(REFRESH_KEY);
       if (!refreshToken) return null;
       try {
         const result = await apiRequest<SessionResponse>("/auth/session/refresh", {
           method: "POST", body: { refresh_token: refreshToken }, baseUrl: API_BASE_URL
         });
-        await SecureStore.setItemAsync(ACCESS_KEY, result.access_token);
-        await SecureStore.setItemAsync(REFRESH_KEY, result.refresh_token);
+        await TokenStorage.setItemAsync(ACCESS_KEY, result.access_token);
+        await TokenStorage.setItemAsync(REFRESH_KEY, result.refresh_token);
         return result;
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) {
-          await SecureStore.deleteItemAsync(ACCESS_KEY);
-          await SecureStore.deleteItemAsync(REFRESH_KEY);
+          await TokenStorage.deleteItemAsync(ACCESS_KEY);
+          await TokenStorage.deleteItemAsync(REFRESH_KEY);
         }
         return null;
       }
