@@ -199,7 +199,7 @@ export default function NutritionScreen() {
       setRecipeName(""); setRecipeIngredients([]); setRecipeFoodQuery(""); setRecipeFoodResults([]);
       await loadRecipes();
       setSelectedRecipe(created); setRecipeEditName(created.name); setRecipeEditDescription(created.description ?? "");
-      setRecipeEditServings(String(created.serving_count)); setRecipeEditSteps(created.steps.join("\\n"));
+      setRecipeEditServings(String(created.serving_count)); setRecipeEditSteps(created.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(created.ingredients.map(item => [item.id, String(item.quantity_g)])));
       setNotice("Receta creada y disponible en tu cuenta.");
     } catch (reason) {
@@ -216,7 +216,7 @@ export default function NutritionScreen() {
       setRecipeEditName(detail.name);
       setRecipeEditDescription(detail.description ?? "");
       setRecipeEditServings(String(detail.serving_count));
-      setRecipeEditSteps(detail.steps.join("\\n"));
+      setRecipeEditSteps(detail.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(detail.ingredients.map(item => [item.id, String(item.quantity_g)])));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo abrir la receta."); }
     finally { setLoading(false); }
@@ -239,7 +239,7 @@ export default function NutritionScreen() {
     try {
       const updated = await api<RecipeDetail>("/recipes/" + selectedRecipe.id, token, { method: "PUT", body: {
         name: recipeEditName.trim(), description: recipeEditDescription.trim() || null,
-        serving_count: count, steps: recipeEditSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+        serving_count: count, steps: recipeEditSteps.split("\n").map(step => step.trim()).filter(Boolean),
         ingredients,
       } });
       setSelectedRecipe(updated);
@@ -276,7 +276,7 @@ export default function NutritionScreen() {
       const copy = await api<RecipeDetail>("/recipes/" + recipe.id + "/copy", token, { method: "POST" });
       await loadRecipes();
       setSelectedRecipe(copy); setRecipeEditName(copy.name); setRecipeEditDescription(copy.description ?? "");
-      setRecipeEditServings(String(copy.serving_count)); setRecipeEditSteps(copy.steps.join("\\n"));
+      setRecipeEditServings(String(copy.serving_count)); setRecipeEditSteps(copy.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(copy.ingredients.map(item => [item.id, String(item.quantity_g)])));
       setNotice("Copia personal creada. Ya puedes editarla.");
     } catch (reason) {
