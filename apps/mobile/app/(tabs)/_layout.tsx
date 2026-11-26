@@ -16,6 +16,8 @@ export default function TabsLayout() {
     <Tabs.Screen name="index" options={{title:"Hoy",tabBarIcon:({color,size})=><Ionicons name="home-outline" color={String(color)} size={size}/>}} />
     <Tabs.Screen name="nutrition" options={{title:"Nutrición",tabBarIcon:({color,size})=><Ionicons name="restaurant-outline" color={String(color)} size={size}/>}} />
     <Tabs.Screen name="training" options={{title:"Entreno",tabBarIcon:({color,size})=><Ionicons name="barbell-outline" color={String(color)} size={size}/>}} />
+    <Tabs.Screen name="habits" options={{title:"Hábitos",tabBarIcon:({color,size})=><Ionicons name="water-outline" color={String(color)} size={size}/>}} />
+    <Tabs.Screen name="assistant" options={{title:"Asistente",tabBarIcon:({color,size})=><Ionicons name="sparkles-outline" color={String(color)} size={size}/>}} />
     <Tabs.Screen name="progress" options={{title:"Progreso",tabBarIcon:({color,size})=><Ionicons name="trending-up-outline" color={String(color)} size={size}/>}} />
     <Tabs.Screen name="profile" options={{title:"Perfil",tabBarIcon:({color,size})=><Ionicons name="person-outline" color={String(color)} size={size}/>}} />
   </Tabs>;
