@@ -351,7 +351,7 @@ export default function NutritionScreen() {
       const result = await api<FoodEstimate>("/recipes/estimate", token, { method: "POST", body: {
         name: recipeEstimateName.trim(),
         description: recipeEstimateDescription.trim(),
-        steps: recipeEstimateSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+        steps: recipeEstimateSteps.split("\n").map(step => step.trim()).filter(Boolean),
       } });
       setRecipeEstimateResult(result);
     } catch (reason) {
@@ -372,7 +372,7 @@ export default function NutritionScreen() {
         name: recipeEstimateName.trim() || recipeEstimateResult.name,
         description: recipeEstimateDescription.trim() || null,
         serving_count: count,
-        steps: recipeEstimateSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+        steps: recipeEstimateSteps.split("\n").map(step => step.trim()).filter(Boolean),
         items: recipeEstimateResult.items.map(item => ({
           name: item.name, grams: item.grams, kcal_per_100g: item.kcal_per_100g,
           protein_g_per_100g: item.protein_g_per_100g, carbs_g_per_100g: item.carbs_g_per_100g,
