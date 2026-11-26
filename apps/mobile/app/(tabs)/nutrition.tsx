@@ -375,11 +375,11 @@ export default function NutritionScreen() {
     } finally { setLoading(false); }
   }
 
-  async function openFoodForLogging(food: FoodSearchResult) {
+  async function openFoodForLogging(food: FoodSearchResult, initialQuantity = grams) {
     if (!token) return;
     setSelectedFood(food);
     setSelectedFoodDetail(null);
-    setFoodQuantity(grams);
+    setFoodQuantity(initialQuantity);
     setSelectedFoodUnit("grams");
     setFoodServings([]);
     setError("");
@@ -1074,7 +1074,7 @@ export default function NutritionScreen() {
       <Panel>
         {frequentFoods.length ? frequentFoods.map(item => <Pressable key={item.food.id} onPress={() => {
           setGrams(String(Math.round(item.typical_grams)));
-          void openFoodForLogging(item.food);
+          void openFoodForLogging(item.food, String(Math.round(item.typical_grams)));
         }} style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 9 }}>
           <View style={{ flex: 1, gap: 3 }}>
             <Text style={{ color: colors.text, fontWeight: "800" }}>{item.food.name}</Text>
