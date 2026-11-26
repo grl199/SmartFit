@@ -11,6 +11,7 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 type Meal = "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
 type OwnedFoodUnit = { id: number; food_id: number; unit_name: string; unit_name_plural?: string | null; grams_per_unit: number; description?: string | null };
+type FoodServing = OwnedFoodUnit;
 type OwnedFood = {
   id: number; name: string; brand?: string | null; barcode?: string | null; serving_g?: number | null;
   kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
@@ -72,6 +73,10 @@ export default function NutritionScreen() {
   const [query, setQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState<"generic" | "openfoodfacts">("generic");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
+  const [selectedFood, setSelectedFood] = useState<FoodSearchResult | null>(null);
+  const [foodServings, setFoodServings] = useState<FoodServing[]>([]);
+  const [selectedFoodUnit, setSelectedFoodUnit] = useState("grams");
+  const [foodQuantity, setFoodQuantity] = useState("100");
   const [grams, setGrams] = useState("100");
   const [meal, setMeal] = useState<Meal>("lunch");
   const [barcode, setBarcode] = useState("");
@@ -322,6 +327,43 @@ export default function NutritionScreen() {
       if (found.length === 0) setError("No encontramos alimentos con ese nombre.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Falló la búsqueda.");
+    } finally { setLoading(false); }
+  }
+
+  async function openFoodForLogging(food: FoodSearchResult) {
+    if (!token) return;
+    setSelectedFood(food);
+    setFoodQuantity(grams);
+    setSelectedFoodUnit("grams");
+    setFoodServings([]);
+    setError("");
+    try {
+      setFoodServings(await api<FoodServing[]>("/foods/" + food.id + "/servings", token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar las unidades de este alimento.");
+    }
+  }
+
+  async function addSelectedFood() {
+    if (!token || !selectedFood) return;
+    const quantity = Number(foodQuantity.replace(",", "."));
+    const usingUnit = selectedFoodUnit !== "grams";
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > (usingUnit ? 1000 : 5000)) {
+      setError(usingUnit ? "La cantidad debe estar entre 0 y 1000 unidades." : "La cantidad debe estar entre 1 y 5000 gramos.");
+      return;
+    }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const body = usingUnit
+        ? { food_id: selectedFood.id, serving_id: Number(selectedFoodUnit), quantity, meal, log_date: date }
+        : { food_id: selectedFood.id, grams: quantity, meal, log_date: date };
+      await api("/logs", token, { method: "POST", body });
+      setSelectedFood(null); setFoodServings([]); setFoodQuantity("100");
+      setResults([]); setQuery("");
+      await load();
+      setNotice("Alimento registrado en el diario.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar la ingesta.");
     } finally { setLoading(false); }
   }
 
@@ -776,11 +818,31 @@ export default function NutritionScreen() {
         <Field label="Cantidad (g)" value={grams} onChangeText={setGrams} keyboardType="decimal-pad" />
         <ChoiceRow value={meal} onChange={setMeal} options={meals} />
         <AppButton title="Buscar alimentos" onPress={() => void searchFoods()} loading={loading} disabled={!query.trim()} />
-        {results.map(food => <Pressable key={food.id} onPress={() => void addFood(food)} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 12, gap: 4 }}>
+        {results.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 12, gap: 4 }}>
           <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
           <Muted>{food.brand ? food.brand + " · " : ""}{Math.round(food.kcal)} kcal / 100 g · {Math.round(food.protein_g)} g proteína</Muted>
-          <Text style={{ color: colors.accent, fontWeight: "800", fontSize: 12 }}>Añadir {grams} g</Text>
+          <Text style={{ color: colors.accent, fontWeight: "800", fontSize: 12 }}>Elegir cantidad y unidad ›</Text>
         </Pressable>)}
+        {selectedFood ? <View style={{ borderTopWidth: 1, borderTopColor: colors.accent, paddingTop: 12, gap: 8 }}>
+          <SectionTitle title={selectedFood.name} action="Registrar ingesta" />
+          <Text style={{ color: colors.text, fontWeight: "700" }}>Unidad de medida</Text>
+          <ChoiceRow value={selectedFoodUnit} onChange={setSelectedFoodUnit} options={[
+            { value: "grams", label: "Gramos" },
+            ...foodServings.map(unit => ({ value: String(unit.id), label: unit.unit_name_plural || unit.unit_name })),
+          ]} />
+          <Field
+            label={selectedFoodUnit === "grams" ? "Cantidad (g)" : "Número de unidades"}
+            value={foodQuantity}
+            onChangeText={setFoodQuantity}
+            keyboardType="decimal-pad"
+          />
+          {selectedFoodUnit !== "grams" ? <Muted>
+            1 {foodServings.find(item => String(item.id) === selectedFoodUnit)?.unit_name ?? "unidad"} = {fmt(foodServings.find(item => String(item.id) === selectedFoodUnit)?.grams_per_unit, 1)} g
+          </Muted> : null}
+          <ChoiceRow value={meal} onChange={setMeal} options={meals} />
+          <AppButton title="Registrar alimento" onPress={() => void addSelectedFood()} loading={loading} />
+          <AppButton title="Cancelar" onPress={() => setSelectedFood(null)} variant="quiet" />
+        </View> : null}
       </Panel>
       <SectionTitle title="Estimar comida con IA" />
       <Panel>
@@ -889,12 +951,12 @@ export default function NutritionScreen() {
       {catalogSections.filter(item => item.id === catalogCategory).flatMap(item => item.foods)
         .filter(food => !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
           (food.brand ?? "").toLowerCase().includes(catalogQuery.trim().toLowerCase()))
-        .map(food => <Pressable key={food.id} onPress={() => void addFood(food)} style={{
+        .map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
           paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 3,
         }}>
           <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
           <Muted>{food.brand ?? "Alimento genérico"} · {fmt(food.kcal)} kcal/100 g · proteína {fmt(food.protein_g)} g</Muted>
-          <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>＋ Añadir {grams} g a {meals.find(item => item.value === meal)?.label.toLowerCase()}</Text>
+          <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Seleccionar cantidad y unidad para {meals.find(item => item.value === meal)?.label.toLowerCase()} ›</Text>
         </Pressable>)}
       {!loading && !catalogSections.some(item => item.id === catalogCategory && item.foods.some(food =>
         !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
