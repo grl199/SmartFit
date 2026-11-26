@@ -7,6 +7,19 @@ import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Pro
 import { colors } from "@/theme";
 
 type Meal = "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
+type OwnedFood = {
+  id: number; name: string; brand?: string | null; barcode?: string | null; serving_g?: number | null;
+  kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
+  sat_fat_g: number; fiber_g: number; sodium_mg: number; times_used: number; share_status: string;
+};
+type FoodDraft = {
+  name: string; brand: string; barcode: string; serving_g: string; kcal: string; protein_g: string;
+  carbs_g: string; sugars_g: string; fat_g: string; sat_fat_g: string; fiber_g: string; sodium_mg: string;
+};
+const emptyFoodDraft = (): FoodDraft => ({
+  name: "", brand: "", barcode: "", serving_g: "100", kcal: "0", protein_g: "0",
+  carbs_g: "0", sugars_g: "0", fat_g: "0", sat_fat_g: "0", fiber_g: "0", sodium_mg: "0",
+});
 type RecipeSummary = {
   id: number; name: string; description?: string | null; is_system: boolean; food_id: number;
   serving_count: number; serving_g: number; per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number };
@@ -46,7 +59,7 @@ const fmt = (value: number | null | undefined) => value == null ? "—" : Math.r
 
 export default function NutritionScreen() {
   const { token } = useAuth();
-  const [section, setSection] = useState<"diary" | "recipes">("diary");
+  const [section, setSection] = useState<"diary" | "recipes" | "foods">("diary");
   const [date, setDate] = useState(localDateISO());
   const [data, setData] = useState<DashboardDay | null>(null);
   const [query, setQuery] = useState("");
@@ -58,6 +71,9 @@ export default function NutritionScreen() {
   const [estimateDescription, setEstimateDescription] = useState("");
   const [estimateResult, setEstimateResult] = useState<FoodEstimate | null>(null);
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
+  const [ownedFoods, setOwnedFoods] = useState<OwnedFood[]>([]);
+  const [foodDraft, setFoodDraft] = useState<FoodDraft>(emptyFoodDraft());
+  const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDetail | null>(null);
   const [recipeEditName, setRecipeEditName] = useState("");
   const [recipeEditDescription, setRecipeEditDescription] = useState("");
@@ -95,6 +111,105 @@ export default function NutritionScreen() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las recetas.");
     } finally { setLoading(false); }
+  }
+
+  async function loadOwnedFoods() {
+    if (!token) return;
+    setLoading(true); setError("");
+    try {
+      setOwnedFoods(await api<OwnedFood[]>("/foods/mine?limit=100", token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar tus alimentos.");
+    } finally { setLoading(false); }
+  }
+
+  function editOwnedFood(food: OwnedFood) {
+    setEditingFoodId(food.id);
+    setFoodDraft({
+      name: food.name, brand: food.brand ?? "", barcode: food.barcode ?? "",
+      serving_g: food.serving_g == null ? "" : String(food.serving_g),
+      kcal: String(food.kcal), protein_g: String(food.protein_g), carbs_g: String(food.carbs_g),
+      sugars_g: String(food.sugars_g), fat_g: String(food.fat_g), sat_fat_g: String(food.sat_fat_g),
+      fiber_g: String(food.fiber_g), sodium_mg: String(food.sodium_mg),
+    });
+    setNotice("");
+  }
+
+  async function saveOwnedFood() {
+    if (!token) return;
+    if (!foodDraft.name.trim()) {
+      setError("El nombre del alimento es obligatorio.");
+      return;
+    }
+    const values = {
+      name: foodDraft.name.trim(), brand: foodDraft.brand.trim() || null,
+      barcode: foodDraft.barcode.trim() || null,
+      serving_g: foodDraft.serving_g.trim() ? Number(foodDraft.serving_g.replace(",", ".")) : null,
+      kcal: Number(foodDraft.kcal), protein_g: Number(foodDraft.protein_g),
+      carbs_g: Number(foodDraft.carbs_g), sugars_g: Number(foodDraft.sugars_g),
+      fat_g: Number(foodDraft.fat_g), sat_fat_g: Number(foodDraft.sat_fat_g),
+      fiber_g: Number(foodDraft.fiber_g), sodium_mg: Number(foodDraft.sodium_mg),
+    };
+    const numeric = [values.kcal, values.protein_g, values.carbs_g, values.sugars_g, values.fat_g,
+      values.sat_fat_g, values.fiber_g, values.sodium_mg, ...(values.serving_g === null ? [] : [values.serving_g])];
+    if (numeric.some(value => !Number.isFinite(value) || value < 0) ||
+        (values.serving_g !== null && values.serving_g <= 0) ||
+        values.protein_g + values.carbs_g + values.fat_g > 105 ||
+        values.sugars_g > values.carbs_g + 0.5 || values.sat_fat_g > values.fat_g + 0.5) {
+      setError("Revisa los nutrientes: no pueden ser negativos y los macronutrientes deben ser coherentes.");
+      return;
+    }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      if (editingFoodId === null) {
+        await api("/foods", token, { method: "POST", body: { ...values, share: false } });
+      } else {
+        await api("/foods/" + editingFoodId, token, { method: "PUT", body: values });
+      }
+      setFoodDraft(emptyFoodDraft());
+      setEditingFoodId(null);
+      await loadOwnedFoods();
+      setNotice(editingFoodId === null ? "Alimento personalizado creado." : "Alimento actualizado.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar el alimento.");
+    } finally { setLoading(false); }
+  }
+
+  async function toggleFoodSharing(food: OwnedFood) {
+    if (!token) return;
+    setLoading(true); setError(""); setNotice("");
+    try {
+      if (food.share_status !== "private") {
+        await api("/foods/" + food.id + "/share", token, { method: "DELETE" });
+        setNotice("Se ha retirado el alimento de la comunidad.");
+      } else {
+        await api("/foods/" + food.id + "/share", token, { method: "POST" });
+        setNotice("Alimento enviado al proceso de verificación de la comunidad.");
+      }
+      await loadOwnedFoods();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cambiar el estado del alimento.");
+    } finally { setLoading(false); }
+  }
+
+  async function deleteOwnedFood(food: OwnedFood) {
+    if (!token) return;
+    Alert.alert("Eliminar alimento", "¿Quieres eliminar «" + food.name + "»? Solo se podrá borrar si no aparece en tu diario ni en tus recetas.", [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Eliminar", style: "destructive", onPress: () => {
+        void (async () => {
+          setLoading(true); setError("");
+          try {
+            await api("/foods/" + food.id, token, { method: "DELETE" });
+            if (editingFoodId === food.id) { setEditingFoodId(null); setFoodDraft(emptyFoodDraft()); }
+            await loadOwnedFoods();
+            setNotice("Alimento eliminado.");
+          } catch (reason) {
+            setError(reason instanceof Error ? reason.message : "No se pudo eliminar el alimento.");
+          } finally { setLoading(false); }
+        })();
+      } },
+    ]);
   }
 
   async function searchFoods() {
@@ -364,8 +479,8 @@ export default function NutritionScreen() {
 
   return <Screen>
     <PageTitle eyebrow="Nutrición" title="Alimenta tu progreso" subtitle="Diario de alimentos y recetas, sincronizados con tu cuenta." />
-    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); }} options={[
-      { value: "diary", label: "Diario" }, { value: "recipes", label: "Recetas" },
+    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); if (value === "foods") void loadOwnedFoods(); }} options={[
+      { value: "diary", label: "Diario" }, { value: "recipes", label: "Recetas" }, { value: "foods", label: "Mis alimentos" },
     ]} />
     <ErrorMessage message={error} />
     {notice ? <Text style={{ color: colors.accent, fontSize: 13 }}>{notice}</Text> : null}
@@ -454,6 +569,49 @@ export default function NutritionScreen() {
         </View> : null}
       </Panel>
       <AppButton title="Actualizar resumen" variant="quiet" onPress={() => void load()} />
+    </> : null}
+
+    {section === "foods" ? <>
+      <SectionTitle title="Mis alimentos" action={ownedFoods.length + " personalizados"} />
+      <Muted>Crea alimentos propios con sus nutrientes por 100 g. Puedes editarlos, compartirlos con la comunidad o eliminarlos si no están en uso.</Muted>
+      {loading ? <ActivityIndicator color={colors.accent} /> : null}
+      {ownedFoods.map(food => <Panel key={food.id}>
+        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 15, flex: 1 }}>{food.name}</Text>
+          <Text style={{ color: food.share_status === "verified" ? colors.accent : colors.muted, fontSize: 10, fontWeight: "900" }}>
+            {food.share_status === "verified" ? "VERIFICADO" : food.share_status === "pending" ? "EN REVISIÓN" : "PRIVADO"}
+          </Text>
+        </View>
+        <Muted>{food.brand ?? "Sin marca"} · {food.times_used} usos</Muted>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 9 }}>
+          <Muted>{fmt(food.kcal)} kcal</Muted><Muted>P {fmt(food.protein_g)} g</Muted>
+          <Muted>C {fmt(food.carbs_g)} g</Muted><Muted>G {fmt(food.fat_g)} g</Muted>
+          <Muted>Fibra {fmt(food.fiber_g)} g</Muted>
+        </View>
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}><AppButton title="Editar" variant="secondary" onPress={() => editOwnedFood(food)} /></View>
+          <View style={{ flex: 1 }}><AppButton title={food.share_status === "private" ? "Compartir" : "Retirar"} variant="quiet" onPress={() => void toggleFoodSharing(food)} loading={loading} /></View>
+        </View>
+        <Text onPress={() => deleteOwnedFood(food)} style={{ color: colors.danger, fontWeight: "700", paddingVertical: 5 }}>Eliminar alimento</Text>
+      </Panel>)}
+      <SectionTitle title={editingFoodId === null ? "Crear alimento" : "Editar alimento"} />
+      <Panel>
+        <Field label="Nombre" value={foodDraft.name} onChangeText={value => setFoodDraft(current => ({ ...current, name: value }))} placeholder="Ej. Yogur natural casero" />
+        <Field label="Marca (opcional)" value={foodDraft.brand} onChangeText={value => setFoodDraft(current => ({ ...current, brand: value }))} />
+        <Field label="Código de barras (opcional)" value={foodDraft.barcode} onChangeText={value => setFoodDraft(current => ({ ...current, barcode: value }))} keyboardType="number-pad" />
+        <Field label="Tamaño de ración (g, opcional)" value={foodDraft.serving_g} onChangeText={value => setFoodDraft(current => ({ ...current, serving_g: value }))} keyboardType="decimal-pad" />
+        <Muted>Nutrientes por 100 g</Muted>
+        <Field label="Energía (kcal)" value={foodDraft.kcal} onChangeText={value => setFoodDraft(current => ({ ...current, kcal: value }))} keyboardType="decimal-pad" />
+        <Field label="Proteína (g)" value={foodDraft.protein_g} onChangeText={value => setFoodDraft(current => ({ ...current, protein_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Carbohidratos (g)" value={foodDraft.carbs_g} onChangeText={value => setFoodDraft(current => ({ ...current, carbs_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Azúcares (g)" value={foodDraft.sugars_g} onChangeText={value => setFoodDraft(current => ({ ...current, sugars_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Grasas (g)" value={foodDraft.fat_g} onChangeText={value => setFoodDraft(current => ({ ...current, fat_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Grasas saturadas (g)" value={foodDraft.sat_fat_g} onChangeText={value => setFoodDraft(current => ({ ...current, sat_fat_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Fibra (g)" value={foodDraft.fiber_g} onChangeText={value => setFoodDraft(current => ({ ...current, fiber_g: value }))} keyboardType="decimal-pad" />
+        <Field label="Sodio (mg)" value={foodDraft.sodium_mg} onChangeText={value => setFoodDraft(current => ({ ...current, sodium_mg: value }))} keyboardType="decimal-pad" />
+        <AppButton title={editingFoodId === null ? "Guardar alimento" : "Guardar cambios"} onPress={() => void saveOwnedFood()} loading={loading} disabled={!foodDraft.name.trim()} />
+        {editingFoodId !== null ? <AppButton title="Cancelar edición" onPress={() => { setEditingFoodId(null); setFoodDraft(emptyFoodDraft()); }} variant="quiet" /> : null}
+      </Panel>
     </> : null}
 
     {section === "recipes" ? <>
