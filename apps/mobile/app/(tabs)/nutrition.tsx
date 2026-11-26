@@ -12,7 +12,7 @@ import { BarcodeScanner } from "@/components/BarcodeScanner";
 type Meal = "auto" | "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
 type FrequentFood = { food: FoodSearchResult; times: number; typical_grams: number; last_logged?: string };
 type FoodDetail = FoodSearchResult & {
-  source?: string; user_id?: number | null; barcode?: string | null; image_url?: string | null;
+  source?: string; user_id?: number | null; barcode?: string | null; serving_g?: number | null; image_url?: string | null;
   nutriscore_grade?: string | null; nova_group?: number | null; ecoscore_grade?: string | null;
   serving_size?: string | null; labels?: string[]; allergens?: string[]; ingredients?: string | null;
   categories?: string[]; attribution?: string | null; license?: string | null;
