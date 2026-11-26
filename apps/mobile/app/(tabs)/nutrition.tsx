@@ -1044,7 +1044,7 @@ export default function NutritionScreen() {
 
   return <Screen>
     <PageTitle eyebrow="Nutrición" title="Alimenta tu progreso" subtitle="Diario de alimentos y recetas, sincronizados con tu cuenta." />
-    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); if (value === "foods") void loadOwnedFoods(); if (value === "catalog") void loadCatalog(); }} options={[
+    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); if (value === "foods") void loadOwnedFoods(); if (value === "catalog") void loadSmartFitSearchData(); }} options={[
       { value: "diary", label: "Diario" }, { value: "catalog", label: "Buscar" }, { value: "recipes", label: "Recetas" }, { value: "foods", label: "Mis alimentos" },
     ]} />
     <ErrorMessage message={error} />
@@ -1141,6 +1141,7 @@ export default function NutritionScreen() {
                 <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
                 <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
               </Pressable>
+              <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
             </Panel>)}
             <SectionTitle title="Mis personalizados" action={filteredPersonalFoods.length + " alimentos"} />
             {filteredPersonalFoods.map(food => <Pressable key={"personal-" + food.id} onPress={() => void openFoodForLogging({
@@ -1331,6 +1332,7 @@ export default function NutritionScreen() {
           <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
           <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
         </Pressable>
+        <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
       </Panel>)}
       <SectionTitle title="Mis personalizados" action={filteredPersonalFoods.length + " alimentos"} />
       {filteredPersonalFoods.map(food => <Pressable key={"catalog-personal-" + food.id} onPress={() => void openFoodForLogging({
