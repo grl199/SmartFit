@@ -619,11 +619,11 @@ export default function TrainingScreen() {
         </Panel>)}
     </> : null}
 
-    {tab === "gps" && token ? <CardioGpsTracker
+    {token ? <CardioGpsTracker
       token={token}
       owner={String(user?.id ?? "")}
       initialCategory={category === "walking" ? "walking" : "running"}
-      visible
+      visible={tab === "gps"}
       onSaved={() => { void loadAll(); setTab("history"); }}
     /> : null}
 
