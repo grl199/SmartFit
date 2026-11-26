@@ -88,29 +88,90 @@ function paceText(ms: number, km: number) {
   return Math.floor(total / 60) + ":" + String(total % 60).padStart(2, "0") + " /km";
 }
 
-function routeHtml(points: RoutePoint[]) {
-  if (points.length < 2) {
-    return "<html><body style='margin:0;background:#0e1612;color:#9eada5;font:14px sans-serif;display:grid;place-items:center;height:100vh'>El recorrido aparecerá aquí al recibir puntos GPS.</body></html>";
+const ROUTE_MAP_HTML = `<!doctype html>
+<html><head>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<style>
+html,body,#map{margin:0;padding:0;width:100%;height:100%;background:#0e1612}
+.leaflet-container{background:#0e1612;font:12px sans-serif}
+.leaflet-control-attribution{font-size:9px!important}
+</style>
+</head><body>
+<div id="map"></div>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+(function(){
+  if(!window.L){document.body.innerHTML="<div style='color:#fff;padding:20px;font:14px sans-serif'>No se pudo cargar el mapa. Comprueba la conexión a internet.</div>";return;}
+  var map=L.map("map",{zoomControl:true,attributionControl:true}).setView([40.4168,-3.7038],13);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",{
+    maxZoom:19,
+    attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+  }).addTo(map);
+  var routeLayer=L.featureGroup().addTo(map);
+  window.setSmartFitRoute=function(points){
+    routeLayer.clearLayers();
+    if(!Array.isArray(points)||!points.length)return;
+    if(points.length===1){
+      map.setView(points[0],16);
+      L.circleMarker(points[0],{radius:7,color:"#ffffff",weight:2,fillColor:"#63e6a6",fillOpacity:1}).addTo(routeLayer);
+      return;
+    }
+    var line=L.polyline(points,{color:"#16a86b",weight:5,opacity:.95,lineJoin:"round"}).addTo(routeLayer);
+    L.circleMarker(points[0],{radius:6,color:"#ffffff",weight:2,fillColor:"#237bd1",fillOpacity:1}).bindTooltip("Inicio").addTo(routeLayer);
+    L.circleMarker(points[points.length-1],{radius:7,color:"#ffffff",weight:2,fillColor:"#16a86b",fillOpacity:1}).bindTooltip("Fin").addTo(routeLayer);
+    map.fitBounds(line.getBounds().pad(.16),{maxZoom:17});
+  };
+  window.setTimeout(function(){map.invalidateSize();},250);
+})();
+</script></body></html>`;
+
+export function RouteMapPreview({ points, initiallyVisible = false, height = 220 }: {
+  points: RoutePoint[]; initiallyVisible?: boolean; height?: number;
+}) {
+  const [visible,setVisible] = useState(initiallyVisible);
+  const [failed,setFailed] = useState(false);
+  const webViewRef = useRef<WebView|null>(null);
+  const loadedRef = useRef(false);
+  const pointsRef = useRef(points);
+  pointsRef.current = points;
+
+  const pushPoints = useCallback(() => {
+    if (!loadedRef.current || !webViewRef.current) return;
+    const payload = JSON.stringify(pointsRef.current.map(point => [point.lat,point.lng]));
+    webViewRef.current.injectJavaScript("window.setSmartFitRoute && window.setSmartFitRoute("+payload+"); true;");
+  }, []);
+
+  useEffect(() => {
+    if (visible) pushPoints();
+  }, [points,visible,pushPoints]);
+
+  if (!visible) {
+    return <AppButton title="Ver mapa del recorrido" variant="quiet" onPress={() => setVisible(true)} disabled={points.length === 0}/>;
   }
-  const minLat = Math.min(...points.map(point => point.lat));
-  const maxLat = Math.max(...points.map(point => point.lat));
-  const minLng = Math.min(...points.map(point => point.lng));
-  const maxLng = Math.max(...points.map(point => point.lng));
-  const dx = Math.max(0.000001, maxLng - minLng);
-  const dy = Math.max(0.000001, maxLat - minLat);
-  const xy = points.map(point => {
-    const x = 18 + ((point.lng - minLng) / dx) * 324;
-    const y = 202 - ((point.lat - minLat) / dy) * 184;
-    return x.toFixed(1) + "," + y.toFixed(1);
-  }).join(" ");
-  return "<!doctype html><html><head><meta name='viewport' content='width=device-width,initial-scale=1,maximum-scale=1'></head>" +
-    "<body style='margin:0;background:#0e1612'><svg viewBox='0 0 360 220' width='100%' height='100%' preserveAspectRatio='xMidYMid meet'>" +
-    "<defs><pattern id='g' width='24' height='24' patternUnits='userSpaceOnUse'><path d='M24 0H0V24' fill='none' stroke='#23332b' stroke-width='1'/></pattern></defs>" +
-    "<rect width='360' height='220' fill='url(#g)'/><polyline points='" + xy +
-    "' fill='none' stroke='#63e6a6' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/>" +
-    "<circle cx='" + xy.split(" ")[0].split(",")[0] + "' cy='" + xy.split(" ")[0].split(",")[1] + "' r='5' fill='#fff' stroke='#63e6a6' stroke-width='3'/>" +
-    "<circle cx='" + xy.split(" ").slice(-1)[0].split(",")[0] + "' cy='" + xy.split(" ").slice(-1)[0].split(",")[1] + "' r='6' fill='#63e6a6' stroke='#fff' stroke-width='2'/>" +
-    "</svg></body></html>";
+  if (failed) {
+    return <View style={{height,alignItems:"center",justifyContent:"center",gap:8,backgroundColor:colors.surfaceRaised,borderRadius:12,padding:14}}>
+      <Muted>No se pudo cargar el mapa de OpenStreetMap.</Muted>
+      <AppButton title="Reintentar mapa" variant="quiet" onPress={() => {setFailed(false);loadedRef.current=false;}}/>
+    </View>;
+  }
+  return <View style={{height,overflow:"hidden",borderRadius:12,borderWidth:1,borderColor:colors.border}}>
+    <WebView
+      ref={webViewRef}
+      source={{html:ROUTE_MAP_HTML,baseUrl:"https://smartfit.local"}}
+      originWhitelist={["*"]}
+      javaScriptEnabled
+      domStorageEnabled
+      scrollEnabled={false}
+      nestedScrollEnabled={false}
+      onLoadEnd={() => {loadedRef.current=true;pushPoints();}}
+      onError={() => setFailed(true)}
+      style={{flex:1,backgroundColor:colors.surface}}
+    />
+    <View style={{position:"absolute",right:8,top:8}}>
+      <AppButton title="Ocultar mapa" size="sm" variant="secondary" onPress={() => setVisible(false)}/>
+    </View>
+  </View>;
 }
 
 function KeepAwakeWhileTracking() {
@@ -408,7 +469,6 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
   }, [points, elapsed, status]);
   const pace = paceText(stats.activeMs, stats.distanceKm);
   const lastFixAge = signalAge == null ? null : signalAge;
-  const mapHtml = useMemo(() => routeHtml(points), [points]);
 
   if (!visible) {
     return status === "tracking" ? <KeepAwakeWhileTracking /> : null;
@@ -482,9 +542,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
     </Panel>
     <Panel>
       <SectionTitle title="Mapa de tu recorrido" action={status === "tracking" ? "EN DIRECTO" : status === "finished" ? "FINALIZADO" : "GPS"} />
-      {Platform.OS === "web" ? <View style={{ height: 220, alignItems: "center", justifyContent: "center" }}>
-        <Muted>{points.length} puntos registrados</Muted>
-      </View> : <WebView source={{ html: mapHtml, baseUrl: "https://smartfit.local" }} originWhitelist={["*"]} javaScriptEnabled scrollEnabled={false} style={{ height: 220, backgroundColor: colors.surface }} />}
+      <RouteMapPreview points={points} initiallyVisible height={260} />
     </Panel>
   </>;
 }
