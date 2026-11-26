@@ -9,8 +9,8 @@ export default function TabsLayout() {
   if (!user) return <Redirect href="/(auth)/login" />;
   if (!user.onboarding_completed) return <Redirect href="/onboarding" />;
   return <Tabs screenOptions={{
-    tabBarPosition:"top",headerShown:false,tabBarActiveTintColor:colors.accent,tabBarInactiveTintColor:colors.muted,
-    tabBarStyle:{backgroundColor:colors.surface,borderBottomColor:colors.border,borderTopWidth:0,height:58,paddingTop:5,paddingBottom:5,elevation:0},
+    tabBarPosition:"bottom",headerShown:false,tabBarActiveTintColor:colors.accent,tabBarInactiveTintColor:colors.muted,
+    tabBarStyle:{backgroundColor:colors.surface,borderTopColor:colors.border,borderBottomWidth:0,height:72,paddingTop:8,paddingBottom:8,elevation:12},
     tabBarLabelStyle:{fontSize:10,fontWeight:"700"},tabBarItemStyle:{paddingHorizontal:2}
   }}>
     <Tabs.Screen name="index" options={{title:"Hoy",tabBarIcon:({color,size})=><Ionicons name="home-outline" color={String(color)} size={size}/>}} />
