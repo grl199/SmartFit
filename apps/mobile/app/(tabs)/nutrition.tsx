@@ -1089,7 +1089,7 @@ export default function NutritionScreen() {
           <Field
             label={foodEntryMode === "openfoodfacts" ? "Buscar producto de marca" : "Buscar en el catálogo SmartFit"}
             value={query}
-            onChangeText={value => { setQuery(value); setResults([]); }}
+            onChangeText={value => { setQuery(value); setCatalogCategory(""); setResults([]); }}
             placeholder={foodEntryMode === "openfoodfacts" ? "Ej. yogur Danone, avena Hacendado…" : "Ej. avena, plátano, yogur…"}
             returnKeyType="search"
             onSubmitEditing={() => void searchFoods()}
@@ -1101,7 +1101,7 @@ export default function NutritionScreen() {
             {loading && !catalogSections.length ? <ActivityIndicator color={colors.accent} /> : null}
             <View style={{ gap: 8 }}>
               {filteredSmartFitSections.map(item => {
-                const expanded = !!smartFitFilter || item.id === catalogCategory;
+                const expanded = item.id === catalogCategory;
                 return <Panel key={item.id}>
                   <Pressable onPress={() => setCatalogCategory(current => current === item.id ? "" : item.id)}
                     style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -1134,27 +1134,55 @@ export default function NutritionScreen() {
             {!loading && smartFitFilter && !filteredSmartFitSections.length
               ? <Muted>No hay alimentos que coincidan con «{query}».</Muted> : null}
             {!smartFitFilter ? <Muted>Selecciona una categoría para explorar sus alimentos. Escribe arriba para filtrar productos en todas las categorías.</Muted> : null}
-            <SectionTitle title="Recetas SmartFit" action={filteredSmartFitRecipes.length + " recetas"} />
-            {filteredSmartFitRecipes.map(recipe => <Panel key={"recipe-" + recipe.id}>
-              <Pressable onPress={() => void openRecipe(recipe)} style={{ gap: 4 }}>
-                <Text style={{ color: colors.text, fontWeight: "900" }}>🍲 {recipe.name}</Text>
-                <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
-                <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
+            <Panel>
+              <Pressable onPress={() => setCatalogCategory(current => current === "__smartfit_recipes" ? "" : "__smartfit_recipes")}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Text style={{ fontSize: 25 }}>🍲</Text>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: colors.text, fontWeight: "900" }}>Recetas SmartFit</Text>
+                  <Muted>Recetas oficiales disponibles para registrar</Muted>
+                </View>
+                <Muted>{filteredSmartFitRecipes.length} recetas</Muted>
+                <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{catalogCategory === "__smartfit_recipes" ? "−" : "+"}</Text>
               </Pressable>
-              <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
-            </Panel>)}
-            <SectionTitle title="Mis personalizados" action={filteredPersonalFoods.length + " alimentos"} />
-            {filteredPersonalFoods.map(food => <Pressable key={"personal-" + food.id} onPress={() => void openFoodForLogging({
-              id: food.id, name: food.name, brand: food.brand, kcal: food.kcal, protein_g: food.protein_g,
-              carbs_g: food.carbs_g, fat_g: food.fat_g, source: "personal",
-            })} style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 }}>
-              <Text style={{ fontSize: 22 }}>👤</Text>
-              <View style={{ flex: 1, gap: 2 }}>
-                <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-                <Muted>{food.brand ?? "Alimento personal"} · {fmt(food.kcal)} kcal/100 g</Muted>
-              </View>
-              <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
-            </Pressable>)}
+              {catalogCategory === "__smartfit_recipes" ? <View style={{ marginTop: 9 }}>
+                {filteredSmartFitRecipes.map(recipe => <View key={"recipe-" + recipe.id} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 9, gap: 7 }}>
+                  <Pressable onPress={() => void openRecipe(recipe)} style={{ gap: 4 }}>
+                    <Text style={{ color: colors.text, fontWeight: "900" }}>{recipe.name}</Text>
+                    <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
+                    <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
+                  </Pressable>
+                  <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
+                </View>)}
+                {!filteredSmartFitRecipes.length ? <Muted>No hay recetas que coincidan con «{query}».</Muted> : null}
+              </View> : null}
+            </Panel>
+            <Panel>
+              <Pressable onPress={() => setCatalogCategory(current => current === "__my_personal_foods" ? "" : "__my_personal_foods")}
+                style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                <Text style={{ fontSize: 25 }}>👤</Text>
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: colors.text, fontWeight: "900" }}>Mis personalizados</Text>
+                  <Muted>Alimentos que has creado para tu cuenta</Muted>
+                </View>
+                <Muted>{filteredPersonalFoods.length} alimentos</Muted>
+                <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{catalogCategory === "__my_personal_foods" ? "−" : "+"}</Text>
+              </Pressable>
+              {catalogCategory === "__my_personal_foods" ? <View style={{ marginTop: 9 }}>
+                {filteredPersonalFoods.map(food => <Pressable key={"personal-" + food.id} onPress={() => void openFoodForLogging({
+                  id: food.id, name: food.name, brand: food.brand, kcal: food.kcal, protein_g: food.protein_g,
+                  carbs_g: food.carbs_g, fat_g: food.fat_g, source: "personal",
+                })} style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 }}>
+                  <Text style={{ fontSize: 22 }}>👤</Text>
+                  <View style={{ flex: 1, gap: 2 }}>
+                    <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+                    <Muted>{food.brand ?? "Alimento personal"} · {fmt(food.kcal)} kcal/100 g</Muted>
+                  </View>
+                  <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
+                </Pressable>)}
+                {!filteredPersonalFoods.length ? <Muted>No hay alimentos personalizados que coincidan con «{query}».</Muted> : null}
+              </View> : null}
+            </Panel>
             {smartFitFilter && !filteredSmartFitRecipes.length && !filteredPersonalFoods.length && !filteredSmartFitSections.length
               ? <Muted>No hay coincidencias en el catálogo, las recetas SmartFit ni tus personalizados.</Muted> : null}
           </> : <>
@@ -1290,11 +1318,11 @@ export default function NutritionScreen() {
     {section === "catalog" ? <>
       <SectionTitle title="Buscar en SmartFit" action={(catalogSections.reduce((sum, item) => sum + item.count, 0) + filteredSmartFitRecipes.length + filteredPersonalFoods.length) + " resultados"} />
       <Muted>Explora alimentos por categoría y añádelos al diario con la cantidad y comida seleccionadas.</Muted>
-      <Field label="Buscar alimentos en todas las categorías" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Ej. lentejas, café, arroz, tortilla…" />
+      <Field label="Buscar alimentos en todas las categorías" value={catalogQuery} onChangeText={value => { setCatalogQuery(value); setCatalogCategory(""); }} placeholder="Ej. lentejas, café, arroz, tortilla…" />
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
       <View style={{ gap: 8 }}>
         {filteredCatalogSections.map(item => {
-          const expanded = !!catalogFilter || item.id === catalogCategory;
+          const expanded = item.id === catalogCategory;
           return <Panel key={item.id}>
             <Pressable onPress={() => setCatalogCategory(current => current === item.id ? "" : item.id)}
               style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
@@ -1325,27 +1353,55 @@ export default function NutritionScreen() {
         })}
         {catalogFilter && !filteredCatalogSections.length ? <Muted>No hay alimentos que coincidan con «{catalogQuery}».</Muted> : null}
       </View>
-      <SectionTitle title="Recetas SmartFit" action={filteredSmartFitRecipes.length + " recetas"} />
-      {filteredSmartFitRecipes.map(recipe => <Panel key={"catalog-recipe-" + recipe.id}>
-        <Pressable onPress={() => void openRecipe(recipe)} style={{ gap: 4 }}>
-          <Text style={{ color: colors.text, fontWeight: "900" }}>🍲 {recipe.name}</Text>
-          <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
-          <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
+      <Panel>
+        <Pressable onPress={() => setCatalogCategory(current => current === "__smartfit_recipes" ? "" : "__smartfit_recipes")}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={{ fontSize: 25 }}>🍲</Text>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: colors.text, fontWeight: "900" }}>Recetas SmartFit</Text>
+            <Muted>Recetas oficiales disponibles para registrar</Muted>
+          </View>
+          <Muted>{filteredSmartFitRecipes.length} recetas</Muted>
+          <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{catalogCategory === "__smartfit_recipes" ? "−" : "+"}</Text>
         </Pressable>
-        <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
-      </Panel>)}
-      <SectionTitle title="Mis personalizados" action={filteredPersonalFoods.length + " alimentos"} />
-      {filteredPersonalFoods.map(food => <Pressable key={"catalog-personal-" + food.id} onPress={() => void openFoodForLogging({
-        id: food.id, name: food.name, brand: food.brand, kcal: food.kcal, protein_g: food.protein_g,
-        carbs_g: food.carbs_g, fat_g: food.fat_g, source: "personal",
-      })} style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 }}>
-        <Text style={{ fontSize: 22 }}>👤</Text>
-        <View style={{ flex: 1, gap: 2 }}>
-          <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-          <Muted>{food.brand ?? "Alimento personal"} · {fmt(food.kcal)} kcal/100 g</Muted>
-        </View>
-        <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
-      </Pressable>)}
+        {catalogCategory === "__smartfit_recipes" ? <View style={{ marginTop: 9 }}>
+          {filteredSmartFitRecipes.map(recipe => <View key={"catalog-recipe-" + recipe.id} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 9, gap: 7 }}>
+            <Pressable onPress={() => void openRecipe(recipe)} style={{ gap: 4 }}>
+              <Text style={{ color: colors.text, fontWeight: "900" }}>{recipe.name}</Text>
+              <Muted>{recipe.description || "Receta del catálogo SmartFit"} · {fmt(recipe.per_serving?.kcal)} kcal/ración</Muted>
+              <Text style={{ color: colors.accent, fontWeight: "800" }}>Ver receta ›</Text>
+            </Pressable>
+            <AppButton title="Registrar receta" variant="secondary" onPress={() => void logRecipe(recipe)} loading={loading} />
+          </View>)}
+          {!filteredSmartFitRecipes.length ? <Muted>No hay recetas que coincidan con «{catalogQuery}».</Muted> : null}
+        </View> : null}
+      </Panel>
+      <Panel>
+        <Pressable onPress={() => setCatalogCategory(current => current === "__my_personal_foods" ? "" : "__my_personal_foods")}
+          style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+          <Text style={{ fontSize: 25 }}>👤</Text>
+          <View style={{ flex: 1, gap: 2 }}>
+            <Text style={{ color: colors.text, fontWeight: "900" }}>Mis personalizados</Text>
+            <Muted>Alimentos que has creado para tu cuenta</Muted>
+          </View>
+          <Muted>{filteredPersonalFoods.length} alimentos</Muted>
+          <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{catalogCategory === "__my_personal_foods" ? "−" : "+"}</Text>
+        </Pressable>
+        {catalogCategory === "__my_personal_foods" ? <View style={{ marginTop: 9 }}>
+          {filteredPersonalFoods.map(food => <Pressable key={"catalog-personal-" + food.id} onPress={() => void openFoodForLogging({
+            id: food.id, name: food.name, brand: food.brand, kcal: food.kcal, protein_g: food.protein_g,
+            carbs_g: food.carbs_g, fat_g: food.fat_g, source: "personal",
+          })} style={{ flexDirection: "row", alignItems: "center", gap: 10, borderTopWidth: 1, borderColor: colors.border, paddingVertical: 9 }}>
+            <Text style={{ fontSize: 22 }}>👤</Text>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+              <Muted>{food.brand ?? "Alimento personal"} · {fmt(food.kcal)} kcal/100 g</Muted>
+            </View>
+            <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
+          </Pressable>)}
+          {!filteredPersonalFoods.length ? <Muted>No hay alimentos personalizados que coincidan con «{catalogQuery}».</Muted> : null}
+        </View> : null}
+      </Panel>
       {catalogFilter && !filteredSmartFitRecipes.length && !filteredPersonalFoods.length && !filteredCatalogSections.length
         ? <Muted>No hay coincidencias en ninguna de las tres fuentes.</Muted> : null}
     </> : null}
