@@ -79,6 +79,7 @@ function shiftDay(value: string, amount: number) {
   day.setDate(day.getDate() + amount);
   return [day.getFullYear(), String(day.getMonth() + 1).padStart(2, "0"), String(day.getDate()).padStart(2, "0")].join("-");
 }
+const normalizeFoodQuery = (value: string) => value.toLocaleLowerCase("es").normalize("NFD").replace(/[\\u0300-\\u036f]/g, "");
 const fmt = (value: number | null | undefined) => value == null ? "—" : Math.round(value).toLocaleString("es-ES");
 
 export default function NutritionScreen() {
@@ -212,11 +213,17 @@ export default function NutritionScreen() {
     try {
       const result = await api<{ sections: FoodCatalogSection[] }>("/foods/catalog", token);
       setCatalogSections(result.sections);
-      setCatalogCategory(current => result.sections.some(item => item.id === current) ? current : result.sections[0]?.id ?? "");
+      setCatalogCategory(current => result.sections.some(item => item.id === current) ? current : "");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo cargar el catálogo de alimentos.");
     } finally { setLoading(false); }
   }
+
+  useEffect(() => {
+    if (token && section === "diary" && foodEntryMode === "smartfit" && catalogSections.length === 0) {
+      void loadCatalog();
+    }
+  }, [token, section, foodEntryMode, catalogSections.length]);
 
   async function loadOwnedFoods() {
     if (!token) return;
@@ -379,7 +386,7 @@ export default function NutritionScreen() {
   }, [token, query, foodSearchSource]);
 
   useEffect(() => {
-    const canSearch = section === "diary" && (foodEntryMode === "smartfit" || foodEntryMode === "openfoodfacts") && query.trim().length > 0;
+    const canSearch = section === "diary" && foodEntryMode === "openfoodfacts" && query.trim().length > 0;
     if (!canSearch) { setResults([]); return; }
     const timer = setTimeout(() => { void searchFoods(); }, 400);
     return () => clearTimeout(timer);
@@ -979,6 +986,22 @@ export default function NutritionScreen() {
     </Screen>;
   }
 
+  const smartFitFilter = normalizeFoodQuery(query.trim());
+  const filteredSmartFitSections = catalogSections.map(item => ({
+    ...item,
+    foods: smartFitFilter
+      ? item.foods.filter(food => normalizeFoodQuery([food.name, food.brand ?? ""].join(" ")).includes(smartFitFilter))
+      : item.foods,
+  })).filter(item => !smartFitFilter || item.foods.length > 0);
+
+  const catalogFilter = normalizeFoodQuery(catalogQuery.trim());
+  const filteredCatalogSections = catalogSections.map(item => ({
+    ...item,
+    foods: catalogFilter
+      ? item.foods.filter(food => normalizeFoodQuery([food.name, food.brand ?? ""].join(" ")).includes(catalogFilter))
+      : item.foods,
+  })).filter(item => !catalogFilter || item.foods.length > 0);
+
   const totals = data?.totals;
   const target = data?.targets;
   const recipePreviewLocal = recipeIngredients.reduce((sum, item) => {
@@ -1050,24 +1073,63 @@ export default function NutritionScreen() {
           <Muted>{foodEntryMode === "openfoodfacts"
             ? "Resultados de Open Food Facts con fotografía del envase cuando está disponible."
             : "Los resultados se filtran mientras escribes; no necesitas pulsar Buscar."}</Muted>
-          {loading && query.trim() ? <ActivityIndicator color={colors.accent} /> : null}
-          {results.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
-            flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1,
-            borderColor: colors.border, paddingVertical: 10,
-          }}>
-            {food.image_url
-              ? <Image source={{ uri: food.image_url }} style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised }} resizeMode="contain" />
-              : <View style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised, alignItems: "center", justifyContent: "center" }}>
-                  <Text style={{ fontSize: 25 }}>{food.icon || (foodSearchSource === "openfoodfacts" ? "📦" : "🥗")}</Text>
-                </View>}
-            <View style={{ flex: 1, gap: 3 }}>
-              <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-              <Muted>{food.brand ? food.brand + " · " : ""}{fmt(food.kcal)} kcal/100 g · P {fmt(food.protein_g)} g</Muted>
-              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Abrir ficha nutricional ›</Text>
+          {foodEntryMode === "smartfit" ? <>
+            {loading && !catalogSections.length ? <ActivityIndicator color={colors.accent} /> : null}
+            <View style={{ gap: 8 }}>
+              {filteredSmartFitSections.map(item => {
+                const expanded = !!smartFitFilter || item.id === catalogCategory;
+                return <Panel key={item.id}>
+                  <Pressable onPress={() => setCatalogCategory(current => current === item.id ? "" : item.id)}
+                    style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+                    <Text style={{ fontSize: 25 }}>{item.icon || "🥗"}</Text>
+                    <View style={{ flex: 1, gap: 2 }}>
+                      <Text style={{ color: colors.text, fontWeight: "900" }}>{item.title}</Text>
+                      {item.description ? <Muted>{item.description}</Muted> : null}
+                    </View>
+                    <Muted>{item.foods.length} alimentos</Muted>
+                    <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{expanded ? "−" : "+"}</Text>
+                  </Pressable>
+                  {expanded ? <View style={{ marginTop: 9 }}>
+                    {item.foods.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
+                      flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9,
+                      borderTopWidth: 1, borderColor: colors.border,
+                    }}>
+                      {food.image_url
+                        ? <Image source={{ uri: food.image_url }} style={{ width: 44, height: 44, borderRadius: 9, backgroundColor: colors.surfaceRaised }} resizeMode="contain" />
+                        : <Text style={{ fontSize: 22 }}>{food.icon || item.icon || "🥗"}</Text>}
+                      <View style={{ flex: 1, gap: 2 }}>
+                        <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+                        <Muted>{food.brand ?? "Alimento genérico"} · {fmt(food.kcal)} kcal/100 g</Muted>
+                      </View>
+                      <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
+                    </Pressable>)}
+                  </View> : null}
+                </Panel>;
+              })}
             </View>
-          </Pressable>)}
-          {!query.trim() ? <Muted>Empieza a escribir para ver coincidencias al instante.</Muted> : null}
-          {!!query.trim() && !loading && !results.length ? <Muted>No hay coincidencias con ese nombre.</Muted> : null}
+            {!loading && smartFitFilter && !filteredSmartFitSections.length
+              ? <Muted>No hay alimentos que coincidan con «{query}».</Muted> : null}
+            {!smartFitFilter ? <Muted>Selecciona una categoría para explorar sus alimentos. Escribe arriba para filtrar productos en todas las categorías.</Muted> : null}
+          </> : <>
+            {loading && query.trim() ? <ActivityIndicator color={colors.accent} /> : null}
+            {results.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
+              flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1,
+              borderColor: colors.border, paddingVertical: 10,
+            }}>
+              {food.image_url
+                ? <Image source={{ uri: food.image_url }} style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised }} resizeMode="contain" />
+                : <View style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised, alignItems: "center", justifyContent: "center" }}>
+                    <Text style={{ fontSize: 25 }}>📦</Text>
+                  </View>}
+              <View style={{ flex: 1, gap: 3 }}>
+                <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+                <Muted>{food.brand ? food.brand + " · " : ""}{fmt(food.kcal)} kcal/100 g · P {fmt(food.protein_g)} g</Muted>
+                <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Abrir ficha nutricional ›</Text>
+              </View>
+            </Pressable>)}
+            {!query.trim() ? <Muted>Empieza a escribir para ver coincidencias al instante.</Muted> : null}
+            {!!query.trim() && !loading && !results.length ? <Muted>No hay coincidencias con ese nombre.</Muted> : null}
+          </>}
         </> : null}
       </Panel>
       {foodEntryMode === "estimate" ? <>
@@ -1184,23 +1246,21 @@ export default function NutritionScreen() {
       <Field label="Filtrar esta categoría" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Buscar por nombre…" />
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
       <View style={{ gap: 8 }}>
-        {catalogSections.map(item => {
-          const expanded = item.id === catalogCategory;
-          const foods = item.foods.filter(food => !catalogQuery.trim() ||
-            food.name.toLocaleLowerCase("es").includes(catalogQuery.trim().toLocaleLowerCase()) ||
-            (food.brand ?? "").toLocaleLowerCase("es").includes(catalogQuery.trim().toLocaleLowerCase()));
+        {filteredCatalogSections.map(item => {
+          const expanded = !!catalogFilter || item.id === catalogCategory;
           return <Panel key={item.id}>
-            <Pressable onPress={() => setCatalogCategory(expanded ? "" : item.id)} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-              <Text style={{ fontSize: 24 }}>{item.icon || "🥗"}</Text>
+            <Pressable onPress={() => setCatalogCategory(current => current === item.id ? "" : item.id)}
+              style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ fontSize: 25 }}>{item.icon || "🥗"}</Text>
               <View style={{ flex: 1 }}>
                 <Text style={{ color: colors.text, fontWeight: "900" }}>{item.title}</Text>
                 {item.description ? <Muted>{item.description}</Muted> : null}
               </View>
-              <Muted>{foods.length}/{item.count}</Muted>
+              <Muted>{item.foods.length}/{item.count}</Muted>
               <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{expanded ? "−" : "+"}</Text>
             </Pressable>
             {expanded ? <View style={{ marginTop: 10 }}>
-              {foods.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
+              {item.foods.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
                 flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9,
                 borderTopWidth: 1, borderColor: colors.border,
               }}>
@@ -1213,10 +1273,10 @@ export default function NutritionScreen() {
                 </View>
                 <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
               </Pressable>)}
-              {!foods.length ? <Muted>No hay alimentos con este filtro.</Muted> : null}
             </View> : null}
           </Panel>;
         })}
+        {catalogFilter && !filteredCatalogSections.length ? <Muted>No hay alimentos que coincidan con «{catalogQuery}».</Muted> : null}
       </View>
     </> : null}
 
