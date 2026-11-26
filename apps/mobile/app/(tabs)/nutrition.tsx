@@ -39,7 +39,15 @@ type RecipeIngredient = {
 type RecipeDetail = RecipeSummary & {
   editable: boolean; ingredients: RecipeIngredient[]; totals?: { kcal: number; protein_g: number; carbs_g: number; fat_g: number };
 };
-type RecipeDraftIngredient = { food: FoodSearchResult; grams: string };
+type RecipeDraftIngredient = { food: FoodSearchResult; quantity: string; unit_name: string; grams_per_unit: string };
+type RecipeUnitOption = { value: string; label: string; factor: number };
+const recipeUnits: RecipeUnitOption[] = [
+  { value: "g", label: "Gramos", factor: 1 }, { value: "ml", label: "Mililitros", factor: 1 },
+  { value: "cucharada", label: "Cucharadas", factor: 15 }, { value: "cucharadita", label: "Cucharaditas", factor: 5 },
+  { value: "unidad", label: "Unidades", factor: 50 }, { value: "trozo", label: "Trozos", factor: 50 },
+  { value: "taza", label: "Tazas", factor: 240 }, { value: "rebanada", label: "Rebanadas", factor: 30 },
+  { value: "loncha", label: "Lonchas", factor: 20 },
+];
 type BarcodeResult = { status: string; food?: FoodSearchResult | null; name?: string | null; brand?: string | null };
 type FoodEstimate = {
   name: string; items: Array<{
@@ -110,6 +118,8 @@ export default function NutritionScreen() {
   const [recipeEditServings, setRecipeEditServings] = useState("1");
   const [recipeEditSteps, setRecipeEditSteps] = useState("");
   const [recipeEditAmounts, setRecipeEditAmounts] = useState<Record<number, string>>({});
+  const [recipeEditUnits, setRecipeEditUnits] = useState<Record<number, { quantity: string; unit_name: string; grams_per_unit: string }>>({});
+  const [recipePreview, setRecipePreview] = useState<{ serving_g: number; per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number } } | null>(null);
   const [editingLog, setEditingLog] = useState<{ id: number; grams: string; meal: Meal } | null>(null);
   const [recipeName, setRecipeName] = useState("");
   const [servings, setServings] = useState("1");
@@ -140,6 +150,27 @@ export default function NutritionScreen() {
   }, [token, date]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (!token || recipeIngredients.length === 0) {
+      setRecipePreview(null);
+      return;
+    }
+    let active = true;
+    const handle = setTimeout(() => {
+      void api<{ serving_g: number; per_serving: { kcal: number; protein_g: number; carbs_g: number; fat_g: number; fiber_g?: number } }>("/recipes/preview", token, {
+        method: "POST", body: {
+          serving_count: Number(servings) || 1,
+          ingredients: recipeIngredientPayload.map(item => ({
+            food_id: item.food_id, quantity_g: item.quantity_g, unit_name: item.unit_name,
+            quantity: item.quantity, grams_per_unit: item.grams_per_unit,
+          })),
+        },
+      }).then(result => { if (active) setRecipePreview(result); })
+        .catch(reason => { if (active) setError(reason instanceof Error ? reason.message : "No se pudo calcular el resumen de la receta."); });
+    }, 350);
+    return () => { active = false; clearTimeout(handle); };
+  }, [token, recipeIngredients, servings]);
 
   useEffect(() => {
     if (wasRecording.current && !voiceRecorderState.isRecording && !voiceNoteUri && voiceRecorder.uri) {
@@ -640,7 +671,17 @@ export default function NutritionScreen() {
 
   function addRecipeIngredient(food: FoodSearchResult) {
     setRecipeIngredients(current => current.some(item => item.food.id === food.id)
-      ? current : [...current, { food, grams: "100" }]);
+      ? current : [...current, { food, quantity: "100", unit_name: "g", grams_per_unit: "1" }]);
+  }
+
+  function updateRecipeIngredient(index: number, patch: Partial<RecipeDraftIngredient>) {
+    setRecipeIngredients(current => current.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  }
+
+  function gramsForIngredient(item: RecipeDraftIngredient): number {
+    const quantity = Number(item.quantity.replace(",", "."));
+    const factor = Number(item.grams_per_unit.replace(",", "."));
+    return Number.isFinite(quantity) && Number.isFinite(factor) ? quantity * factor : Number.NaN;
   }
 
   async function estimateRecipe() {
@@ -702,9 +743,17 @@ export default function NutritionScreen() {
       setError("Indica un nombre y al menos un ingrediente.");
       return;
     }
-    const ingredients = recipeIngredients.map(item => ({ food_id: item.food.id, quantity_g: Number(item.grams), unit_name: "g" }));
-    if (ingredients.some(item => !Number.isFinite(item.quantity_g) || item.quantity_g <= 0 || item.quantity_g > 5000)) {
-      setError("Cada ingrediente debe tener una cantidad entre 1 y 5000 gramos.");
+    const ingredients = recipeIngredients.map(item => {
+      const quantity = Number(item.quantity.replace(",", "."));
+      const gramsPerUnit = Number(item.grams_per_unit.replace(",", "."));
+      return {
+        food_id: item.food.id, quantity_g: quantity * gramsPerUnit,
+        unit_name: item.unit_name, quantity, grams_per_unit: gramsPerUnit,
+      };
+    });
+    if (ingredients.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || item.quantity > 5000 ||
+      !Number.isFinite(item.grams_per_unit) || item.grams_per_unit <= 0 || item.quantity_g <= 0 || item.quantity_g > 5000)) {
+      setError("Revisa las cantidades y equivalencias de cada ingrediente.");
       return;
     }
     const count = Number(servings);
@@ -722,6 +771,7 @@ export default function NutritionScreen() {
       setSelectedRecipe(created); setRecipeEditName(created.name); setRecipeEditDescription(created.description ?? "");
       setRecipeEditServings(String(created.serving_count)); setRecipeEditSteps(created.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(created.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      setRecipeEditUnits(Object.fromEntries(created.ingredients.map(item => [item.id, { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) }])));
       setNotice("Receta creada y disponible en tu cuenta.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo crear la receta.");
@@ -739,6 +789,7 @@ export default function NutritionScreen() {
       setRecipeEditServings(String(detail.serving_count));
       setRecipeEditSteps(detail.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(detail.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      setRecipeEditUnits(Object.fromEntries(detail.ingredients.map(item => [item.id, { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) }])));
     } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo abrir la receta."); }
     finally { setLoading(false); }
   }
@@ -746,13 +797,17 @@ export default function NutritionScreen() {
   async function saveRecipeEdits() {
     if (!token || !selectedRecipe?.editable) return;
     const count = Number(recipeEditServings);
-    const ingredients = selectedRecipe.ingredients.map(item => ({
-      food_id: item.food_id,
-      quantity_g: Number(recipeEditAmounts[item.id] ?? item.quantity_g),
-      unit_name: "g",
-    }));
+    const ingredients = selectedRecipe.ingredients.map(item => {
+      const unit = recipeEditUnits[item.id] ?? { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) };
+      const quantity = Number(unit.quantity.replace(",", "."));
+      const gramsPerUnit = Number(unit.grams_per_unit.replace(",", "."));
+      return {
+        food_id: item.food_id, quantity_g: quantity * gramsPerUnit,
+        unit_name: unit.unit_name, quantity, grams_per_unit: gramsPerUnit,
+      };
+    });
     if (!recipeEditName.trim() || !Number.isFinite(count) || count <= 0 || count > 100 ||
-        ingredients.some(item => !Number.isFinite(item.quantity_g) || item.quantity_g <= 0 || item.quantity_g > 5000)) {
+        ingredients.some(item => !Number.isFinite(item.quantity) || item.quantity <= 0 || !Number.isFinite(item.grams_per_unit) || item.grams_per_unit <= 0 || item.quantity_g <= 0 || item.quantity_g > 5000)) {
       setError("Revisa el nombre, las raciones y las cantidades de los ingredientes.");
       return;
     }
@@ -765,6 +820,7 @@ export default function NutritionScreen() {
       } });
       setSelectedRecipe(updated);
       setRecipeEditAmounts(Object.fromEntries(updated.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      setRecipeEditUnits(Object.fromEntries(updated.ingredients.map(item => [item.id, { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) }])));
       await loadRecipes();
       setNotice("Receta actualizada.");
     } catch (reason) {
@@ -799,6 +855,7 @@ export default function NutritionScreen() {
       setSelectedRecipe(copy); setRecipeEditName(copy.name); setRecipeEditDescription(copy.description ?? "");
       setRecipeEditServings(String(copy.serving_count)); setRecipeEditSteps(copy.steps.join("\n"));
       setRecipeEditAmounts(Object.fromEntries(copy.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      setRecipeEditUnits(Object.fromEntries(copy.ingredients.map(item => [item.id, { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) }])));
       setNotice("Copia personal creada. Ya puedes editarla.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo copiar la receta.");
@@ -826,8 +883,8 @@ export default function NutritionScreen() {
 
   const totals = data?.totals;
   const target = data?.targets;
-  const recipePreview = recipeIngredients.reduce((sum, item) => {
-    const gramsValue = Number(item.grams) || 0;
+  const recipePreviewLocal = recipeIngredients.reduce((sum, item) => {
+    const gramsValue = gramsForIngredient(item);
     return {
       kcal: sum.kcal + item.food.kcal * gramsValue / 100,
       protein_g: sum.protein_g + item.food.protein_g * gramsValue / 100,
@@ -835,6 +892,10 @@ export default function NutritionScreen() {
       fat_g: sum.fat_g + item.food.fat_g * gramsValue / 100,
     };
   }, { kcal: 0, protein_g: 0, carbs_g: 0, fat_g: 0 });
+  const recipeIngredientPayload = recipeIngredients.map(item => ({
+    food_id: item.food.id, quantity_g: gramsForIngredient(item),
+    unit_name: item.unit_name, quantity: Number(item.quantity), grams_per_unit: Number(item.grams_per_unit),
+  }));
 
   return <Screen>
     <PageTitle eyebrow="Nutrición" title="Alimenta tu progreso" subtitle="Diario de alimentos y recetas, sincronizados con tu cuenta." />
@@ -1121,12 +1182,18 @@ export default function NutritionScreen() {
           <Field label="Número de raciones" value={recipeEditServings} onChangeText={setRecipeEditServings} keyboardType="decimal-pad" />
           <Field label="Pasos (uno por línea)" value={recipeEditSteps} onChangeText={setRecipeEditSteps} multiline numberOfLines={4} />
         </> : null}
-        {selectedRecipe.ingredients.map(item => <View key={item.id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
-          <Text style={{ color: colors.text, fontWeight: "700", flex: 1 }}>{item.food}</Text>
-          {selectedRecipe.editable
-            ? <Field label="Cantidad (g)" value={recipeEditAmounts[item.id] ?? String(item.quantity_g)} onChangeText={value => setRecipeEditAmounts(current => ({ ...current, [item.id]: value }))} keyboardType="decimal-pad" />
-            : <Muted>{fmt(item.quantity_g)} g</Muted>}
-        </View>)}
+        {selectedRecipe.ingredients.map(item => {
+          const unit = recipeEditUnits[item.id] ?? { quantity: String(item.quantity), unit_name: item.unit_name || "g", grams_per_unit: String(item.grams_per_unit || 1) };
+          return <View key={item.id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7, gap: 6 }}>
+            <Text style={{ color: colors.text, fontWeight: "700", flex: 1 }}>{item.food}</Text>
+            {selectedRecipe.editable ? <>
+              <Field label="Cantidad" value={unit.quantity} onChangeText={value => setRecipeEditUnits(current => ({ ...current, [item.id]: { ...unit, quantity: value } }))} keyboardType="decimal-pad" />
+              <ChoiceRow value={unit.unit_name} onChange={value => setRecipeEditUnits(current => ({ ...current, [item.id]: { ...unit, unit_name: value, grams_per_unit: String(recipeUnits.find(option => option.value === value)?.factor ?? 1) } }))} options={recipeUnits.map(option => ({ value: option.value, label: option.label }))} />
+              {unit.unit_name !== "g" && unit.unit_name !== "ml" ? <Field label="Gramos por unidad" value={unit.grams_per_unit} onChangeText={value => setRecipeEditUnits(current => ({ ...current, [item.id]: { ...unit, grams_per_unit: value } }))} keyboardType="decimal-pad" /> : null}
+              <Muted>Equivale a {fmt(Number(unit.quantity) * Number(unit.grams_per_unit))} g</Muted>
+            </> : <Muted>{fmt(item.quantity)} {item.unit_name || "g"} · {fmt(item.quantity_g)} g</Muted>}
+          </View>;
+        })}
         {selectedRecipe.steps.map((step, index) => !selectedRecipe.editable ? <Muted key={index}>{index + 1}. {step}</Muted> : null)}
         {selectedRecipe.editable ? <AppButton title="Guardar cambios de receta" onPress={() => void saveRecipeEdits()} loading={loading} /> : null}
         <Text onPress={() => setSelectedRecipe(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar detalle</Text>
@@ -1162,15 +1229,19 @@ export default function NutritionScreen() {
           <Muted>{fmt(food.kcal)} kcal / 100 g · {food.brand ?? "Catálogo SmartFit"}</Muted>
           <Text style={{ color: colors.accent, fontWeight: "800" }}>＋ Añadir ingrediente</Text>
         </Pressable>)}
-        {recipeIngredients.map(item => <View key={item.food.id} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 9, gap: 6 }}>
+        {recipeIngredients.map((item, index) => <View key={item.food.id} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 9, gap: 6 }}>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Text style={{ color: colors.text, fontWeight: "800", flex: 1 }}>{item.food.name}</Text>
             <Text onPress={() => setRecipeIngredients(current => current.filter(x => x.food.id !== item.food.id))} style={{ color: colors.danger, padding: 5 }}>Quitar</Text>
           </View>
-          <Field label="Cantidad (g)" value={item.grams} onChangeText={value => setRecipeIngredients(current => current.map(x => x.food.id === item.food.id ? { ...x, grams: value } : x))} keyboardType="decimal-pad" />
+          <Field label="Cantidad" value={item.quantity} onChangeText={value => updateRecipeIngredient(index, { quantity: value })} keyboardType="decimal-pad" />
+          <ChoiceRow value={item.unit_name} onChange={value => updateRecipeIngredient(index, { unit_name: value, grams_per_unit: String(recipeUnits.find(option => option.value === value)?.factor ?? 1) })} options={recipeUnits.map(option => ({ value: option.value, label: option.label }))} />
+          {item.unit_name !== "g" && item.unit_name !== "ml" ? <Field label="Gramos por unidad" value={item.grams_per_unit} onChangeText={value => updateRecipeIngredient(index, { grams_per_unit: value })} keyboardType="decimal-pad" /> : null}
+          <Muted>Equivale a {fmt(gramsForIngredient(item))} g</Muted>
         </View>)}
         {recipeIngredients.length ? <View style={{ gap: 4 }}>
-          <Muted>Estimación por receta completa: {fmt(recipePreview.kcal)} kcal · proteína {fmt(recipePreview.protein_g)} g · hidratos {fmt(recipePreview.carbs_g)} g · grasas {fmt(recipePreview.fat_g)} g</Muted>
+          <Muted>Estimación por receta completa: {fmt(recipePreviewLocal.kcal)} kcal · proteína {fmt(recipePreviewLocal.protein_g)} g · hidratos {fmt(recipePreviewLocal.carbs_g)} g · grasas {fmt(recipePreviewLocal.fat_g)} g</Muted>
+          {recipePreview ? <Muted>Por ración · {fmt(recipePreview.serving_g)} g · {fmt(recipePreview.per_serving.kcal)} kcal · proteína {fmt(recipePreview.per_serving.protein_g)} g · hidratos {fmt(recipePreview.per_serving.carbs_g)} g · grasas {fmt(recipePreview.per_serving.fat_g)} g</Muted> : null}
           <AppButton title="Guardar receta" onPress={() => void createRecipe()} loading={loading} />
         </View> : null}
       </Panel>
