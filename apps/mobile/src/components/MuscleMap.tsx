@@ -27,8 +27,6 @@ const muscleMapTargets: Record<string, string[]> = {
   abductors: ["gluteus-medius"],
 };
 
-const displayName = (value: string) => value.replaceAll("_", " ").replace(/\b\w/g, char => char.toUpperCase());
-
 export function MuscleMap({ muscles }: Props) {
   const [active, setActive] = useState<{ name: string; sets: number; strength: number; cardio: number; volume: number } | null>(null);
   const payload = useMemo(() => {
@@ -51,6 +49,7 @@ export function MuscleMap({ muscles }: Props) {
     const script = `
       (function(){
         const data=${data};
+        const targets=${JSON.stringify(muscleMapTargets)};
         const root=document.querySelector('.smartfit-muscle-map');
         if(!root)return;
         const nodes=Array.from(root.querySelectorAll('.muscle[data-muscle]'));
@@ -63,7 +62,8 @@ export function MuscleMap({ muscles }: Props) {
           node.setAttribute('role','button');
           node.setAttribute('tabindex','0');
           const title=node.querySelector('title')?.textContent||id;
-          const detail=data.values[Object.keys(data.values).find(key=>(${JSON.stringify(muscleMapTargets)}[key]||[]).includes(id))||''];
+          const groupKey=Object.keys(targets).find(key=>(targets[key]||[]).includes(id));
+          const detail=groupKey?data.values[groupKey]:null;
           const send=()=>window.ReactNativeWebView?.postMessage(JSON.stringify({
             name:title,sets:load,strength:detail?.strength||0,cardio:detail?.cardio||0,volume:detail?.volume||0
           }));
