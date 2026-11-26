@@ -236,6 +236,18 @@ export default function ProfileScreen() {
       {targets.rationale ? <Muted>{targets.rationale}</Muted> : null}
       <Muted>Origen de los objetivos: {targets.source === "manual" ? "ajuste manual" : targets.source ?? "SmartFit"}.</Muted>
     </Panel> : null}
+    <SectionTitle title="Integraciones y próximas mejoras" />
+    <Panel>
+      <Text style={{ color: colors.text, fontWeight: "900" }}>Salud y dispositivos</Text>
+      <View style={{ gap: 10 }}>
+        <View><Text style={{ color: colors.text, fontWeight: "700" }}>Health Connect (Android)</Text><Muted>El backend acepta datos normalizados, pero falta la aplicación Android complementaria que lea los datos con permisos del usuario.</Muted></View>
+        <View><Text style={{ color: colors.text, fontWeight: "700" }}>Samsung Health</Text><Muted>Requiere integrar Samsung Health Data SDK en una app Android complementaria.</Muted></View>
+        <View><Text style={{ color: colors.text, fontWeight: "700" }}>Apple HealthKit</Text><Muted>Pendiente de desarrollo para iPhone y Apple Watch.</Muted></View>
+        <View><Text style={{ color: colors.text, fontWeight: "700" }}>Garmin y Fitbit</Text><Muted>Integraciones previstas; todavía no importan datos.</Muted></View>
+      </View>
+      <Text style={{ color: colors.text, fontWeight: "900" }}>Automatizaciones previstas</Text>
+      <Muted>Sincronización de pasos y entrenamientos, y registros de frecuencia cardiaca y sueño cuando las plataformas y permisos lo permitan.</Muted>
+    </Panel>
     <Panel>
       <SectionTitle title="Sesión" />
       <Muted>ID de usuario · {user?.id}</Muted>
