@@ -755,7 +755,7 @@ export default function NutritionScreen() {
         {estimatePhoto ? <View style={{ gap: 6 }}>
           <Image source={{ uri: estimatePhoto.uri }} style={{ width: "100%", height: 190, borderRadius: 12, backgroundColor: colors.surfaceRaised }} resizeMode="cover" />
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Muted numberOfLines={1}>{estimatePhoto.fileName ?? "Foto seleccionada"}</Muted>
+            <Muted>{estimatePhoto.fileName ?? "Foto seleccionada"}</Muted>
             <Text onPress={() => { setEstimatePhoto(null); setEstimateResult(null); }} style={{ color: colors.danger, fontWeight: "800", padding: 6 }}>Quitar foto</Text>
           </View>
         </View> : null}
