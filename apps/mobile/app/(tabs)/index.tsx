@@ -36,18 +36,35 @@ export default function DashboardScreen() {
     kcal: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.kcal, 0) ?? 0,
     protein_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.protein_g, 0) ?? 0,
     carbs_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.carbs_g, 0) ?? 0,
+    sugars_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.sugars_g, 0) ?? 0,
     fat_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.fat_g, 0) ?? 0,
+    sat_fat_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.sat_fat_g, 0) ?? 0,
+    fiber_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.fiber_g, 0) ?? 0,
+    sodium_mg: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.sodium_mg, 0) ?? 0,
   }));
   const kcalGoal = Number(target?.kcal) > 0 ? Number(target?.kcal) : 2500;
   const contributionRows = [
-    { key: "kcal" as const, label: "Energía", unit: "kcal", goal: kcalGoal },
-    { key: "protein_g" as const, label: "Proteína", unit: "g", goal: Number(target?.protein_g) > 0 ? Number(target?.protein_g) : kcalGoal * .15 / 4 },
-    { key: "carbs_g" as const, label: "Hidratos", unit: "g", goal: Number(target?.carbs_g) > 0 ? Number(target?.carbs_g) : kcalGoal * .55 / 4 },
-    { key: "fat_g" as const, label: "Grasas", unit: "g", goal: Number(target?.fat_g) > 0 ? Number(target?.fat_g) : kcalGoal * .3 / 9 },
+    { key: "kcal" as const, label: "Energía", unit: "kcal", goal: kcalGoal, kind: "goal" as const, note: "Objetivo diario personalizado" },
+    { key: "protein_g" as const, label: "Proteína", unit: "g", goal: Number(target?.protein_g) > 0 ? Number(target?.protein_g) : kcalGoal * .15 / 4, kind: "goal" as const, note: "Objetivo diario o referencia provisional del 15 % de la energía" },
+    { key: "carbs_g" as const, label: "Hidratos", unit: "g", goal: Number(target?.carbs_g) > 0 ? Number(target?.carbs_g) : kcalGoal * .55 / 4, kind: "goal" as const, note: "Objetivo diario o referencia provisional del 55 % de la energía" },
+    { key: "sugars_g" as const, label: "Azúcares", unit: "g", goal: kcalGoal * .1 / 4, kind: "limit" as const, note: "Referencia del 10 % de la energía; el diario registra azúcares totales, no distingue los libres" },
+    { key: "fat_g" as const, label: "Grasas", unit: "g", goal: Number(target?.fat_g) > 0 ? Number(target?.fat_g) : kcalGoal * .3 / 9, kind: "goal" as const, note: "Objetivo diario o referencia provisional del 30 % de la energía" },
+    { key: "sat_fat_g" as const, label: "Grasas saturadas", unit: "g", goal: kcalGoal * .1 / 9, kind: "limit" as const, note: "Límite orientativo inferior al 10 % de la energía" },
+    { key: "fiber_g" as const, label: "Fibra", unit: "g", goal: Number(target?.fiber_g) > 0 ? Number(target?.fiber_g) : 25, kind: "minimum" as const, note: "Referencia mínima orientativa para adultos" },
+    { key: "sodium_mg" as const, label: "Sodio", unit: "mg", goal: 2000, kind: "limit" as const, note: "Referencia de 2.000 mg al día" },
   ].map(row => {
-    const total = mealValues.reduce((sum, meal) => sum + meal[row.key], 0);
+    const valueForMeal = (meal: typeof mealValues[number]) => {
+      const value = Math.max(0, Number(meal[row.key] || 0));
+      return row.key === "sodium_mg" && value > 10000 ? value / 1000 : value;
+    };
+    const total = mealValues.reduce((sum, meal) => sum + valueForMeal(meal), 0);
     const visualMax = Math.max(row.goal * 1.18, total * 1.08, 1);
-    return { ...row, total, visualMax, marker: Math.min(100, row.goal / visualMax * 100) };
+    const status = row.kind === "minimum"
+      ? (total >= row.goal ? "Mínimo alcanzado" : "Faltan " + (row.goal-total).toLocaleString("es-ES",{maximumFractionDigits:1}) + " " + row.unit)
+      : row.kind === "limit"
+        ? (total > row.goal ? "Exceso de " + (total-row.goal).toLocaleString("es-ES",{maximumFractionDigits:1}) + " " + row.unit : "Dentro del límite · margen " + (row.goal-total).toLocaleString("es-ES",{maximumFractionDigits:1}) + " " + row.unit)
+        : (total > row.goal ? "Por encima del objetivo · +" + (total-row.goal).toLocaleString("es-ES",{maximumFractionDigits:1}) + " " + row.unit : "Restan " + (row.goal-total).toLocaleString("es-ES",{maximumFractionDigits:1}) + " " + row.unit);
+    return { ...row, total, visualMax, marker: Math.min(100, row.goal / visualMax * 100), status, valueForMeal };
   });
   return <Screen>
     <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:"center"}}>
@@ -91,15 +108,15 @@ export default function DashboardScreen() {
       {contributionRows.map(row=><View key={row.key} style={{gap:5}}>
         <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:"baseline"}}>
           <Text style={{color:colors.text,fontWeight:"800",fontSize:12}}>{row.label}</Text>
-          <Muted>{row.total.toLocaleString("es-ES",{maximumFractionDigits:1})} / {row.goal.toLocaleString("es-ES",{maximumFractionDigits:1})} {row.unit}</Muted>
+          <Muted>{row.total.toLocaleString("es-ES",{maximumFractionDigits:1})} / {row.goal.toLocaleString("es-ES",{maximumFractionDigits:1})} {row.unit} · {(row.total/row.goal*100).toLocaleString("es-ES",{maximumFractionDigits:0})}%</Muted>
         </View>
         <View style={{height:13,borderRadius:8,backgroundColor:colors.surfaceRaised,overflow:"hidden",flexDirection:"row",position:"relative"}}>
-          {mealValues.map(meal=>meal[row.key]>0?<View key={meal.key} style={{height:13,width:(meal[row.key]/row.visualMax*100)+"%",backgroundColor:meal.color}}/>:null)}
+          {mealValues.map(meal=>row.valueForMeal(meal)>0?<View key={meal.key} style={{height:13,width:(row.valueForMeal(meal)/row.visualMax*100)+"%",backgroundColor:meal.color}}/>:null)}
           <View style={{position:"absolute",left:row.marker+"%",top:0,bottom:0,width:2,backgroundColor:colors.text}}/>
         </View>
-        <Muted>{row.total>row.goal?"Por encima del objetivo · +"+(row.total-row.goal).toLocaleString("es-ES",{maximumFractionDigits:1})+" "+row.unit:"Restan "+(row.goal-row.total).toLocaleString("es-ES",{maximumFractionDigits:1})+" "+row.unit}</Muted>
+        <Muted>{row.status} · {row.note}</Muted>
       </View>)}
-      <Muted>Las metas de macros sin objetivo personalizado usan referencias provisionales. El gráfico muestra calorías, proteína, hidratos y grasas; no incluye nutrientes que el resumen móvil no devuelve por comida.</Muted>
+      <Muted>Las referencias son orientativas, no sustituyen una pauta individual. SmartFit registra azúcares totales y no distingue los azúcares libres. Los límites de sodio y grasas saturadas son informativos.</Muted>
     </Panel>
     <SectionTitle title="Hidratación"/>
     <Panel>
