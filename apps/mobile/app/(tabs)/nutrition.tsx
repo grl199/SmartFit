@@ -10,6 +10,7 @@ import { colors } from "@/theme";
 import { BarcodeScanner } from "@/components/BarcodeScanner";
 
 type Meal = "breakfast" | "mid_morning" | "lunch" | "snack" | "dinner";
+type OwnedFoodUnit = { id: number; food_id: number; unit_name: string; unit_name_plural?: string | null; grams_per_unit: number; description?: string | null };
 type OwnedFood = {
   id: number; name: string; brand?: string | null; barcode?: string | null; serving_g?: number | null;
   kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
@@ -69,6 +70,7 @@ export default function NutritionScreen() {
   const [date, setDate] = useState(localDateISO());
   const [data, setData] = useState<DashboardDay | null>(null);
   const [query, setQuery] = useState("");
+  const [foodSearchSource, setFoodSearchSource] = useState<"generic" | "openfoodfacts">("generic");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [grams, setGrams] = useState("100");
   const [meal, setMeal] = useState<Meal>("lunch");
@@ -90,6 +92,11 @@ export default function NutritionScreen() {
   const [catalogQuery, setCatalogQuery] = useState("");
   const [foodDraft, setFoodDraft] = useState<FoodDraft>(emptyFoodDraft());
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
+  const [ownedFoodUnits, setOwnedFoodUnits] = useState<OwnedFoodUnit[]>([]);
+  const [unitName, setUnitName] = useState("");
+  const [unitPlural, setUnitPlural] = useState("");
+  const [unitGrams, setUnitGrams] = useState("");
+  const [unitDescription, setUnitDescription] = useState("");
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDetail | null>(null);
   const [recipeEditName, setRecipeEditName] = useState("");
   const [recipeEditDescription, setRecipeEditDescription] = useState("");
@@ -169,7 +176,8 @@ export default function NutritionScreen() {
     } finally { setLoading(false); }
   }
 
-  function editOwnedFood(food: OwnedFood) {
+  async function editOwnedFood(food: OwnedFood) {
+    if (!token) return;
     setEditingFoodId(food.id);
     setFoodDraft({
       name: food.name, brand: food.brand ?? "", barcode: food.barcode ?? "",
@@ -179,6 +187,11 @@ export default function NutritionScreen() {
       fiber_g: String(food.fiber_g), sodium_mg: String(food.sodium_mg),
     });
     setNotice("");
+    try {
+      setOwnedFoodUnits(await api<OwnedFoodUnit[]>("/foods/" + food.id + "/servings", token));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudieron cargar las unidades habituales.");
+    }
   }
 
   async function saveOwnedFood() {
@@ -208,16 +221,53 @@ export default function NutritionScreen() {
     setLoading(true); setError(""); setNotice("");
     try {
       if (editingFoodId === null) {
-        await api("/foods", token, { method: "POST", body: { ...values, share: false } });
+        const created = await api<OwnedFood>("/foods", token, { method: "POST", body: { ...values, share: false } });
+        setEditingFoodId(created.id);
+        setOwnedFoodUnits([]);
+        await loadOwnedFoods();
+        setNotice("Alimento creado. Puedes añadir ahora sus unidades habituales.");
       } else {
         await api("/foods/" + editingFoodId, token, { method: "PUT", body: values });
+        await loadOwnedFoods();
+        setNotice("Alimento actualizado.");
       }
-      setFoodDraft(emptyFoodDraft());
-      setEditingFoodId(null);
-      await loadOwnedFoods();
-      setNotice(editingFoodId === null ? "Alimento personalizado creado." : "Alimento actualizado.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo guardar el alimento.");
+    } finally { setLoading(false); }
+  }
+
+  async function addOwnedFoodUnit() {
+    if (!token || editingFoodId === null) return;
+    const gramsValue = Number(unitGrams.replace(",", "."));
+    if (!unitName.trim() || !Number.isFinite(gramsValue) || gramsValue <= 0 || gramsValue > 5000) {
+      setError("Indica el nombre de la unidad y su equivalencia entre 0 y 5000 gramos.");
+      return;
+    }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const unit = await api<OwnedFoodUnit>("/foods/" + editingFoodId + "/servings", token, {
+        method: "POST", body: {
+          unit_name: unitName.trim(), unit_name_plural: unitPlural.trim() || null,
+          grams_per_unit: gramsValue, description: unitDescription.trim() || null,
+        },
+      });
+      setOwnedFoodUnits(current => [...current, unit].sort((a, b) => b.grams_per_unit - a.grams_per_unit));
+      setUnitName(""); setUnitPlural(""); setUnitGrams(""); setUnitDescription("");
+      setNotice("Unidad habitual añadida.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo añadir la unidad.");
+    } finally { setLoading(false); }
+  }
+
+  async function deleteOwnedFoodUnit(unit: OwnedFoodUnit) {
+    if (!token || editingFoodId === null) return;
+    setLoading(true); setError("");
+    try {
+      await api("/foods/" + editingFoodId + "/servings/" + unit.id, token, { method: "DELETE" });
+      setOwnedFoodUnits(current => current.filter(item => item.id !== unit.id));
+      setNotice("Unidad eliminada.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo eliminar la unidad.");
     } finally { setLoading(false); }
   }
 
@@ -262,7 +312,12 @@ export default function NutritionScreen() {
     if (!token || !query.trim()) return;
     setLoading(true); setError("");
     try {
-      const found = await api<FoodSearchResult[]>("/foods/search?q=" + encodeURIComponent(query.trim()) + "&limit=8&online=false", token);
+      const params = new URLSearchParams({
+        q: query.trim(), limit: "8",
+        online: foodSearchSource === "openfoodfacts" ? "true" : "false",
+        source: foodSearchSource,
+      });
+      const found = await api<FoodSearchResult[]>("/foods/search?" + params.toString(), token);
       setResults(found);
       if (found.length === 0) setError("No encontramos alimentos con ese nombre.");
     } catch (reason) {
@@ -713,7 +768,11 @@ export default function NutritionScreen() {
       </Panel>
       <SectionTitle title="Añadir alimento" />
       <Panel>
-        <Field label="Buscar en el catálogo" value={query} onChangeText={setQuery} placeholder="Ej. avena, plátano, yogur…" returnKeyType="search" onSubmitEditing={() => void searchFoods()} />
+        <Field label="Buscar alimentos" value={query} onChangeText={setQuery} placeholder="Ej. avena, plátano, yogur…" returnKeyType="search" onSubmitEditing={() => void searchFoods()} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Origen de búsqueda</Text>
+        <ChoiceRow value={foodSearchSource} onChange={setFoodSearchSource} options={[
+          { value: "generic", label: "Catálogo SmartFit" }, { value: "openfoodfacts", label: "Open Food Facts" },
+        ]} />
         <Field label="Cantidad (g)" value={grams} onChangeText={setGrams} keyboardType="decimal-pad" />
         <ChoiceRow value={meal} onChange={setMeal} options={meals} />
         <AppButton title="Buscar alimentos" onPress={() => void searchFoods()} loading={loading} disabled={!query.trim()} />
@@ -881,7 +940,22 @@ export default function NutritionScreen() {
         <Field label="Fibra (g)" value={foodDraft.fiber_g} onChangeText={value => setFoodDraft(current => ({ ...current, fiber_g: value }))} keyboardType="decimal-pad" />
         <Field label="Sodio (mg)" value={foodDraft.sodium_mg} onChangeText={value => setFoodDraft(current => ({ ...current, sodium_mg: value }))} keyboardType="decimal-pad" />
         <AppButton title={editingFoodId === null ? "Guardar alimento" : "Guardar cambios"} onPress={() => void saveOwnedFood()} loading={loading} disabled={!foodDraft.name.trim()} />
-        {editingFoodId !== null ? <AppButton title="Cancelar edición" onPress={() => { setEditingFoodId(null); setFoodDraft(emptyFoodDraft()); }} variant="quiet" /> : null}
+        {editingFoodId !== null ? <>
+          <SectionTitle title="Unidades habituales" action={ownedFoodUnits.length + " unidades"} />
+          {ownedFoodUnits.map(unit => <View key={unit.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
+            <View style={{ flex: 1, gap: 2 }}>
+              <Text style={{ color: colors.text, fontWeight: "800" }}>{unit.unit_name_plural || unit.unit_name}</Text>
+              <Muted>{fmt(unit.grams_per_unit, 1)} g por unidad{unit.description ? " · " + unit.description : ""}</Muted>
+            </View>
+            <Text onPress={() => void deleteOwnedFoodUnit(unit)} style={{ color: colors.danger, fontWeight: "700", padding: 7 }}>Quitar</Text>
+          </View>)}
+          <Field label="Nombre de unidad (singular)" value={unitName} onChangeText={setUnitName} placeholder="Ej. cucharada" />
+          <Field label="Plural (opcional)" value={unitPlural} onChangeText={setUnitPlural} placeholder="Ej. cucharadas" />
+          <Field label="Equivalencia en gramos" value={unitGrams} onChangeText={setUnitGrams} keyboardType="decimal-pad" placeholder="Ej. 15" />
+          <Field label="Descripción (opcional)" value={unitDescription} onChangeText={setUnitDescription} placeholder="Ej. rasa" />
+          <AppButton title="Añadir unidad habitual" onPress={() => void addOwnedFoodUnit()} loading={loading} disabled={!unitName.trim() || !unitGrams.trim()} variant="secondary" />
+          <AppButton title="Cerrar edición" onPress={() => { setEditingFoodId(null); setFoodDraft(emptyFoodDraft()); setOwnedFoodUnits([]); }} variant="quiet" />
+        </> : null}
       </Panel>
     </> : null}
 
