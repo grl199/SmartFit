@@ -9,13 +9,13 @@ import { ExerciseAnimation } from "@/components/ExerciseAnimation";
 
 type Exercise = { id: number; name: string; kind: string; primary_muscle: string; secondary_muscles: string[]; equipment: string[] };
 type SetDraft = { reps: string; weight_kg: string; reached_failure: string };
-type DraftExercise = { exercise: Exercise; sets: SetDraft[] };
+type DraftExercise = { exercise: Exercise; sets: SetDraft[]; duration_min: string };
 type Workout = {
   id: number; performed_on: string; kind: string; category?: string | null; duration_min: number;
   kcal_burned?: number | null; kcal_source?: string | null; kcal_note?: string | null;
   distance_km?: number | null; elevation_gain_m?: number | null; steps?: number | null;
   avg_hr_bpm?: number | null; notes?: string | null;
-  exercises: Array<{ exercise_id: number; exercise: string; primary_muscle: string; sets: Array<{ reps: number; weight_kg?: number | null; reached_failure?: boolean | null }> }>;
+  exercises: Array<{ exercise_id: number; exercise: string; primary_muscle: string; duration_min?: number | null; sets: Array<{ reps: number; weight_kg?: number | null; reached_failure?: boolean | null }> }>;
   feedback?: Array<{ exercise: string; message: string }>;
 };
 type PlanExercise = { id: number; exercise_id: number; exercise: string; sets: number; reps_min: number; reps_max: number; rest_s?: number | null; notes?: string | null };
@@ -29,6 +29,23 @@ type Tab = "session" | "plan" | "history" | "muscles";
 type PlanExerciseDraft = { exercise_id: number; exercise: string; sets: string; reps_min: string; reps_max: string; rest_s: string; notes: string };
 const muscleOptions = ["chest","shoulders","biceps","triceps","forearms","abs","quadriceps","hamstrings","glutes","calves","lats","upper_back","lower_back","traps","neck","abductors","adductors"];
 const equipmentOptions = ["none","barbell","dumbbell","machine","kettlebell","resistance_band","bench","plate","wheel","medicine_ball","box","suspension","other"];
+const kindFilterOptions = [
+  { value: "", label: "Todos" }, { value: "strength", label: "Fuerza" },
+  { value: "full_body", label: "Cuerpo entero" }, { value: "stretching", label: "Estiramientos" },
+];
+const muscleFilterOptions = [
+  { value: "", label: "Todos" }, { value: "chest", label: "Pecho" }, { value: "back", label: "Espalda" },
+  { value: "shoulders", label: "Hombros" }, { value: "biceps", label: "Bíceps" },
+  { value: "triceps", label: "Tríceps" }, { value: "abs", label: "Abdomen" },
+  { value: "quadriceps", label: "Cuádriceps" }, { value: "hamstrings", label: "Isquios" },
+  { value: "glutes", label: "Glúteos" }, { value: "calves", label: "Gemelos" },
+];
+const equipmentFilterOptions = [
+  { value: "", label: "Todos" }, { value: "none", label: "Sin equipo" }, { value: "barbell", label: "Barra" },
+  { value: "dumbbell", label: "Mancuernas" }, { value: "machine", label: "Máquina" },
+  { value: "kettlebell", label: "Pesa rusa" }, { value: "resistance_band", label: "Banda" },
+  { value: "bench", label: "Banco" }, { value: "suspension", label: "TRX" },
+];
 const categories = [
   { value: "strength", label: "Fuerza" }, { value: "walking", label: "Andar" },
   { value: "running", label: "Correr" }, { value: "sport", label: "Deporte" },
@@ -46,6 +63,9 @@ export default function TrainingScreen() {
   const [muscles, setMuscles] = useState<MuscleSummary | null>(null);
   const [drafts, setDrafts] = useState<DraftExercise[]>([]);
   const [query, setQuery] = useState("");
+  const [kindFilter, setKindFilter] = useState("");
+  const [muscleFilter, setMuscleFilter] = useState("");
+  const [equipmentFilter, setEquipmentFilter] = useState("");
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exerciseContent, setExerciseContent] = useState<Content | null>(null);
   const [exerciseHistory, setExerciseHistory] = useState<ExerciseHistory>([]);
@@ -107,8 +127,13 @@ export default function TrainingScreen() {
   async function refreshCatalog() {
     if (!token) return;
     try {
-      const path = "/exercises?include_secondary=true" + (query.trim() ? "&q=" + encodeURIComponent(query.trim()) : "");
-      setCatalog(await api<Exercise[]>(path, token));
+      const params = new URLSearchParams();
+      params.set("include_secondary", "true");
+      if (query.trim()) params.set("q", query.trim());
+      if (kindFilter) params.set("kind", kindFilter);
+      if (muscleFilter) params.set("muscles", muscleFilter);
+      if (equipmentFilter) params.set("equipment", equipmentFilter);
+      setCatalog(await api<Exercise[]>("/exercises?" + params.toString(), token));
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo buscar en el catálogo.");
     }
@@ -139,7 +164,7 @@ export default function TrainingScreen() {
       const existing = current.find(item => item.exercise.id === exercise.id);
       if (existing) return current.map(item => item.exercise.id === exercise.id
         ? { ...item, sets: [...item.sets, emptySet()] } : item);
-      return [...current, { exercise, sets: [emptySet()] }];
+      return [...current, { exercise, sets: [emptySet()], duration_min: "" }];
     });
     setNotice(exercise.name + " añadido a la sesión.");
   }
@@ -152,9 +177,14 @@ export default function TrainingScreen() {
 
   async function saveSession() {
     if (!token) return;
-    const minutes = Number(duration);
+    const exerciseMinutes = drafts.map(item => Number(item.duration_min));
+    if (drafts.length && exerciseMinutes.some(value => !Number.isInteger(value) || value < 1 || value > 600)) {
+      setError("Indica entre 1 y 600 minutos para cada ejercicio. La duración total se calculará sumándolos.");
+      return;
+    }
+    const minutes = drafts.length ? exerciseMinutes.reduce((sum, value) => sum + value, 0) : Number(duration);
     if (!Number.isInteger(minutes) || minutes < 1 || minutes > 600) {
-      setError("La duración debe estar entre 1 y 600 minutos.");
+      setError("La duración total debe estar entre 1 y 600 minutos.");
       return;
     }
     const parsedSets = drafts.flatMap(item => item.sets.map(set => ({
@@ -184,6 +214,7 @@ export default function TrainingScreen() {
     try {
       await api("/workouts", token, { method: "POST", body: {
         performed_on: date, kind: name.trim() || "Entrenamiento", category, duration_min: minutes,
+        exercise_durations_min: drafts.length ? Object.fromEntries(drafts.map(item => [String(item.exercise.id), Number(item.duration_min)])) : {},
         distance_km: category === "walking" || category === "running" ? km : null,
         elevation_gain_m: category === "walking" || category === "running" ? climb : null,
         steps: category === "walking" || category === "running" ? stepCount : null,
@@ -341,7 +372,7 @@ export default function TrainingScreen() {
         <Field label="Fecha (AAAA-MM-DD)" value={date} onChangeText={setDate} placeholder={localDateISO()} />
         <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo de actividad</Text>
         <ChoiceRow value={category} onChange={setCategory} options={categories} />
-        <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
+        {drafts.length === 0 ? <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" /> : <Muted>La duración total se calculará sumando los minutos de cada ejercicio.</Muted>}
         {isCardio ? <>
           <Field label="Distancia (km)" value={distance} onChangeText={setDistance} keyboardType="decimal-pad" placeholder="Ej. 5,2" />
           <Field label="Desnivel positivo (m)" value={elevation} onChangeText={setElevation} keyboardType="number-pad" />
@@ -354,7 +385,13 @@ export default function TrainingScreen() {
       <SectionTitle title="Añadir ejercicios" action={drafts.length + " ejercicios"} />
       <Panel>
         <Field label="Buscar en el catálogo" value={query} onChangeText={setQuery} placeholder="Press banca, sentadilla…" returnKeyType="search" onSubmitEditing={() => void refreshCatalog()} />
-        <AppButton title="Buscar ejercicios" onPress={() => void refreshCatalog()} variant="secondary" />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Tipo de ejercicio</Text>
+        <ChoiceRow value={kindFilter} onChange={setKindFilter} options={kindFilterOptions} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Grupo muscular</Text>
+        <ChoiceRow value={muscleFilter} onChange={setMuscleFilter} options={muscleFilterOptions} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
+        <ChoiceRow value={equipmentFilter} onChange={setEquipmentFilter} options={equipmentFilterOptions} />
+        <AppButton title="Aplicar filtros" onPress={() => void refreshCatalog()} variant="secondary" />
         {catalog.slice(0, 30).map(exercise => <View key={exercise.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 }}>
           <View style={{ flex: 1, gap: 2 }}>
             <Text style={{ color: colors.text, fontWeight: "800" }}>{exercise.name}</Text>
@@ -413,6 +450,7 @@ export default function TrainingScreen() {
           <Text style={{ color: colors.text, fontWeight: "900", flex: 1 }}>{item.exercise.name}</Text>
           <Text onPress={() => setDrafts(current => current.filter(x => x.exercise.id !== item.exercise.id))} style={{ color: colors.danger, fontWeight: "700", padding: 6 }}>Quitar</Text>
         </View>
+        <Field label="Tiempo dedicado a este ejercicio (minutos)" value={item.duration_min} onChangeText={value => setDrafts(current => current.map(entry => entry.exercise.id === item.exercise.id ? { ...entry, duration_min: value } : entry))} keyboardType="number-pad" placeholder="Ej. 12" />
         {item.sets.map((set, index) => <View key={index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9, gap: 8 }}>
           <Text style={{ color: colors.accent, fontWeight: "800" }}>Serie {index + 1}</Text>
           <View style={{ flexDirection: "row", gap: 8 }}>
@@ -486,7 +524,7 @@ export default function TrainingScreen() {
           {workout.distance_km != null ? <Muted>{fmt(workout.distance_km, 2)} km · {fmt(workout.steps)} pasos · desnivel {fmt(workout.elevation_gain_m)} m</Muted> : null}
           {workout.exercises.map(exercise => <View key={exercise.exercise_id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
             <Text style={{ color: colors.text, fontWeight: "800" }}>{exercise.exercise}</Text>
-            <Muted>{exercise.sets.map(set => set.reps + " reps" + (set.weight_kg == null ? "" : " × " + fmt(set.weight_kg, 1) + " kg") + (set.reached_failure ? " · fallo" : "")).join("  |  ")}</Muted>
+            <Muted>{exercise.duration_min != null ? "Tiempo: " + exercise.duration_min + " min · " : ""}{exercise.sets.map(set => set.reps + " reps" + (set.weight_kg == null ? "" : " × " + fmt(set.weight_kg, 1) + " kg") + (set.reached_failure ? " · fallo" : "")).join("  |  ")}</Muted>
           </View>)}
           {workout.feedback?.map((item, index) => <Muted key={index}>{item.exercise}: {item.message}</Muted>)}
           {workout.kcal_note ? <Muted>{workout.kcal_note}</Muted> : null}
