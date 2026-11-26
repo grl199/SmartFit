@@ -19,7 +19,7 @@ type RemoteDraft = {
   started_at: string; points: RoutePoint[]; point_count: number; synced_point_count?: number;
 };
 type LocalDraft = RemoteDraft & { owner: string };
-type Props = { token: string; owner: string; visible: boolean; onSaved: () => void };
+type Props = { token: string; owner: string; visible: boolean; initialCategory: Category; onSaved: () => void };
 type RouteStats = { distanceKm: number; elevationM: number; gapMs: number; activeMs: number };
 
 const MAX_POINTS = 10000;
@@ -183,8 +183,8 @@ function KeepAwakeWhileTracking() {
   return null;
 }
 
-export function CardioGpsTracker({ token, owner, visible, onSaved }: Props) {
-  const [category, setCategory] = useState<Category>("running");
+export function CardioGpsTracker({ token, owner, visible, initialCategory, onSaved }: Props) {
+  const [category, setCategory] = useState<Category>(initialCategory);
   const [name, setName] = useState("Correr");
   const [date, setDate] = useState(localDateISO());
   const [points, setPoints] = useState<RoutePoint[]>([]);
@@ -400,6 +400,10 @@ export function CardioGpsTracker({ token, owner, visible, onSaved }: Props) {
     void persistLocalDraft();
     void syncNow();
   }, [stopWatch, persistLocalDraft, syncNow]);
+
+  useEffect(() => {
+    if (visible && status === "idle") setCategory(initialCategory);
+  }, [initialCategory, visible, status]);
 
   useEffect(() => {
     setName(category === "running" ? "Correr" : "Andar");
