@@ -47,6 +47,12 @@ export default function NutritionScreen() {
   const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDetail | null>(null);
+  const [recipeEditName, setRecipeEditName] = useState("");
+  const [recipeEditDescription, setRecipeEditDescription] = useState("");
+  const [recipeEditServings, setRecipeEditServings] = useState("1");
+  const [recipeEditSteps, setRecipeEditSteps] = useState("");
+  const [recipeEditAmounts, setRecipeEditAmounts] = useState<Record<number, string>>({});
+  const [editingLog, setEditingLog] = useState<{ id: number; grams: string; meal: Meal } | null>(null);
   const [recipeName, setRecipeName] = useState("");
   const [servings, setServings] = useState("1");
   const [recipeFoodQuery, setRecipeFoodQuery] = useState("");
@@ -106,6 +112,24 @@ export default function NutritionScreen() {
       setNotice("Alimento registrado.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo guardar la ingesta.");
+    } finally { setLoading(false); }
+  }
+
+  async function saveLogEdit() {
+    if (!token || !editingLog) return;
+    const quantity = Number(editingLog.grams.replace(",", "."));
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > 5000) {
+      setError("Introduce una cantidad entre 1 y 5000 gramos.");
+      return;
+    }
+    setLoading(true); setError("");
+    try {
+      await api("/logs/" + editingLog.id, token, { method: "PUT", body: { grams: quantity, meal: editingLog.meal } });
+      setEditingLog(null);
+      await load();
+      setNotice("Registro actualizado.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo actualizar el registro.");
     } finally { setLoading(false); }
   }
 
@@ -174,7 +198,9 @@ export default function NutritionScreen() {
       } });
       setRecipeName(""); setRecipeIngredients([]); setRecipeFoodQuery(""); setRecipeFoodResults([]);
       await loadRecipes();
-      setSelectedRecipe(created);
+      setSelectedRecipe(created); setRecipeEditName(created.name); setRecipeEditDescription(created.description ?? "");
+      setRecipeEditServings(String(created.serving_count)); setRecipeEditSteps(created.steps.join("\\n"));
+      setRecipeEditAmounts(Object.fromEntries(created.ingredients.map(item => [item.id, String(item.quantity_g)])));
       setNotice("Receta creada y disponible en tu cuenta.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo crear la receta.");
@@ -184,9 +210,45 @@ export default function NutritionScreen() {
   async function openRecipe(recipe: RecipeSummary) {
     if (!token) return;
     setLoading(true); setError("");
-    try { setSelectedRecipe(await api<RecipeDetail>("/recipes/" + recipe.id, token)); }
-    catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo abrir la receta."); }
+    try {
+      const detail = await api<RecipeDetail>("/recipes/" + recipe.id, token);
+      setSelectedRecipe(detail);
+      setRecipeEditName(detail.name);
+      setRecipeEditDescription(detail.description ?? "");
+      setRecipeEditServings(String(detail.serving_count));
+      setRecipeEditSteps(detail.steps.join("\\n"));
+      setRecipeEditAmounts(Object.fromEntries(detail.ingredients.map(item => [item.id, String(item.quantity_g)])));
+    } catch (reason) { setError(reason instanceof Error ? reason.message : "No se pudo abrir la receta."); }
     finally { setLoading(false); }
+  }
+
+  async function saveRecipeEdits() {
+    if (!token || !selectedRecipe?.editable) return;
+    const count = Number(recipeEditServings);
+    const ingredients = selectedRecipe.ingredients.map(item => ({
+      food_id: item.food_id,
+      quantity_g: Number(recipeEditAmounts[item.id] ?? item.quantity_g),
+      unit_name: "g",
+    }));
+    if (!recipeEditName.trim() || !Number.isFinite(count) || count <= 0 || count > 100 ||
+        ingredients.some(item => !Number.isFinite(item.quantity_g) || item.quantity_g <= 0 || item.quantity_g > 5000)) {
+      setError("Revisa el nombre, las raciones y las cantidades de los ingredientes.");
+      return;
+    }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const updated = await api<RecipeDetail>("/recipes/" + selectedRecipe.id, token, { method: "PUT", body: {
+        name: recipeEditName.trim(), description: recipeEditDescription.trim() || null,
+        serving_count: count, steps: recipeEditSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+        ingredients,
+      } });
+      setSelectedRecipe(updated);
+      setRecipeEditAmounts(Object.fromEntries(updated.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      await loadRecipes();
+      setNotice("Receta actualizada.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar la receta.");
+    } finally { setLoading(false); }
   }
 
   async function logRecipe(recipe: RecipeSummary) {
@@ -213,8 +275,10 @@ export default function NutritionScreen() {
     try {
       const copy = await api<RecipeDetail>("/recipes/" + recipe.id + "/copy", token, { method: "POST" });
       await loadRecipes();
-      setSelectedRecipe(copy);
-      setNotice("Copia personal creada. Ya puedes editarla desde la web.");
+      setSelectedRecipe(copy); setRecipeEditName(copy.name); setRecipeEditDescription(copy.description ?? "");
+      setRecipeEditServings(String(copy.serving_count)); setRecipeEditSteps(copy.steps.join("\\n"));
+      setRecipeEditAmounts(Object.fromEntries(copy.ingredients.map(item => [item.id, String(item.quantity_g)])));
+      setNotice("Copia personal creada. Ya puedes editarla.");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo copiar la receta.");
     } finally { setLoading(false); }
@@ -310,9 +374,19 @@ export default function NutritionScreen() {
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
             <Muted>{entry.time} · {entry.grams} g · {entry.meal}</Muted>
-            <Text onPress={() => deleteLog(entry.id)} style={{ color: colors.danger, fontWeight: "700", padding: 5 }}>Eliminar</Text>
+            <View style={{ flexDirection: "row", gap: 12 }}>
+              <Text onPress={() => setEditingLog({ id: entry.id, grams: String(entry.grams), meal: meals.some(item => item.value === entry.meal) ? entry.meal as Meal : "lunch" })} style={{ color: colors.accent, fontWeight: "700", padding: 5 }}>Editar</Text>
+              <Text onPress={() => deleteLog(entry.id)} style={{ color: colors.danger, fontWeight: "700", padding: 5 }}>Eliminar</Text>
+            </View>
           </View>
         </View>) : <Muted>Todavía no has registrado ninguna comida este día.</Muted>}
+        {editingLog ? <View style={{ gap: 9, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 12 }}>
+          <SectionTitle title="Editar registro" />
+          <Field label="Cantidad (g)" value={editingLog.grams} onChangeText={value => setEditingLog(current => current ? { ...current, grams: value } : current)} keyboardType="decimal-pad" />
+          <ChoiceRow value={editingLog.meal} onChange={value => setEditingLog(current => current ? { ...current, meal: value } : current)} options={meals} />
+          <AppButton title="Guardar cambios" onPress={() => void saveLogEdit()} loading={loading} />
+          <AppButton title="Cancelar" onPress={() => setEditingLog(null)} variant="quiet" />
+        </View> : null}
       </Panel>
       <AppButton title="Actualizar resumen" variant="quiet" onPress={() => void load()} />
     </> : null}
@@ -339,11 +413,20 @@ export default function NutritionScreen() {
         <SectionTitle title={selectedRecipe.name} action={selectedRecipe.editable ? "Receta personal" : "Catálogo"} />
         {selectedRecipe.description ? <Muted>{selectedRecipe.description}</Muted> : null}
         <Muted>{selectedRecipe.serving_count} raciones · {fmt(selectedRecipe.per_serving?.kcal)} kcal por ración</Muted>
-        {selectedRecipe.ingredients.map(item => <View key={item.id} style={{ flexDirection: "row", justifyContent: "space-between", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
+        {selectedRecipe.editable ? <>
+          <Field label="Nombre" value={recipeEditName} onChangeText={setRecipeEditName} />
+          <Field label="Descripción" value={recipeEditDescription} onChangeText={setRecipeEditDescription} multiline numberOfLines={2} />
+          <Field label="Número de raciones" value={recipeEditServings} onChangeText={setRecipeEditServings} keyboardType="decimal-pad" />
+          <Field label="Pasos (uno por línea)" value={recipeEditSteps} onChangeText={setRecipeEditSteps} multiline numberOfLines={4} />
+        </> : null}
+        {selectedRecipe.ingredients.map(item => <View key={item.id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
           <Text style={{ color: colors.text, fontWeight: "700", flex: 1 }}>{item.food}</Text>
-          <Muted>{fmt(item.quantity_g)} g</Muted>
+          {selectedRecipe.editable
+            ? <Field label="Cantidad (g)" value={recipeEditAmounts[item.id] ?? String(item.quantity_g)} onChangeText={value => setRecipeEditAmounts(current => ({ ...current, [item.id]: value }))} keyboardType="decimal-pad" />
+            : <Muted>{fmt(item.quantity_g)} g</Muted>}
         </View>)}
-        {selectedRecipe.steps.map((step, index) => <Muted key={index}>{index + 1}. {step}</Muted>)}
+        {selectedRecipe.steps.map((step, index) => !selectedRecipe.editable ? <Muted key={index}>{index + 1}. {step}</Muted> : null)}
+        {selectedRecipe.editable ? <AppButton title="Guardar cambios de receta" onPress={() => void saveRecipeEdits()} loading={loading} /> : null}
         <Text onPress={() => setSelectedRecipe(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar detalle</Text>
       </Panel> : null}
       <SectionTitle title="Crear receta" />
