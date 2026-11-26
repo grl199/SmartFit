@@ -373,6 +373,7 @@ export function CardioGpsTracker({ token, owner, visible, onSaved }: Props) {
     tick();
     const timer = setInterval(tick, 1000);
     const syncTimer = setInterval(() => { void syncNow(); }, 15000);
+    const localTimer = setInterval(() => { if (Date.now() - lastLocalPersistRef.current >= LOCAL_PERSIST_MS) void persistLocalDraft(); }, 1000);
     const appState = AppState.addEventListener("change", next => {
       if (next === "active") {
         void startWatch().catch(() => setError("No se pudo reanudar la señal GPS."));
