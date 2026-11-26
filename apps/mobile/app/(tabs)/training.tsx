@@ -6,6 +6,7 @@ import { useAuth } from "@/auth/AuthProvider";
 import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Screen, SectionTitle } from "@/components/ui";
 import { colors } from "@/theme";
 import { ExerciseAnimation } from "@/components/ExerciseAnimation";
+import { CardioGpsTracker } from "@/components/CardioGpsTracker";
 
 type Exercise = { id: number; name: string; kind: string; primary_muscle: string; secondary_muscles: string[]; equipment: string[] };
 type SetDraft = { reps: string; weight_kg: string; reached_failure: string };
@@ -25,7 +26,7 @@ type MuscleSummary = { start: string; end: string; sessions: number; muscles: Re
 type Content = { description?: string | null; start_position?: string | null; instructions?: string[]; common_mistakes?: string[]; image_url?: string | null; video_url?: string | null; media_type?: string | null; media_credit?: string | null };
 type ExerciseHistory = Array<{ workout_id: number; date: string; sets: Array<{ set_number: number; reps: number; weight_kg?: number | null; reached_failure?: boolean | null; rpe?: number | null }> }>;
 type ExerciseProgress = Array<{ date: string; best_weight_kg?: number | null; est_1rm_kg?: number | null; sets: number; volume_kg: number }>;
-type Tab = "session" | "plan" | "history" | "muscles";
+type Tab = "session" | "plan" | "history" | "muscles" | "gps";
 type PlanExerciseDraft = { exercise_id: number; exercise: string; sets: string; reps_min: string; reps_max: string; rest_s: string; notes: string };
 const muscleOptions = ["chest","shoulders","biceps","triceps","forearms","abs","quadriceps","hamstrings","glutes","calves","lats","upper_back","lower_back","traps","neck","abductors","adductors"];
 const equipmentOptions = ["none","barbell","dumbbell","machine","kettlebell","resistance_band","bench","plate","wheel","medicine_ball","box","suspension","other"];
@@ -360,7 +361,7 @@ export default function TrainingScreen() {
     <PageTitle eyebrow="Entrenamiento" title="Entrena y registra tu evolución" subtitle="Plan personalizado, catálogo de ejercicios, sesiones e intensidad muscular." />
     <ChoiceRow value={tab} onChange={setTab} options={[
       { value: "session", label: "Sesión" }, { value: "plan", label: "Mi plan" },
-      { value: "history", label: "Historial" }, { value: "muscles", label: "Músculos" },
+      { value: "history", label: "Historial" }, { value: "muscles", label: "Músculos" }, { value: "gps", label: "GPS" },
     ]} />
     <ErrorMessage message={error} />
     {notice ? <Text style={{ color: colors.accent, fontSize: 13 }}>{notice}</Text> : null}
@@ -537,6 +538,8 @@ export default function TrainingScreen() {
           </View>
         </Panel>)}
     </> : null}
+
+    {token ? <CardioGpsTracker token={token} visible={tab === "gps"} onSaved={() => { void loadAll(); setTab("history"); }} /> : null}
 
     {tab === "muscles" ? <>
       <SectionTitle title="Carga muscular" action={muscles?.sessions + " sesiones"} />
