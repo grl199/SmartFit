@@ -1,5 +1,5 @@
 import React, { createElement, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
+import { ActivityIndicator, Platform, Pressable, Text, View, useWindowDimensions } from "react-native";
 import { WebView } from "react-native-webview";
 import { EXERCISE_ANIMATION_HTML } from "@/lib/exercise-animation-html";
 import { colors } from "@/theme";
@@ -10,6 +10,8 @@ const REQUESTED_EXERCISE_LINE =
   "const requestedExercise=new URLSearchParams(window.location.search).get('exercise')?.trim()||'';";
 
 export function ExerciseAnimation({ exerciseName }: Props) {
+  const { height: windowHeight } = useWindowDimensions();
+  const animationHeight = Math.max(440, Math.min(640, Math.round(windowHeight * 0.64)));
   const [failed, setFailed] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   useEffect(() => { setFailed(false); setReloadKey(value => value + 1); }, [exerciseName]);
@@ -23,7 +25,7 @@ export function ExerciseAnimation({ exerciseName }: Props) {
 
   if (failed) {
     return <View style={{
-      height: 280, borderRadius: 14, borderWidth: 1, borderColor: colors.border,
+      height: animationHeight, borderRadius: 14, borderWidth: 1, borderColor: colors.border,
       backgroundColor: colors.surfaceRaised, alignItems: "center", justifyContent: "center",
       padding: 18, gap: 8,
     }}>
@@ -39,7 +41,7 @@ export function ExerciseAnimation({ exerciseName }: Props) {
 
   if (Platform.OS === "web") {
     return <View style={{
-      height: 340, overflow: "hidden", borderRadius: 14,
+      height: animationHeight, overflow: "hidden", borderRadius: 14,
       borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
     }}>
       {createElement("iframe", {
@@ -53,7 +55,7 @@ export function ExerciseAnimation({ exerciseName }: Props) {
   }
 
   return <View style={{
-    height: 340, overflow: "hidden", borderRadius: 14,
+    height: animationHeight, overflow: "hidden", borderRadius: 14,
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   }}>
     <WebView
