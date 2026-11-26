@@ -886,7 +886,7 @@ export default function NutritionScreen() {
             keyboardType="decimal-pad"
           />
           {selectedFoodUnit !== "grams" ? <Muted>
-            1 {foodServings.find(item => String(item.id) === selectedFoodUnit)?.unit_name ?? "unidad"} = {fmt(foodServings.find(item => String(item.id) === selectedFoodUnit)?.grams_per_unit, 1)} g
+            1 {foodServings.find(item => String(item.id) === selectedFoodUnit)?.unit_name ?? "unidad"} = {fmt(foodServings.find(item => String(item.id) === selectedFoodUnit)?.grams_per_unit)} g
           </Muted> : null}
           <ChoiceRow value={meal} onChange={setMeal} options={meals} />
           <AppButton title="Registrar alimento" onPress={() => void addSelectedFood()} loading={loading} />
