@@ -86,6 +86,10 @@ export default function NutritionScreen() {
   const [recipeFoodQuery, setRecipeFoodQuery] = useState("");
   const [recipeFoodResults, setRecipeFoodResults] = useState<FoodSearchResult[]>([]);
   const [recipeIngredients, setRecipeIngredients] = useState<RecipeDraftIngredient[]>([]);
+  const [recipeEstimateName, setRecipeEstimateName] = useState("");
+  const [recipeEstimateDescription, setRecipeEstimateDescription] = useState("");
+  const [recipeEstimateSteps, setRecipeEstimateSteps] = useState("");
+  const [recipeEstimateResult, setRecipeEstimateResult] = useState<FoodEstimate | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -335,6 +339,59 @@ export default function NutritionScreen() {
   function addRecipeIngredient(food: FoodSearchResult) {
     setRecipeIngredients(current => current.some(item => item.food.id === food.id)
       ? current : [...current, { food, grams: "100" }]);
+  }
+
+  async function estimateRecipe() {
+    if (!token || !recipeEstimateName.trim()) {
+      setError("Escribe el nombre de la receta antes de estimarla.");
+      return;
+    }
+    setLoading(true); setError(""); setRecipeEstimateResult(null);
+    try {
+      const result = await api<FoodEstimate>("/recipes/estimate", token, { method: "POST", body: {
+        name: recipeEstimateName.trim(),
+        description: recipeEstimateDescription.trim(),
+        steps: recipeEstimateSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+      } });
+      setRecipeEstimateResult(result);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo estimar la receta.");
+    } finally { setLoading(false); }
+  }
+
+  async function confirmRecipeEstimate() {
+    if (!token || !recipeEstimateResult) return;
+    const count = Number(servings);
+    if (!Number.isFinite(count) || count <= 0 || count > 100) {
+      setError("El número de raciones debe estar entre 1 y 100.");
+      return;
+    }
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const created = await api<RecipeDetail>("/recipes/from-estimate", token, { method: "POST", body: {
+        name: recipeEstimateName.trim() || recipeEstimateResult.name,
+        description: recipeEstimateDescription.trim() || null,
+        serving_count: count,
+        steps: recipeEstimateSteps.split("\\n").map(step => step.trim()).filter(Boolean),
+        items: recipeEstimateResult.items.map(item => ({
+          name: item.name, grams: item.grams, kcal_per_100g: item.kcal_per_100g,
+          protein_g_per_100g: item.protein_g_per_100g, carbs_g_per_100g: item.carbs_g_per_100g,
+          sugars_g_per_100g: item.sugars_g_per_100g, fat_g_per_100g: item.fat_g_per_100g,
+          sat_fat_g_per_100g: item.sat_fat_g_per_100g, fiber_g_per_100g: item.fiber_g_per_100g,
+          sodium_mg_per_100g: item.sodium_mg_per_100g, confidence: item.confidence,
+          unit_name: "g", quantity: item.grams, grams_per_unit: 1,
+        })),
+      } });
+      setRecipeEstimateResult(null);
+      setRecipeEstimateName(""); setRecipeEstimateDescription(""); setRecipeEstimateSteps("");
+      await loadRecipes();
+      await openRecipe({ id: created.id, name: created.name, description: created.description, is_system: false,
+        food_id: created.food_id, serving_count: created.serving_count, serving_g: created.serving_g,
+        per_serving: created.per_serving, steps: created.steps });
+      setNotice("Receta estimada, revisada y guardada. Puedes editar sus ingredientes antes de volver a registrarla.");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar la receta estimada.");
+    } finally { setLoading(false); }
   }
 
   async function createRecipe() {
@@ -652,6 +709,26 @@ export default function NutritionScreen() {
         {selectedRecipe.editable ? <AppButton title="Guardar cambios de receta" onPress={() => void saveRecipeEdits()} loading={loading} /> : null}
         <Text onPress={() => setSelectedRecipe(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar detalle</Text>
       </Panel> : null}
+      <SectionTitle title="Estimar receta con IA" />
+      <Panel>
+        <Muted>Describe la receta y sus pasos. SmartFit propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la propuesta antes de guardarla.</Muted>
+        <Field label="Nombre de la receta" value={recipeEstimateName} onChangeText={setRecipeEstimateName} placeholder="Ej. Lasaña de verduras" />
+        <Field label="Descripción e ingredientes conocidos" value={recipeEstimateDescription} onChangeText={setRecipeEstimateDescription} multiline numberOfLines={3} placeholder="Ingredientes, cantidades aproximadas o características…" />
+        <Field label="Pasos de preparación (uno por línea)" value={recipeEstimateSteps} onChangeText={setRecipeEstimateSteps} multiline numberOfLines={3} />
+        <AppButton title="Estimar ingredientes" onPress={() => void estimateRecipe()} loading={loading} disabled={!recipeEstimateName.trim()} variant="secondary" />
+        {recipeEstimateResult ? <View style={{ gap: 8 }}>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>{recipeEstimateResult.name}</Text>
+          <Text style={{ color: colors.accent, fontWeight: "800" }}>{fmt(recipeEstimateResult.total_grams)} g · {fmt(recipeEstimateResult.totals.kcal)} kcal en total</Text>
+          {recipeEstimateResult.items.map((item, index) => <View key={index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
+            <Text style={{ color: colors.text, fontWeight: "700" }}>{item.name} · {fmt(item.grams)} g</Text>
+            <Muted>{fmt(item.kcal_per_100g)} kcal/100 g · confianza {item.confidence === "medium" ? "media" : "baja"}</Muted>
+          </View>)}
+          {recipeEstimateResult.assumptions.map((item, index) => <Muted key={index}>• {item}</Muted>)}
+          <Muted>Los nutrientes y cantidades son orientativos. Se guardarán como alimentos privados estimados por IA.</Muted>
+          <AppButton title="Confirmar y guardar receta" onPress={() => void confirmRecipeEstimate()} loading={loading} />
+          <AppButton title="Descartar propuesta" onPress={() => setRecipeEstimateResult(null)} variant="quiet" />
+        </View> : null}
+      </Panel>
       <SectionTitle title="Crear receta" />
       <Panel>
         <Field label="Nombre de la receta" value={recipeName} onChangeText={setRecipeName} placeholder="Ej. Bowl de yogur y avena" />
