@@ -1,0 +1,46 @@
+# Cloud Build trigger for the Expo/React Native Android application.
+# Build context: repository root. Run the EAS command from apps/mobile (monorepo).
+# This trigger orchestrates an EAS Build; it does not deploy the binary to Cloud Run.
+substitutions:
+  _EAS_PROFILE: preview
+
+steps:
+  - name: node:22
+    entrypoint: bash
+    secretEnv:
+      - EXPO_TOKEN
+    args:
+      - -ceu
+      - |
+        case "${_EAS_PROFILE}" in
+          preview|production) ;;
+          *) echo "Use _EAS_PROFILE=preview or production." >&2; exit 1 ;;
+        esac
+
+        if [[ -z "$$EXPO_TOKEN" ]]; then
+          echo "Secret EXPO_TOKEN is empty or unavailable to this Cloud Build service account." >&2
+          exit 1
+        fi
+
+        corepack enable
+        corepack prepare pnpm@10.12.1 --activate
+        pnpm install --frozen-lockfile
+
+        node -e 'const app=require("./apps/mobile/app.json"); if(!app.expo?.extra?.eas?.projectId){console.error("Missing expo.extra.eas.projectId. Run eas init from apps/mobile and commit app.json.");process.exit(1)}'
+
+        cd apps/mobile
+        npx --yes eas-cli@latest build \
+          --platform android \
+          --profile "${_EAS_PROFILE}" \
+          --non-interactive \
+          --wait \
+          --json
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/$PROJECT_ID/secrets/EXPO_TOKEN/versions/latest
+      env: EXPO_TOKEN
+
+timeout: 10800s
+options:
+  logging: CLOUD_LOGGING_ONLY
