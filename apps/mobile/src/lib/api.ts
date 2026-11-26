@@ -101,6 +101,6 @@ export type DashboardDay = {
   workouts: Array<{ id: number; kind: string; duration_min: number; kcal_burned?: number | null }>;
   water_ml: number;
 };
-export type FoodSearchResult = { id: number; name: string; brand?: string | null; kcal: number; protein_g: number; carbs_g: number; fat_g: number };
+export type FoodSearchResult = { id: number; name: string; brand?: string | null; kcal: number; protein_g: number; carbs_g: number; fat_g: number; icon?: string | null; image_url?: string | null; source?: string | null; barcode?: string | null };
 export type WorkoutSummary = { id: number; kind: string; performed_on: string; duration_min: number; kcal_burned?: number | null; category?: string | null };
 export type WeightEntry = { id: number; measured_on: string; weight_kg: number; body_fat_pct?: number | null };
