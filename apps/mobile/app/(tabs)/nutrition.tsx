@@ -449,7 +449,7 @@ export default function NutritionScreen() {
         } as unknown as Blob);
       }
       const result = await apiUpload<{ transcript: string }>("/foods/transcribe-audio", form, token);
-      setEstimateDescription(current => current.trim() ? current.trim() + "\\n" + result.transcript : result.transcript);
+      setEstimateDescription(current => current.trim() ? current.trim() + "\n" + result.transcript : result.transcript);
       setVoiceNoteUri(null);
       setNotice("Nota de voz transcrita. Revisa el texto y pulsa «Estimar nutrientes».");
     } catch (reason) {
