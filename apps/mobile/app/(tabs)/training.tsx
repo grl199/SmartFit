@@ -402,7 +402,7 @@ export default function TrainingScreen() {
           </View>
           <View style={{ gap: 6 }}>
             <AppButton title="＋ Añadir" onPress={() => addExercise(exercise)} variant="quiet" />
-            <Text onPress={() => void showExercise(exercise)} style={{ color: colors.accent, fontSize: 11, fontWeight: "800", textAlign: "center" }}>Ver ficha</Text>
+            <AppButton title="Ver ficha + animación 3D" onPress={() => void showExercise(exercise)} variant="quiet" />
           </View>
         </View>)}
         {catalog.length === 0 ? <Muted>No hay resultados. Prueba otra búsqueda.</Muted> : null}
