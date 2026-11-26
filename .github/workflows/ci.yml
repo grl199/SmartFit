@@ -13,8 +13,6 @@ jobs:
     name: Python tests, API contracts, web and mobile
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      PYTHONPATH: \${{ github.workspace }}/backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
