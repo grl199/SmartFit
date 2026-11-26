@@ -25,7 +25,7 @@ type Content = { description?: string | null; start_position?: string | null; in
 type Tab = "session" | "plan" | "history" | "muscles";
 type PlanExerciseDraft = { exercise_id: number; exercise: string; sets: string; reps_min: string; reps_max: string; rest_s: string; notes: string };
 const muscleOptions = ["chest","shoulders","biceps","triceps","forearms","abs","quadriceps","hamstrings","glutes","calves","lats","upper_back","lower_back","traps","neck","abductors","adductors"];
-const equipmentOptions = ["none","barbell","dumbbell","machine","cable","kettlebell","resistance_band","bench","plate","wheel","medicine_ball","box","suspension","other"];
+const equipmentOptions = ["none","barbell","dumbbell","machine","kettlebell","resistance_band","bench","plate","wheel","medicine_ball","box","suspension","other"];
 const categories = [
   { value: "strength", label: "Fuerza" }, { value: "walking", label: "Andar" },
   { value: "running", label: "Correr" }, { value: "sport", label: "Deporte" },
