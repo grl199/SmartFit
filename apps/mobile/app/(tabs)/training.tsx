@@ -156,9 +156,15 @@ export default function TrainingScreen() {
   function changeCategory(next: string) {
     setCategory(next);
     setCatalogVisible(false);
-    if (next === "strength") {
-      setKindFilter("strength");
-      setCatalogFiltersVisible(true);
+    if (next === "walking" || next === "running") {
+      setTab("gps");
+      setCatalogFiltersVisible(false);
+    } else {
+      setTab(current => current === "gps" ? "session" : current);
+      if (next === "strength") {
+        setKindFilter("strength");
+        setCatalogFiltersVisible(true);
+      }
     }
   }
 
@@ -379,11 +385,11 @@ export default function TrainingScreen() {
   const isCardio = category === "walking" || category === "running";
 
   return <Screen>
-    <PageTitle eyebrow="Entrenamiento" title="Entrena y registra tu evolución" subtitle="Plan personalizado, catálogo de ejercicios, sesiones e intensidad muscular." />
-    <ChoiceRow value={tab} onChange={setTab} options={[
+    <PageTitle eyebrow="Entrenamiento" title={tab === "gps" ? "Registra tu recorrido" : "Entrena y registra tu evolución"} subtitle={tab === "gps" ? "Seguimiento GPS para tu actividad al aire libre." : "Plan personalizado, catálogo de ejercicios, sesiones e intensidad muscular."} />
+    {tab !== "gps" ? <ChoiceRow value={tab} onChange={setTab} options={[
       { value: "session", label: "Sesión" }, { value: "plan", label: "Mi plan" },
-      { value: "history", label: "Historial" }, { value: "muscles", label: "Músculos" }, { value: "gps", label: "GPS" },
-    ]} />
+      { value: "history", label: "Historial" }, { value: "muscles", label: "Músculos" },
+    ]} /> : <AppButton title="← Volver a la sesión" onPress={() => setTab("session")} variant="quiet" />}
     <ErrorMessage message={error} />
     {notice ? <Text style={{ color: colors.accent, fontSize: 13 }}>{notice}</Text> : null}
     {loading ? <ActivityIndicator color={colors.accent} /> : null}
@@ -434,13 +440,8 @@ export default function TrainingScreen() {
           <ChoiceRow value={category} onChange={changeCategory} options={categories} />
           {category === "strength" ? <Muted>Primero define qué tipo de ejercicios quieres ver. Después podrás seleccionar uno para abrir su ficha.</Muted> : null}
           {isCardio ? <>
-            <Field label="Duración total (minutos)" value={duration} onChangeText={setDuration} keyboardType="number-pad" />
-            <Field label="Distancia (km)" value={distance} onChangeText={setDistance} keyboardType="decimal-pad" placeholder="Ej. 5,2" />
-            <Field label="Desnivel positivo (m)" value={elevation} onChangeText={setElevation} keyboardType="number-pad" />
-            <Field label="Pasos" value={steps} onChangeText={setSteps} keyboardType="number-pad" />
-            <Field label="Frecuencia cardiaca media (ppm)" value={heartRate} onChangeText={setHeartRate} keyboardType="number-pad" placeholder="Opcional" />
-            <Field label="Notas" value={notes} onChangeText={setNotes} multiline numberOfLines={3} maxLength={1000} placeholder="Sensaciones, intensidad o comentarios…" />
-            <Muted>Las métricas de cardio se registran aquí; para rutas GPS utiliza la pestaña GPS.</Muted>
+            <Muted>Has seleccionado {category === "walking" ? "andar" : "correr"}. El seguimiento GPS se abre directamente para registrar el recorrido, la duración, la distancia y el desnivel.</Muted>
+            <AppButton title="Abrir seguimiento GPS" onPress={() => setTab("gps")} variant="secondary" />
           </> : <>
             <Pressable onPress={() => setShowSessionDetails(value => !value)} style={{ paddingVertical: 8 }}>
               <Text style={{ color: colors.accent, fontWeight: "800" }}>{showSessionDetails ? "− Ocultar detalles adicionales" : "+ Detalles adicionales"}</Text>
@@ -618,7 +619,13 @@ export default function TrainingScreen() {
         </Panel>)}
     </> : null}
 
-    {token ? <CardioGpsTracker token={token} owner={String(user?.id ?? "")} visible={tab === "gps"} onSaved={() => { void loadAll(); setTab("history"); }} /> : null}
+    {tab === "gps" && token ? <CardioGpsTracker
+      token={token}
+      owner={String(user?.id ?? "")}
+      initialCategory={category === "walking" ? "walking" : "running"}
+      visible
+      onSaved={() => { void loadAll(); setTab("history"); }}
+    /> : null}
 
     {tab === "muscles" ? <>
       <SectionTitle title="Carga muscular" action={muscles?.sessions + " sesiones"} />
