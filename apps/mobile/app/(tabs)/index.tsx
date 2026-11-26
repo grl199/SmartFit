@@ -38,12 +38,12 @@ export default function DashboardScreen() {
     carbs_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.carbs_g, 0) ?? 0,
     fat_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.fat_g, 0) ?? 0,
   }));
-  const kcalGoal = target?.kcal > 0 ? target.kcal : 2500;
+  const kcalGoal = Number(target?.kcal) > 0 ? Number(target?.kcal) : 2500;
   const contributionRows = [
     { key: "kcal" as const, label: "Energía", unit: "kcal", goal: kcalGoal },
-    { key: "protein_g" as const, label: "Proteína", unit: "g", goal: target?.protein_g > 0 ? target.protein_g : kcalGoal * .15 / 4 },
-    { key: "carbs_g" as const, label: "Hidratos", unit: "g", goal: target?.carbs_g > 0 ? target.carbs_g : kcalGoal * .55 / 4 },
-    { key: "fat_g" as const, label: "Grasas", unit: "g", goal: target?.fat_g > 0 ? target.fat_g : kcalGoal * .3 / 9 },
+    { key: "protein_g" as const, label: "Proteína", unit: "g", goal: Number(target?.protein_g) > 0 ? Number(target?.protein_g) : kcalGoal * .15 / 4 },
+    { key: "carbs_g" as const, label: "Hidratos", unit: "g", goal: Number(target?.carbs_g) > 0 ? Number(target?.carbs_g) : kcalGoal * .55 / 4 },
+    { key: "fat_g" as const, label: "Grasas", unit: "g", goal: Number(target?.fat_g) > 0 ? Number(target?.fat_g) : kcalGoal * .3 / 9 },
   ].map(row => {
     const total = mealValues.reduce((sum, meal) => sum + meal[row.key], 0);
     const visualMax = Math.max(row.goal * 1.18, total * 1.08, 1);
