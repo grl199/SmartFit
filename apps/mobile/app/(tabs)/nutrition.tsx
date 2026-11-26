@@ -1007,7 +1007,7 @@ export default function NutritionScreen() {
           {ownedFoodUnits.map(unit => <View key={unit.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
             <View style={{ flex: 1, gap: 2 }}>
               <Text style={{ color: colors.text, fontWeight: "800" }}>{unit.unit_name_plural || unit.unit_name}</Text>
-              <Muted>{fmt(unit.grams_per_unit, 1)} g por unidad{unit.description ? " · " + unit.description : ""}</Muted>
+              <Muted>{fmt(unit.grams_per_unit)} g por unidad{unit.description ? " · " + unit.description : ""}</Muted>
             </View>
             <Text onPress={() => void deleteOwnedFoodUnit(unit)} style={{ color: colors.danger, fontWeight: "700", padding: 7 }}>Quitar</Text>
           </View>)}
