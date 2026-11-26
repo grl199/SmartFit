@@ -57,7 +57,7 @@ const emptySet = (): SetDraft => ({ reps: "10", weight_kg: "", reached_failure: 
 const fmt = (value: number | null | undefined, digits = 0) => value == null ? "—" : value.toLocaleString("es-ES", { maximumFractionDigits: digits });
 
 export default function TrainingScreen() {
-  const { token } = useAuth();
+  const { token, user } = useAuth();
   const [tab, setTab] = useState<Tab>("session");
   const [plan, setPlan] = useState<PlanResponse | null>(null);
   const [workouts, setWorkouts] = useState<Workout[]>([]);
@@ -541,7 +541,7 @@ export default function TrainingScreen() {
         </Panel>)}
     </> : null}
 
-    {token ? <CardioGpsTracker token={token} visible={tab === "gps"} onSaved={() => { void loadAll(); setTab("history"); }} /> : null}
+    {token ? <CardioGpsTracker token={token} owner={String(user?.id ?? "")} visible={tab === "gps"} onSaved={() => { void loadAll(); setTab("history"); }} /> : null}
 
     {tab === "muscles" ? <>
       <SectionTitle title="Carga muscular" action={muscles?.sessions + " sesiones"} />
