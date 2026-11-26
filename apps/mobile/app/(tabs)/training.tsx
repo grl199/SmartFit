@@ -5,6 +5,7 @@ import { dateLabel, localDateISO } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
 import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Screen, SectionTitle } from "@/components/ui";
 import { colors } from "@/theme";
+import { ExerciseAnimation } from "@/components/ExerciseAnimation";
 
 type Exercise = { id: number; name: string; kind: string; primary_muscle: string; secondary_muscles: string[]; equipment: string[] };
 type SetDraft = { reps: string; weight_kg: string; reached_failure: string };
@@ -382,6 +383,9 @@ export default function TrainingScreen() {
       </Panel>
       {selectedExercise ? <Panel>
         <SectionTitle title={selectedExercise.name} />
+        <SectionTitle title="Animación interactiva 3D" />
+        <ExerciseAnimation exerciseName={selectedExercise.name} />
+        <Muted>Una repetición en bucle. Arrastra para girar el modelo; puedes pausar o activar el giro 360° desde los controles de la animación.</Muted>
         {exerciseContent?.description ? <Muted>{exerciseContent.description}</Muted> : <Muted>Ficha de ejercicio</Muted>}
         {exerciseContent?.start_position ? <Text style={{ color: colors.text, fontWeight: "700" }}>Posición inicial: {exerciseContent.start_position}</Text> : null}
         {exerciseContent?.instructions?.map((instruction, index) => <Muted key={index}>{index + 1}. {instruction}</Muted>)}
