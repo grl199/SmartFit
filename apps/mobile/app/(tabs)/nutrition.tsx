@@ -42,6 +42,7 @@ type FoodEstimate = {
     confidence: "low" | "medium";
   }>;
   assumptions: string[]; total_grams: number; confidence: "low" | "medium";
+  totals: { kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number; sat_fat_g: number; fiber_g: number; sodium_mg: number };
   per_100g: Record<string, number>;
 };
 
