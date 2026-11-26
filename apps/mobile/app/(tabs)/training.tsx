@@ -34,7 +34,7 @@ const kindFilterOptions = [
   { value: "full_body", label: "Cuerpo entero" }, { value: "stretching", label: "Estiramientos" },
 ];
 const muscleFilterOptions = [
-  { value: "", label: "Todos" }, { value: "chest", label: "Pecho" }, { value: "back", label: "Espalda" },
+  { value: "", label: "Todos" }, { value: "chest", label: "Pecho" }, { value: "upper_back", label: "Espalda alta" }, { value: "lower_back", label: "Espalda baja" }, { value: "lats", label: "Dorsales" },
   { value: "shoulders", label: "Hombros" }, { value: "biceps", label: "Bíceps" },
   { value: "triceps", label: "Tríceps" }, { value: "abs", label: "Abdomen" },
   { value: "quadriceps", label: "Cuádriceps" }, { value: "hamstrings", label: "Isquios" },
@@ -66,6 +66,7 @@ export default function TrainingScreen() {
   const [kindFilter, setKindFilter] = useState("");
   const [muscleFilter, setMuscleFilter] = useState("");
   const [equipmentFilter, setEquipmentFilter] = useState("");
+  const [includeSecondary, setIncludeSecondary] = useState("true");
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exerciseContent, setExerciseContent] = useState<Content | null>(null);
   const [exerciseHistory, setExerciseHistory] = useState<ExerciseHistory>([]);
@@ -128,7 +129,7 @@ export default function TrainingScreen() {
     if (!token) return;
     try {
       const params = new URLSearchParams();
-      params.set("include_secondary", "true");
+      params.set("include_secondary", includeSecondary);
       if (query.trim()) params.set("q", query.trim());
       if (kindFilter) params.set("kind", kindFilter);
       if (muscleFilter) params.set("muscles", muscleFilter);
@@ -391,6 +392,8 @@ export default function TrainingScreen() {
         <ChoiceRow value={muscleFilter} onChange={setMuscleFilter} options={muscleFilterOptions} />
         <Text style={{ color: colors.text, fontWeight: "700" }}>Equipamiento</Text>
         <ChoiceRow value={equipmentFilter} onChange={setEquipmentFilter} options={equipmentFilterOptions} />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Coincidir con músculos secundarios</Text>
+        <ChoiceRow value={includeSecondary} onChange={setIncludeSecondary} options={[{ value: "true", label: "Sí" }, { value: "false", label: "Solo principal" }]} />
         <AppButton title="Aplicar filtros" onPress={() => void refreshCatalog()} variant="secondary" />
         {catalog.slice(0, 30).map(exercise => <View key={exercise.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 }}>
           <View style={{ flex: 1, gap: 2 }}>
