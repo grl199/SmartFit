@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert, AppState, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { useKeepAwake } from "expo-keep-awake";
@@ -15,12 +16,14 @@ type RoutePoint = {
 };
 type RemoteDraft = {
   client_id: string; kind: string; category: Category; performed_on?: string | null;
-  started_at: string; points: RoutePoint[]; point_count: number;
+  started_at: string; points: RoutePoint[]; point_count: number; synced_point_count?: number;
 };
-type Props = { token: string; visible: boolean; onSaved: () => void };
+type LocalDraft = RemoteDraft & { owner: string };
+type Props = { token: string; owner: string; visible: boolean; onSaved: () => void };
 type RouteStats = { distanceKm: number; elevationM: number; gapMs: number; activeMs: number };
 
 const MAX_POINTS = 10000;
+const LOCAL_PERSIST_MS = 5000;
 const SYNC_BATCH = 500;
 const GAP_MS = 120000;
 const MAX_ACCURACY_M = 50;
@@ -180,7 +183,7 @@ function KeepAwakeWhileTracking() {
   return null;
 }
 
-export function CardioGpsTracker({ token, visible, onSaved }: Props) {
+export function CardioGpsTracker({ token, owner, visible, onSaved }: Props) {
   const [category, setCategory] = useState<Category>("running");
   const [name, setName] = useState("Correr");
   const [date, setDate] = useState(localDateISO());
@@ -199,6 +202,8 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
   const [notice, setNotice] = useState("");
 
   const pointsRef = useRef<RoutePoint[]>([]);
+  const lastLocalPersistRef = useRef(0);
+  const localDraftKey = useMemo(() => "smartfit.activeRun.v1." + owner, [owner]);
   const startedAtRef = useRef<number | null>(null);
   const endedAtRef = useRef<number | null>(null);
   const clientIdRef = useRef<string | null>(null);
@@ -244,6 +249,35 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
     );
   }, [onFix]);
 
+  const persistLocalDraft = useCallback(async () => {
+    const clientId = clientIdRef.current;
+    const startMs = startedAtRef.current;
+    if (!owner || !clientId || startMs == null) return;
+    const meta = metaRef.current;
+    const draft: LocalDraft = {
+      owner,
+      client_id: clientId,
+      kind: meta.name.trim().slice(0,100) || "Actividad",
+      category: meta.category,
+      performed_on: meta.date,
+      started_at: new Date(startMs).toISOString(),
+      points: pointsRef.current,
+      point_count: pointsRef.current.length,
+      synced_point_count: syncedUpToRef.current,
+    };
+    try {
+      await AsyncStorage.setItem(localDraftKey, JSON.stringify(draft));
+      lastLocalPersistRef.current = Date.now();
+    } catch {
+      // La copia remota seguirá sincronizándose cuando haya conexión.
+    }
+  }, [owner, localDraftKey]);
+
+  const clearLocalDraft = useCallback(async () => {
+    try { await AsyncStorage.removeItem(localDraftKey); }
+    catch { /* Best effort: no bloquear el guardado de la actividad. */ }
+  }, [localDraftKey]);
+
   const syncNow = useCallback((): Promise<void> => {
     if (syncPromiseRef.current) return syncPromiseRef.current;
     const clientId = clientIdRef.current;
@@ -281,15 +315,50 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
 
   useEffect(() => {
     let active = true;
-    void api<RemoteDraft | null>("/activity-drafts/active", token)
-      .then(draft => {
-        if (!active || !draft || startedAtRef.current != null) return;
-        if (draft.points.length >= 2) setRecovered(draft);
-        else void api("/activity-drafts/" + draft.client_id, token, { method: "DELETE" }).catch(() => undefined);
-      })
-      .catch(() => undefined);
+    async function recoverDraft() {
+      const [remoteResult, localRaw] = await Promise.all([
+        api<RemoteDraft | null>("/activity-drafts/active", token).then(value => ({ value, failed: false })).catch(() => ({ value: null, failed: true })),
+        AsyncStorage.getItem(localDraftKey).catch(() => null),
+      ]);
+      if (!active || startedAtRef.current != null) return;
+      let local: LocalDraft | null = null;
+      if (localRaw) {
+        try {
+          const parsed = JSON.parse(localRaw) as LocalDraft;
+          if (parsed.owner === owner && parsed.client_id && Array.isArray(parsed.points)) local = parsed;
+        } catch { local = null; }
+      }
+      const remote = remoteResult.value;
+      let candidate: RemoteDraft | null = null;
+      if (local && remote && local.client_id === remote.client_id) {
+        const remoteTimestamps = new Set(remote.points.map(point => point.recorded_at));
+        const merged = new Map<string, RoutePoint>();
+        for (const point of [...remote.points, ...local.points]) merged.set(point.recorded_at, point);
+        const points = [...merged.values()].sort((a,b) => Date.parse(a.recorded_at)-Date.parse(b.recorded_at)).slice(-MAX_POINTS);
+        const syncedCount = points.filter(point => remoteTimestamps.has(point.recorded_at)).length;
+        candidate = { ...remote, points, point_count: points.length, synced_point_count: syncedCount };
+      } else if (local && remote) {
+        const localLast = local.points.length ? Date.parse(local.points[local.points.length-1].recorded_at) : Date.parse(local.started_at);
+        const remoteLast = remote.points.length ? Date.parse(remote.points[remote.points.length-1].recorded_at) : Date.parse(remote.started_at);
+        candidate = localLast >= remoteLast
+          ? { ...local, point_count: local.points.length, synced_point_count: local.synced_point_count ?? 0 }
+          : { ...remote, synced_point_count: remote.points.length };
+      } else if (local) {
+        candidate = { ...local, point_count: local.points.length, synced_point_count: local.synced_point_count ?? 0 };
+      } else if (remote) {
+        candidate = { ...remote, synced_point_count: remote.points.length };
+      }
+      if (!candidate) return;
+      if (candidate.points.length >= 2) {
+        setRecovered(candidate);
+      } else {
+        if (local) await clearLocalDraft();
+        if (remote && !remoteResult.failed) void api("/activity-drafts/"+remote.client_id,token,{method:"DELETE"}).catch(()=>undefined);
+      }
+    }
+    void recoverDraft();
     return () => { active = false; };
-  }, [token]);
+  }, [token, owner, localDraftKey, clearLocalDraft]);
 
   useEffect(() => {
     if (status !== "tracking") return;
@@ -310,6 +379,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
         void syncNow();
       } else {
         stopWatch();
+        void persistLocalDraft();
         void syncNow();
         setNotice("La ubicación se registra mientras SmartFit permanece en primer plano. Al salir de la app, el tramo puede quedar sin puntos GPS.");
       }
@@ -317,14 +387,18 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
     return () => {
       clearInterval(timer);
       clearInterval(syncTimer);
+      clearInterval(localTimer);
       appState.remove();
+      void persistLocalDraft();
       void syncNow();
     };
-  }, [status, startWatch, stopWatch, syncNow]);
+  }, [status, startWatch, stopWatch, syncNow, persistLocalDraft]);
 
   useEffect(() => () => {
     stopWatch();
-  }, [stopWatch]);
+    void persistLocalDraft();
+    void syncNow();
+  }, [stopWatch, persistLocalDraft, syncNow]);
 
   useEffect(() => {
     setName(category === "running" ? "Correr" : "Andar");
@@ -347,7 +421,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
       const id = resume?.client_id ?? ("run-" + Math.random().toString(36).slice(2) + Date.now().toString(36));
       clientIdRef.current = id;
       pointsRef.current = initialPoints;
-      syncedUpToRef.current = initialPoints.length;
+      syncedUpToRef.current = Math.min(resume?.synced_point_count ?? initialPoints.length, initialPoints.length);
       startedAtRef.current = startMs;
       endedAtRef.current = null;
       lastFixAtRef.current = initialPoints.length ? Date.parse(initialPoints[initialPoints.length - 1].recorded_at) : startMs;
@@ -359,6 +433,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
       setSyncState(resume ? "ok" : "idle");
       setStatus("tracking");
       await startWatch();
+      await persistLocalDraft();
       void syncNow();
     } catch (reason) {
       stopWatch();
@@ -411,6 +486,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
     setRecovered(null);
     setStatus("idle");
     if (clientId) await api("/activity-drafts/" + clientId, token, { method: "DELETE" }).catch(() => undefined);
+    await clearLocalDraft();
   }
 
   async function finishGps() {
@@ -495,6 +571,7 @@ export function CardioGpsTracker({ token, visible, onSaved }: Props) {
         </View>
         <AppButton title="Descartar recorrido" variant="quiet" onPress={() => {
           void api("/activity-drafts/" + recovered.client_id, token, { method: "DELETE" }).catch(() => undefined);
+          void clearLocalDraft();
           setRecovered(null);
         }} />
       </Panel> : null}
