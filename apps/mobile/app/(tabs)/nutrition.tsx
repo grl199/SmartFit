@@ -69,8 +69,8 @@ type FoodEstimate = {
 };
 
 const meals: Array<{ value: Meal; label: string }> = [
-  { value: "auto", label: "Automático" }, { value: "breakfast", label: "Desayuno" }, { value: "mid_morning", label: "Media mañana" },
-  { value: "lunch", label: "Comida" }, { value: "snack", label: "Merienda" }, { value: "dinner", label: "Cena" },
+  { value: "auto", label: "✨ Automática" }, { value: "breakfast", label: "☀️ Desayuno" }, { value: "mid_morning", label: "🍎 Media mañana" },
+  { value: "lunch", label: "🍽️ Comida" }, { value: "snack", label: "☕ Merienda" }, { value: "dinner", label: "🌙 Cena" },
 ];
 function shiftDay(value: string, amount: number) {
   const parts = value.split("-").map(Number);
@@ -88,6 +88,7 @@ export default function NutritionScreen() {
   const [frequentFoods, setFrequentFoods] = useState<FrequentFood[]>([]);
   const [query, setQuery] = useState("");
   const [foodSearchSource, setFoodSearchSource] = useState<"generic" | "openfoodfacts">("generic");
+  const [foodEntryMode, setFoodEntryMode] = useState<"smartfit" | "openfoodfacts" | "estimate" | "barcode">("smartfit");
   const [results, setResults] = useState<FoodSearchResult[]>([]);
   const [selectedFood, setSelectedFood] = useState<FoodSearchResult | null>(null);
   const [selectedFoodDetail, setSelectedFoodDetail] = useState<FoodDetail | null>(null);
@@ -358,26 +359,35 @@ export default function NutritionScreen() {
     ]);
   }
 
-  async function searchFoods() {
-    if (!token || !query.trim()) return;
+  const searchFoods = useCallback(async () => {
+    if (!token || !query.trim()) { setResults([]); return; }
     setLoading(true); setError("");
     try {
       const params = new URLSearchParams({
-        q: query.trim(), limit: "8",
+        q: query.trim(), limit: "12",
         online: foodSearchSource === "openfoodfacts" ? "true" : "false",
         source: foodSearchSource,
       });
       const found = await api<FoodSearchResult[]>("/foods/search?" + params.toString(), token);
       setResults(found);
-      if (found.length === 0) setError("No encontramos alimentos con ese nombre.");
+      if (found.length === 0) setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Falló la búsqueda.");
+      setResults([]);
     } finally { setLoading(false); }
-  }
+  }, [token, query, foodSearchSource]);
+
+  useEffect(() => {
+    const canSearch = section === "diary" && (foodEntryMode === "smartfit" || foodEntryMode === "openfoodfacts") && query.trim().length > 0;
+    if (!canSearch) { setResults([]); return; }
+    const timer = setTimeout(() => { void searchFoods(); }, 400);
+    return () => clearTimeout(timer);
+  }, [searchFoods, section, foodEntryMode]);
 
   async function openFoodForLogging(food: FoodSearchResult, initialQuantity = grams) {
     if (!token) return;
     setSelectedFood(food);
+    setResults([]);
     setSelectedFoodDetail(null);
     setFoodQuantity(initialQuantity);
     setSelectedFoodUnit("grams");
@@ -911,6 +921,59 @@ export default function NutritionScreen() {
     ]);
   }
 
+  if (selectedFood) {
+    const detail = selectedFoodDetail;
+    const imageUrl = detail?.image_url || selectedFood.image_url;
+    const isOpenFoodFacts = detail?.source === "openfoodfacts" || selectedFood.source === "openfoodfacts";
+    return <Screen>
+      <PageTitle eyebrow={isOpenFoodFacts ? "Open Food Facts" : "Alimento"} title={selectedFood.name}
+        subtitle={selectedFood.brand || (isOpenFoodFacts ? "Producto envasado" : "Ficha nutricional")} />
+      <AppButton title="← Volver al catálogo" variant="quiet" onPress={() => setSelectedFood(null)} />
+      <Panel>
+        {imageUrl ? <Image source={{ uri: imageUrl }} style={{ width: "100%", height: 210, borderRadius: 14, backgroundColor: colors.surfaceRaised }} resizeMode="contain" /> : null}
+        {detail ? <>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
+            {detail.nutriscore_grade ? <Muted>Nutri-Score {detail.nutriscore_grade.toUpperCase()}</Muted> : null}
+            {detail.nova_group ? <Muted>NOVA {detail.nova_group}</Muted> : null}
+            {detail.ecoscore_grade ? <Muted>Eco-Score {detail.ecoscore_grade.toUpperCase()}</Muted> : null}
+          </View>
+          {detail.serving_size ? <Muted>Ración indicada: {detail.serving_size}</Muted> : null}
+          {detail.labels?.length ? <Muted>Etiquetas: {detail.labels.join(", ")}</Muted> : null}
+          {detail.allergens?.length ? <Muted>Alérgenos: {detail.allergens.join(", ")}</Muted> : null}
+          {detail.ingredients ? <Muted>Ingredientes: {detail.ingredients}</Muted> : null}
+          {isOpenFoodFacts && detail.barcode
+            ? <Text onPress={() => void Linking.openURL("https://world.openfoodfacts.org/product/" + encodeURIComponent(detail.barcode!))}
+                style={{ color: colors.accent, fontWeight: "800" }}>Ver ficha original en Open Food Facts ↗</Text>
+            : null}
+        </> : <ActivityIndicator color={colors.accent} />}
+        <View style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 12, gap: 7 }}>
+          <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>Información nutricional · por 100 g</Text>
+          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
+            <Muted>{fmt(selectedFood.kcal)} kcal</Muted>
+            <Muted>Proteína {fmt(selectedFood.protein_g, 1)} g</Muted>
+            <Muted>Hidratos {fmt(selectedFood.carbs_g, 1)} g</Muted>
+            <Muted>Grasas {fmt(selectedFood.fat_g, 1)} g</Muted>
+          </View>
+        </View>
+        {detail?.user_id == null ? <AppButton title="Crear mi versión editable" variant="quiet" onPress={() => void copySelectedFood()} loading={loading} /> : null}
+        <Text style={{ color: colors.text, fontWeight: "800" }}>Unidad de medida</Text>
+        <ChoiceRow value={selectedFoodUnit} onChange={setSelectedFoodUnit} options={[
+          { value: "grams", label: "Gramos" },
+          ...foodServings.map(unit => ({ value: String(unit.id), label: unit.unit_name_plural || unit.unit_name })),
+        ]} />
+        <Field label={selectedFoodUnit === "grams" ? "Cantidad (g)" : "Número de unidades"}
+          value={foodQuantity} onChangeText={setFoodQuantity} keyboardType="decimal-pad" />
+        {selectedFoodUnit !== "grams" ? <Muted>
+          1 {foodServings.find(item => String(item.id) === selectedFoodUnit)?.unit_name ?? "unidad"} = {fmt(foodServings.find(item => String(item.id) === selectedFoodUnit)?.grams_per_unit)} g
+        </Muted> : null}
+        <Text style={{ color: colors.text, fontWeight: "800" }}>Comida del día</Text>
+        <ChoiceRow value={meal} onChange={setMeal} options={meals} />
+        <AppButton title="Añadir al diario" onPress={() => void addSelectedFood()} loading={loading} />
+        <AppButton title="Cancelar" onPress={() => setSelectedFood(null)} variant="quiet" />
+      </Panel>
+    </Screen>;
+  }
+
   const totals = data?.totals;
   const target = data?.targets;
   const recipePreviewLocal = recipeIngredients.reduce((sum, item) => {
@@ -957,54 +1020,52 @@ export default function NutritionScreen() {
       </Panel>
       <SectionTitle title="Añadir alimento" />
       <Panel>
-        <Field label="Buscar alimentos" value={query} onChangeText={setQuery} placeholder="Ej. avena, plátano, yogur…" returnKeyType="search" onSubmitEditing={() => void searchFoods()} />
-        <Text style={{ color: colors.text, fontWeight: "700" }}>Origen de búsqueda</Text>
-        <ChoiceRow value={foodSearchSource} onChange={setFoodSearchSource} options={[
-          { value: "generic", label: "Catálogo SmartFit" }, { value: "openfoodfacts", label: "Open Food Facts" },
+        <Text style={{ color: colors.text, fontWeight: "800" }}>¿Cómo quieres añadirlo?</Text>
+        <ChoiceRow value={foodEntryMode} onChange={value => {
+          setFoodEntryMode(value);
+          setFoodSearchSource(value === "openfoodfacts" ? "openfoodfacts" : "generic");
+          setQuery(""); setResults([]); setError("");
+        }} options={[
+          { value: "smartfit", label: "🥗 Catálogo SmartFit" },
+          { value: "openfoodfacts", label: "📦 OpenFoodFacts" },
+          { value: "estimate", label: "✦ Estimar con IA" },
+          { value: "barcode", label: "📷 Código" },
         ]} />
-        <Field label="Cantidad (g)" value={grams} onChangeText={setGrams} keyboardType="decimal-pad" />
+        <Text style={{ color: colors.text, fontWeight: "700" }}>Comida del día</Text>
         <ChoiceRow value={meal} onChange={setMeal} options={meals} />
-        <AppButton title="Buscar alimentos" onPress={() => void searchFoods()} loading={loading} disabled={!query.trim()} />
-        {results.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{ borderTopWidth: 1, borderColor: colors.border, paddingTop: 12, gap: 4 }}>
-          <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-          <Muted>{food.brand ? food.brand + " · " : ""}{Math.round(food.kcal)} kcal / 100 g · {Math.round(food.protein_g)} g proteína</Muted>
-          <Text style={{ color: colors.accent, fontWeight: "800", fontSize: 12 }}>Elegir cantidad y unidad ›</Text>
-        </Pressable>)}
-        {selectedFood ? <View style={{ borderTopWidth: 1, borderTopColor: colors.accent, paddingTop: 12, gap: 8 }}>
-          <SectionTitle title={selectedFood.name} action="Registrar ingesta" />
-          {selectedFoodDetail?.image_url ? <Image source={{ uri: selectedFoodDetail.image_url }} style={{ width: "100%", height: 150, borderRadius: 12, backgroundColor: colors.surfaceRaised }} resizeMode="contain" /> : null}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-            {selectedFoodDetail?.nutriscore_grade ? <Muted>Nutri-Score {selectedFoodDetail.nutriscore_grade.toUpperCase()}</Muted> : null}
-            {selectedFoodDetail?.nova_group ? <Muted>NOVA {selectedFoodDetail.nova_group}</Muted> : null}
-            {selectedFoodDetail?.ecoscore_grade ? <Muted>Eco-Score {selectedFoodDetail.ecoscore_grade.toUpperCase()}</Muted> : null}
-          </View>
-          {selectedFoodDetail?.serving_size ? <Muted>Ración indicada: {selectedFoodDetail.serving_size}</Muted> : null}
-          {selectedFoodDetail?.labels?.length ? <Muted>Etiquetas: {selectedFoodDetail.labels.join(", ")}</Muted> : null}
-          {selectedFoodDetail?.allergens?.length ? <Muted>Alérgenos: {selectedFoodDetail.allergens.join(", ")}</Muted> : null}
-          {selectedFoodDetail?.ingredients ? <Muted>Ingredientes: {selectedFoodDetail.ingredients}</Muted> : null}
-          {selectedFoodDetail?.source === "openfoodfacts" && selectedFoodDetail.barcode
-            ? <Text onPress={() => void Linking.openURL("https://world.openfoodfacts.org/product/" + encodeURIComponent(selectedFoodDetail.barcode!))} style={{ color: colors.accent, fontWeight: "800" }}>Ver ficha original en Open Food Facts ↗</Text>
-            : null}
-          {selectedFoodDetail?.user_id == null ? <AppButton title="Crear mi versión editable" variant="quiet" onPress={() => void copySelectedFood()} loading={loading} /> : null}
-          <Text style={{ color: colors.text, fontWeight: "700" }}>Unidad de medida</Text>
-          <ChoiceRow value={selectedFoodUnit} onChange={setSelectedFoodUnit} options={[
-            { value: "grams", label: "Gramos" },
-            ...foodServings.map(unit => ({ value: String(unit.id), label: unit.unit_name_plural || unit.unit_name })),
-          ]} />
+        {(foodEntryMode === "smartfit" || foodEntryMode === "openfoodfacts") ? <>
           <Field
-            label={selectedFoodUnit === "grams" ? "Cantidad (g)" : "Número de unidades"}
-            value={foodQuantity}
-            onChangeText={setFoodQuantity}
-            keyboardType="decimal-pad"
+            label={foodEntryMode === "openfoodfacts" ? "Buscar producto de marca" : "Buscar en el catálogo SmartFit"}
+            value={query}
+            onChangeText={value => { setQuery(value); setResults([]); }}
+            placeholder={foodEntryMode === "openfoodfacts" ? "Ej. yogur Danone, avena Hacendado…" : "Ej. avena, plátano, yogur…"}
+            returnKeyType="search"
+            onSubmitEditing={() => void searchFoods()}
           />
-          {selectedFoodUnit !== "grams" ? <Muted>
-            1 {foodServings.find(item => String(item.id) === selectedFoodUnit)?.unit_name ?? "unidad"} = {fmt(foodServings.find(item => String(item.id) === selectedFoodUnit)?.grams_per_unit)} g
-          </Muted> : null}
-          <ChoiceRow value={meal} onChange={setMeal} options={meals} />
-          <AppButton title="Registrar alimento" onPress={() => void addSelectedFood()} loading={loading} />
-          <AppButton title="Cancelar" onPress={() => setSelectedFood(null)} variant="quiet" />
-        </View> : null}
+          <Muted>{foodEntryMode === "openfoodfacts"
+            ? "Resultados de Open Food Facts con fotografía del envase cuando está disponible."
+            : "Los resultados se filtran mientras escribes; no necesitas pulsar Buscar."}</Muted>
+          {loading && query.trim() ? <ActivityIndicator color={colors.accent} /> : null}
+          {results.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
+            flexDirection: "row", alignItems: "center", gap: 11, borderTopWidth: 1,
+            borderColor: colors.border, paddingVertical: 10,
+          }}>
+            {food.image_url
+              ? <Image source={{ uri: food.image_url }} style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised }} resizeMode="contain" />
+              : <View style={{ width: 58, height: 58, borderRadius: 10, backgroundColor: colors.surfaceRaised, alignItems: "center", justifyContent: "center" }}>
+                  <Text style={{ fontSize: 25 }}>{food.icon || (foodSearchSource === "openfoodfacts" ? "📦" : "🥗")}</Text>
+                </View>}
+            <View style={{ flex: 1, gap: 3 }}>
+              <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+              <Muted>{food.brand ? food.brand + " · " : ""}{fmt(food.kcal)} kcal/100 g · P {fmt(food.protein_g, 1)} g</Muted>
+              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Abrir ficha nutricional ›</Text>
+            </View>
+          </Pressable>)}
+          {!query.trim() ? <Muted>Empieza a escribir para ver coincidencias al instante.</Muted> : null}
+          {!!query.trim() && !loading && !results.length ? <Muted>No hay coincidencias con ese nombre.</Muted> : null}
+        </> : null}
       </Panel>
+      {foodEntryMode === "estimate" ? <>
       <SectionTitle title="Estimar comida con IA" />
       <Panel>
         <Muted>Describe el plato o adjunta una foto. SmartFit propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la estimación antes de guardarla.</Muted>
@@ -1059,6 +1120,8 @@ export default function NutritionScreen() {
           <AppButton title="Descartar estimación" onPress={() => setEstimateResult(null)} variant="quiet" />
         </View> : null}
       </Panel>
+      </> : null}
+      {foodEntryMode === "barcode" ? <>
       <SectionTitle title="Buscar código de barras" />
       <Panel>
         <AppButton title="Abrir escáner de cámara" onPress={() => setBarcodeScannerVisible(true)} variant="secondary" />
@@ -1070,6 +1133,7 @@ export default function NutritionScreen() {
         </View> : null}
         <Muted>El escáner detecta EAN/UPC y códigos de barras habituales. Si no se reconoce, puedes introducir los dígitos manualmente.</Muted>
       </Panel>
+      </> : null}
       <SectionTitle title="Tus alimentos habituales" action={frequentFoods.length + " favoritos"} />
       <Panel>
         {frequentFoods.length ? frequentFoods.map(item => <Pressable key={item.food.id} onPress={() => {
@@ -1113,31 +1177,42 @@ export default function NutritionScreen() {
       <SectionTitle title="Catálogo de alimentos" action={catalogSections.reduce((sum, item) => sum + item.count, 0) + " alimentos"} />
       <Muted>Explora alimentos por categoría y añádelos al diario con la cantidad y comida seleccionadas.</Muted>
       <Field label="Filtrar esta categoría" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Buscar por nombre…" />
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
-        {catalogSections.map(item => <Pressable key={item.id} onPress={() => setCatalogCategory(item.id)} style={{
-          paddingVertical: 8, paddingHorizontal: 11, borderRadius: 12, borderWidth: 1,
-          borderColor: item.id === catalogCategory ? colors.accent : colors.border,
-          backgroundColor: item.id === catalogCategory ? colors.accentDark : colors.surfaceRaised,
-        }}>
-          <Text style={{ color: item.id === catalogCategory ? colors.accent : colors.muted, fontWeight: "800", fontSize: 11 }}>
-            {item.title} · {item.count}
-          </Text>
-        </Pressable>)}
-      </View>
       {loading ? <ActivityIndicator color={colors.accent} /> : null}
-      {catalogSections.filter(item => item.id === catalogCategory).flatMap(item => item.foods)
-        .filter(food => !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
-          (food.brand ?? "").toLowerCase().includes(catalogQuery.trim().toLowerCase()))
-        .map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
-          paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 3,
-        }}>
-          <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-          <Muted>{food.brand ?? "Alimento genérico"} · {fmt(food.kcal)} kcal/100 g · proteína {fmt(food.protein_g)} g</Muted>
-          <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Seleccionar cantidad y unidad para {meals.find(item => item.value === meal)?.label.toLowerCase()} ›</Text>
-        </Pressable>)}
-      {!loading && !catalogSections.some(item => item.id === catalogCategory && item.foods.some(food =>
-        !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
-        (food.brand ?? "").toLowerCase().includes(catalogQuery.trim().toLowerCase()))) ? <Muted>No hay alimentos en esta categoría con ese filtro.</Muted> : null}
+      <View style={{ gap: 8 }}>
+        {catalogSections.map(item => {
+          const expanded = item.id === catalogCategory;
+          const foods = item.foods.filter(food => !catalogQuery.trim() ||
+            food.name.toLocaleLowerCase("es").includes(catalogQuery.trim().toLocaleLowerCase()) ||
+            (food.brand ?? "").toLocaleLowerCase("es").includes(catalogQuery.trim().toLocaleLowerCase()));
+          return <Panel key={item.id}>
+            <Pressable onPress={() => setCatalogCategory(expanded ? "" : item.id)} style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
+              <Text style={{ fontSize: 24 }}>{item.icon || "🥗"}</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={{ color: colors.text, fontWeight: "900" }}>{item.title}</Text>
+                {item.description ? <Muted>{item.description}</Muted> : null}
+              </View>
+              <Muted>{foods.length}/{item.count}</Muted>
+              <Text style={{ color: colors.accent, fontWeight: "900", fontSize: 18 }}>{expanded ? "−" : "+"}</Text>
+            </Pressable>
+            {expanded ? <View style={{ marginTop: 10 }}>
+              {foods.map(food => <Pressable key={food.id} onPress={() => void openFoodForLogging(food)} style={{
+                flexDirection: "row", alignItems: "center", gap: 10, paddingVertical: 9,
+                borderTopWidth: 1, borderColor: colors.border,
+              }}>
+                {food.image_url
+                  ? <Image source={{ uri: food.image_url }} style={{ width: 42, height: 42, borderRadius: 9, backgroundColor: colors.surfaceRaised }} resizeMode="contain" />
+                  : <Text style={{ fontSize: 22 }}>{food.icon || item.icon || "🥗"}</Text>}
+                <View style={{ flex: 1, gap: 2 }}>
+                  <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+                  <Muted>{food.brand ?? "Alimento genérico"} · {fmt(food.kcal)} kcal/100 g</Muted>
+                </View>
+                <Text style={{ color: colors.accent, fontWeight: "900" }}>›</Text>
+              </Pressable>)}
+              {!foods.length ? <Muted>No hay alimentos con este filtro.</Muted> : null}
+            </View> : null}
+          </Panel>;
+        })}
+      </View>
     </> : null}
 
     {section === "foods" ? <>
