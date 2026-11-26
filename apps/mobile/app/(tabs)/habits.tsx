@@ -220,7 +220,7 @@ export default function HabitsScreen() {
     <Panel>
       <SectionTitle title="Registrar agua" />
       <ChoiceRow value={waterAmount} onChange={setWaterAmount} options={["150","250","330","500","750"].map(value => ({ value, label: value + " ml" }))} />
-      <AppButton title="Añadir " + waterAmount + " ml" onPress={addWater} loading={busy} />
+      <AppButton title={"Añadir " + waterAmount + " ml"} onPress={addWater} loading={busy} />
       {waterLogs.length ? waterLogs.map(item => <View key={item.id} style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 9 }}>
         <View><Text style={{ color: colors.text, fontWeight: "700" }}>{fmt(item.quantity_ml)} ml</Text><Muted>{new Date(item.logged_at).toLocaleTimeString("es-ES", { hour: "2-digit", minute: "2-digit" })}</Muted></View>
         <Text onPress={() => deleteWater(item)} style={{ color: colors.danger, fontWeight: "700", padding: 8 }}>Eliminar</Text>
