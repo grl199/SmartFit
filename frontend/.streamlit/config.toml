@@ -1,0 +1,9 @@
+# Se ejecuta con `streamlit run Home.py` desde la carpeta frontend/ (es donde Streamlit busca este fichero).
+# No se fijan colores de fondo/texto: la app sigue el modo claro/oscuro del sistema, y se puede cambiar a mano en
+# el menú de la esquina superior derecha (⋮) → Settings → Theme.
+[theme]
+primaryColor = "#16a34a"
+font = "sans serif"
+
+[browser]
+gatherUsageStats = false

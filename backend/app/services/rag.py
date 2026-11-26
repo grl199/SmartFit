@@ -1,0 +1,129 @@
+"""Memoria a largo plazo: embeddings en pgvector."""
+import logging
+from datetime import date
+
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session
+
+from ..db import SessionLocal
+from ..llm import embed_texts
+from ..models import FoodLog, MemoryChunk
+from .cardio import format_pace
+from .nutrition import day_overview
+
+log = logging.getLogger(__name__)
+WEEKDAYS = ["lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo"]
+MEALS = {"breakfast": "Desayuno", "lunch": "Comida", "snack": "Merienda/snack", "dinner": "Cena"}
+
+
+def embed(texts: list[str], task_type: str = "RETRIEVAL_DOCUMENT") -> list[list[float]]:
+    return embed_texts(texts, task_type=task_type)
+
+
+def build_daily_summary(db: Session, user_id: int, day: date) -> str | None:
+    ov = day_overview(db, user_id, day)
+    if not ov["entries"] and not ov["workouts"]:
+        return None
+    t, g = ov["totals"], ov["targets"]
+    lines = [f"Resumen del {day.isoformat()} ({WEEKDAYS[day.weekday()]}).",
+             f"Total: {t['kcal']:.0f} kcal (objetivo {g.get('kcal', 0):.0f}), proteína {t['protein_g']:.0f} g "
+             f"(objetivo {g.get('protein_g', 0):.0f}), hidratos {t['carbs_g']:.0f} g, grasa {t['fat_g']:.0f} g, "
+             f"fibra {t['fiber_g']:.0f} g."]
+    by_meal: dict[str, list[str]] = {}
+    for entry in ov["entries"]:
+        by_meal.setdefault(MEALS.get(entry["meal"], entry["meal"]), []).append(
+            f"{entry['food']} {entry['grams']:.0f} g"
+        )
+    lines += [f"{meal}: {', '.join(items)}." for meal, items in by_meal.items()]
+    for workout in ov["workouts"]:
+        exercises = f" ({', '.join(workout['exercises'])})" if workout.get("exercises") else ""
+        kcal = f", ~{workout['kcal_burned']:.0f} kcal" if workout.get("kcal_burned") else ""
+        dist = ""
+        if workout.get("distance_km"):
+            dist = f", {workout['distance_km']:g} km a {format_pace(workout['duration_min'] / workout['distance_km'])} min/km"
+            if workout.get("elevation_gain_m"):
+                dist += f", +{workout['elevation_gain_m']:g} m de desnivel"
+        if workout.get("steps"):
+            dist += f", {workout['steps']} pasos"
+        lines.append(f"Entrenamiento: {workout['kind']}, {workout['duration_min']} min{dist}{kcal}{exercises}.")
+    return "\n".join(lines)
+
+
+def _upsert(db: Session, user_id: int, kind: str, content: str, ref_date: date | None) -> None:
+    vector = embed([content], task_type="RETRIEVAL_DOCUMENT")[0]
+    stmt = insert(MemoryChunk).values(
+        user_id=user_id, kind=kind, ref_date=ref_date, content=content, embedding=vector
+    )
+    if ref_date is not None:
+        stmt = stmt.on_conflict_do_update(
+            constraint="uq_memory_user_kind_date",
+            set_={"content": content, "embedding": vector},
+        )
+    db.execute(stmt)
+    db.commit()
+
+
+def index_day(db: Session, user_id: int, day: date) -> bool:
+    summary = build_daily_summary(db, user_id, day)
+    if summary is None:
+        return False
+    _upsert(db, user_id, "daily_summary", summary, day)
+    return True
+
+
+def index_day_task(user_id: int, day: date) -> None:
+    """Para BackgroundTasks: sesión propia y sin romper la petición si el proveedor falla."""
+    try:
+        with SessionLocal() as db:
+            index_day(db, user_id, day)
+    except Exception:
+        log.exception("Fallo indexando %s", day)
+
+
+def reindex_all(db: Session, user_id: int) -> dict[str, int]:
+    chunks = db.scalars(
+        select(MemoryChunk).where(MemoryChunk.user_id == user_id)
+    ).all()
+    existing_summaries = {
+        chunk.ref_date: chunk.content
+        for chunk in chunks
+        if chunk.kind == "daily_summary" and chunk.ref_date is not None
+    }
+    for start in range(0, len(chunks), 64):
+        batch = chunks[start:start + 64]
+        vectors = embed([chunk.content for chunk in batch], task_type="RETRIEVAL_DOCUMENT")
+        for chunk, vector in zip(batch, vectors, strict=True):
+            chunk.embedding = vector
+    db.commit()
+
+    days = db.scalars(
+        select(FoodLog.log_date).where(FoodLog.user_id == user_id).distinct()
+    ).all()
+    days_indexed = 0
+    for day in days:
+        summary = build_daily_summary(db, user_id, day)
+        if summary is None:
+            continue
+        if existing_summaries.get(day) != summary:
+            _upsert(db, user_id, "daily_summary", summary, day)
+        days_indexed += 1
+    return {"chunks_reembedded": len(chunks), "days_indexed": days_indexed}
+
+
+def add_note(db: Session, user_id: int, text: str) -> None:
+    _upsert(db, user_id, "note", text, None)
+
+
+def search_memory(db: Session, user_id: int, query: str, k: int = 5) -> list[dict]:
+    query_vector = embed([query], task_type="RETRIEVAL_QUERY")[0]
+    distance = MemoryChunk.embedding.cosine_distance(query_vector).label("dist")
+    rows = db.execute(
+        select(MemoryChunk, distance).where(MemoryChunk.user_id == user_id)
+        .order_by(distance).limit(k)
+    ).all()
+    return [
+        {"kind": memory.kind, "date": memory.ref_date.isoformat() if memory.ref_date else None,
+         "content": memory.content, "similarity": round(1 - dist, 3)}
+        for memory, dist in rows
+    ]

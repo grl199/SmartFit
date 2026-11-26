@@ -1,0 +1,36 @@
+
+steps:
+  # 1. Construir la imagen del backend
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'backend/Dockerfile'
+      - '-t'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'
+      - 'backend'
+
+  # 2. Publicar la imagen en Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'
+
+  # 3. Desplegar la nueva imagen en Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/google-cloud-cli:stable'
+    args:
+      - 'gcloud'
+      - 'run'
+      - 'deploy'
+      - 'smartfit'
+      - '--image=europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'
+      - '--region=europe-west1'
+      - '--platform=managed'
+      - '--allow-unauthenticated'
+      - '--port=8080'
+      # No se establecen --set-env-vars ni --set-secrets: Cloud Run conserva
+      # las variables y secretos que ya están configurados en el servicio.
+      - '--quiet'
+
+images:
+  - 'europe-west1-docker.pkg.dev/$PROJECT_ID/cloud-run-source-deploy/smartfit:$COMMIT_SHA'

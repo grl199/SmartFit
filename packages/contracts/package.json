@@ -1,0 +1,17 @@
+{
+  "name": "@smartfit/contracts",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "generate": "pnpm dlx openapi-typescript@7.6.1 openapi.json -o src/generated.ts",
+    "typecheck": "pnpm --package=typescript@5.8.3 dlx tsc --noEmit --project tsconfig.json"
+  }
+}
