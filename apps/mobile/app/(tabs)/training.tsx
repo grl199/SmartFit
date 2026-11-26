@@ -7,6 +7,7 @@ import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Scr
 import { colors } from "@/theme";
 import { ExerciseAnimation } from "@/components/ExerciseAnimation";
 import { CardioGpsTracker, RouteMapPreview } from "@/components/CardioGpsTracker";
+import { MuscleMap } from "@/components/MuscleMap";
 
 type Exercise = { id: number; name: string; kind: string; primary_muscle: string; secondary_muscles: string[]; equipment: string[] };
 type SetDraft = { reps: string; weight_kg: string; reached_failure: string };
@@ -550,6 +551,10 @@ export default function TrainingScreen() {
         { value: "90", label: "90 días" }, { value: "180", label: "180 días" },
       ]} />
       <Muted>{muscles?.start ?? "—"} a {muscles?.end ?? "—"} · Las series ponderadas priorizan los músculos principales.</Muted>
+      <Panel>
+        <SectionTitle title="Mapa muscular interactivo" action="Frontal y posterior" />
+        <MuscleMap muscles={muscles?.muscles ?? {}} />
+      </Panel>
       {topMuscles.length === 0 ? <Panel><Muted>Registra sesiones para ver la distribución por grupos musculares.</Muted></Panel> :
         topMuscles.map(([key, value]) => <Panel key={key}>
           <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
