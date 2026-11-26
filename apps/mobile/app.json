@@ -32,6 +32,15 @@
           "cameraPermission": "SmartFit necesita acceder a la cámara para fotografiar comidas.",
           "microphonePermission": false
         }
+      ],
+      [
+        "expo-audio",
+        {
+          "microphonePermission": "SmartFit necesita acceso al micrófono para transcribir notas de voz de comida.",
+          "recordAudioAndroid": true,
+          "enableBackgroundRecording": false,
+          "enableBackgroundPlayback": false
+        }
       ]
     ],
     "experiments": {
