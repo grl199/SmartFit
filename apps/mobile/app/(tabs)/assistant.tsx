@@ -22,6 +22,8 @@ export default function AssistantScreen() {
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameTitle, setRenameTitle] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -78,6 +80,22 @@ export default function AssistantScreen() {
     setMessages([]);
     setDraft("");
     setError("");
+  }
+
+  async function saveRename(conversation: Conversation) {
+    if (!token || !renameTitle.trim() || renameTitle.trim().length > 120) {
+      setError("El título debe tener entre 1 y 120 caracteres.");
+      return;
+    }
+    setBusy(true); setError("");
+    try {
+      await api("/conversations/" + conversation.id, token, { method: "PATCH", body: { title: renameTitle.trim() } });
+      setRenamingId(null);
+      setRenameTitle("");
+      await refreshConversations(conversation.id);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo renombrar la conversación.");
+    } finally { setBusy(false); }
   }
 
   function deleteConversation(conversation: Conversation) {
@@ -139,14 +157,23 @@ export default function AssistantScreen() {
     {conversations.length === 0 ? <Muted>Tus conversaciones aparecerán aquí. Empieza escribiendo una pregunta.</Muted> :
       <View style={{ gap: 8 }}>
         {conversations.map(item => <View key={item.id} style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-          <Pressable onPress={() => { setSelectedId(item.id); setError(""); }} style={{
-            flex: 1, padding: 12, borderRadius: 14, borderWidth: 1,
-            borderColor: item.id === selectedId ? colors.accent : colors.border,
-            backgroundColor: item.id === selectedId ? colors.accentDark : colors.surface,
-          }}>
-            <Text numberOfLines={1} style={{ color: colors.text, fontWeight: "800" }}>{item.title}</Text>
-            <Muted>{item.message_count} mensajes · {new Date(item.updated_at).toLocaleDateString("es-ES")}</Muted>
-          </Pressable>
+          <View style={{ flex: 1, gap: 5 }}>
+            <Pressable onPress={() => { setSelectedId(item.id); setError(""); }} style={{
+              padding: 12, borderRadius: 14, borderWidth: 1,
+              borderColor: item.id === selectedId ? colors.accent : colors.border,
+              backgroundColor: item.id === selectedId ? colors.accentDark : colors.surface,
+            }}>
+              <Text numberOfLines={1} style={{ color: colors.text, fontWeight: "800" }}>{item.title}</Text>
+              <Muted>{item.message_count} mensajes · {new Date(item.updated_at).toLocaleDateString("es-ES")}</Muted>
+            </Pressable>
+            {renamingId === item.id ? <View style={{ gap: 6 }}>
+              <Field label="Nuevo título" value={renameTitle} onChangeText={setRenameTitle} maxLength={120} />
+              <View style={{ flexDirection: "row", gap: 7 }}>
+                <View style={{ flex: 1 }}><AppButton title="Guardar título" onPress={() => void saveRename(item)} loading={busy} /></View>
+                <View style={{ flex: 1 }}><AppButton title="Cancelar" variant="quiet" onPress={() => setRenamingId(null)} /></View>
+              </View>
+            </View> : <Text onPress={() => { setRenamingId(item.id); setRenameTitle(item.title); }} style={{ color: colors.accent, fontSize: 12, fontWeight: "800", paddingLeft: 4 }}>Renombrar</Text>}
+          </View>
           <Pressable accessibilityRole="button" accessibilityLabel={"Eliminar " + item.title} onPress={() => deleteConversation(item)} hitSlop={8} style={{ padding: 8 }}>
             <Text style={{ color: colors.danger, fontSize: 18 }}>×</Text>
           </Pressable>
