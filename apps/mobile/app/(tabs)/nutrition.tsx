@@ -14,6 +14,7 @@ type FrequentFood = { food: FoodSearchResult; times: number; typical_grams: numb
 type FoodDetail = FoodSearchResult & {
   source?: string; user_id?: number | null; barcode?: string | null; serving_g?: number | null; image_url?: string | null;
   nutriscore_grade?: string | null; nova_group?: number | null; ecoscore_grade?: string | null;
+  sugars_g?: number | null; sat_fat_g?: number | null; fiber_g?: number | null; sodium_mg?: number | null;
   serving_size?: string | null; labels?: string[]; allergens?: string[]; ingredients?: string | null;
   categories?: string[]; attribution?: string | null; license?: string | null;
 };
@@ -69,7 +70,7 @@ type FoodEstimate = {
 };
 
 const meals: Array<{ value: Meal; label: string }> = [
-  { value: "auto", label: "✨ Automática" }, { value: "breakfast", label: "☀️ Desayuno" }, { value: "mid_morning", label: "🍎 Media mañana" },
+  { value: "auto", label: "✨ Automática" }, { value: "breakfast", label: "☀️ Desayuno" }, { value: "mid_morning", label: "🍎 Almuerzo" },
   { value: "lunch", label: "🍽️ Comida" }, { value: "snack", label: "☕ Merienda" }, { value: "dinner", label: "🌙 Cena" },
 ];
 function shiftDay(value: string, amount: number) {
@@ -950,9 +951,13 @@ export default function NutritionScreen() {
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>Información nutricional · por 100 g</Text>
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 12 }}>
             <Muted>{fmt(selectedFood.kcal)} kcal</Muted>
-            <Muted>Proteína {fmt(selectedFood.protein_g, 1)} g</Muted>
-            <Muted>Hidratos {fmt(selectedFood.carbs_g, 1)} g</Muted>
-            <Muted>Grasas {fmt(selectedFood.fat_g, 1)} g</Muted>
+            <Muted>Proteína {fmt(selectedFood.protein_g)} g</Muted>
+            <Muted>Hidratos {fmt(selectedFood.carbs_g)} g</Muted>
+            <Muted>Grasas {fmt(selectedFood.fat_g)} g</Muted>
+            {detail?.sugars_g != null ? <Muted>Azúcares {fmt(detail.sugars_g)} g</Muted> : null}
+            {detail?.sat_fat_g != null ? <Muted>Saturadas {fmt(detail.sat_fat_g)} g</Muted> : null}
+            {detail?.fiber_g != null ? <Muted>Fibra {fmt(detail.fiber_g)} g</Muted> : null}
+            {detail?.sodium_mg != null ? <Muted>Sodio {fmt(detail.sodium_mg)} mg</Muted> : null}
           </View>
         </View>
         {detail?.user_id == null ? <AppButton title="Crear mi versión editable" variant="quiet" onPress={() => void copySelectedFood()} loading={loading} /> : null}
@@ -1057,7 +1062,7 @@ export default function NutritionScreen() {
                 </View>}
             <View style={{ flex: 1, gap: 3 }}>
               <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
-              <Muted>{food.brand ? food.brand + " · " : ""}{fmt(food.kcal)} kcal/100 g · P {fmt(food.protein_g, 1)} g</Muted>
+              <Muted>{food.brand ? food.brand + " · " : ""}{fmt(food.kcal)} kcal/100 g · P {fmt(food.protein_g)} g</Muted>
               <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>Abrir ficha nutricional ›</Text>
             </View>
           </Pressable>)}
@@ -1155,7 +1160,7 @@ export default function NutritionScreen() {
             <Text style={{ color: colors.accent, fontWeight: "800" }}>{Math.round(entry.kcal)} kcal</Text>
           </View>
           <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-            <Muted>{entry.time} · {entry.grams} g · {entry.meal}</Muted>
+            <Muted>{entry.time} · {entry.grams} g · {meals.find(item => item.value === entry.meal)?.label ?? entry.meal}</Muted>
             <View style={{ flexDirection: "row", gap: 12 }}>
               <Text onPress={() => setEditingLog({ id: entry.id, grams: String(entry.grams), meal: meals.some(item => item.value === entry.meal) ? entry.meal as Meal : "lunch" })} style={{ color: colors.accent, fontWeight: "700", padding: 5 }}>Editar</Text>
               <Text onPress={() => deleteLog(entry.id)} style={{ color: colors.danger, fontWeight: "700", padding: 5 }}>Eliminar</Text>
