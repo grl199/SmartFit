@@ -24,6 +24,31 @@ export default function DashboardScreen() {
     catch(e){setError(e instanceof Error?e.message:"No se pudo registrar el agua.");}
   }
   const totals=data?.totals,target=data?.targets;
+  const mealDefinitions = [
+    { key: "breakfast", label: "Desayuno", icon: "☀️", color: colors.blue },
+    { key: "mid_morning", label: "Almuerzo", icon: "🍎", color: colors.orange },
+    { key: "lunch", label: "Comida", icon: "🍽️", color: colors.accent },
+    { key: "snack", label: "Merienda", icon: "☕", color: colors.danger },
+    { key: "dinner", label: "Cena", icon: "🌙", color: colors.muted },
+  ];
+  const mealValues = mealDefinitions.map(meal => ({
+    ...meal,
+    kcal: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.kcal, 0) ?? 0,
+    protein_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.protein_g, 0) ?? 0,
+    carbs_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.carbs_g, 0) ?? 0,
+    fat_g: data?.entries.filter(entry => entry.meal === meal.key).reduce((sum, entry) => sum + entry.fat_g, 0) ?? 0,
+  }));
+  const kcalGoal = target?.kcal > 0 ? target.kcal : 2500;
+  const contributionRows = [
+    { key: "kcal" as const, label: "Energía", unit: "kcal", goal: kcalGoal },
+    { key: "protein_g" as const, label: "Proteína", unit: "g", goal: target?.protein_g > 0 ? target.protein_g : kcalGoal * .15 / 4 },
+    { key: "carbs_g" as const, label: "Hidratos", unit: "g", goal: target?.carbs_g > 0 ? target.carbs_g : kcalGoal * .55 / 4 },
+    { key: "fat_g" as const, label: "Grasas", unit: "g", goal: target?.fat_g > 0 ? target.fat_g : kcalGoal * .3 / 9 },
+  ].map(row => {
+    const total = mealValues.reduce((sum, meal) => sum + meal[row.key], 0);
+    const visualMax = Math.max(row.goal * 1.18, total * 1.08, 1);
+    return { ...row, total, visualMax, marker: Math.min(100, row.goal / visualMax * 100) };
+  });
   return <Screen>
     <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:"center"}}>
       <View><Text style={{color:colors.accent,fontSize:11,fontWeight:"900",letterSpacing:1.4}}>SMARTFIT</Text><Text style={{color:colors.text,fontSize:14,fontWeight:"700",marginTop:4}}>Hola, {user?.name}</Text></View>
@@ -54,6 +79,28 @@ export default function DashboardScreen() {
         <ProgressBar value={clampPercent(item.amount??0,item.target??0)} color={item.color}/>
       </Panel>)}
     </View>
+    <SectionTitle title="Contribución de cada comida"/>
+    <Panel>
+      <Muted>Cómo se reparte tu ingesta entre las comidas del día. La línea marca el objetivo nutricional.</Muted>
+      <View style={{flexDirection:"row",flexWrap:"wrap",gap:10}}>
+        {mealDefinitions.map(meal=><View key={meal.key} style={{flexDirection:"row",alignItems:"center",gap:5}}>
+          <View style={{width:9,height:9,borderRadius:3,backgroundColor:meal.color}}/>
+          <Muted>{meal.icon} {meal.label}</Muted>
+        </View>)}
+      </View>
+      {contributionRows.map(row=><View key={row.key} style={{gap:5}}>
+        <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:"baseline"}}>
+          <Text style={{color:colors.text,fontWeight:"800",fontSize:12}}>{row.label}</Text>
+          <Muted>{row.total.toLocaleString("es-ES",{maximumFractionDigits:1})} / {row.goal.toLocaleString("es-ES",{maximumFractionDigits:1})} {row.unit}</Muted>
+        </View>
+        <View style={{height:13,borderRadius:8,backgroundColor:colors.surfaceRaised,overflow:"hidden",flexDirection:"row",position:"relative"}}>
+          {mealValues.map(meal=>meal[row.key]>0?<View key={meal.key} style={{height:13,width:(meal[row.key]/row.visualMax*100)+"%",backgroundColor:meal.color}}/>:null)}
+          <View style={{position:"absolute",left:row.marker+"%",top:0,bottom:0,width:2,backgroundColor:colors.text}}/>
+        </View>
+        <Muted>{row.total>row.goal?"Por encima del objetivo · +"+(row.total-row.goal).toLocaleString("es-ES",{maximumFractionDigits:1})+" "+row.unit:"Restan "+(row.goal-row.total).toLocaleString("es-ES",{maximumFractionDigits:1})+" "+row.unit}</Muted>
+      </View>)}
+      <Muted>Las metas de macros sin objetivo personalizado usan referencias provisionales. El gráfico muestra calorías, proteína, hidratos y grasas; no incluye nutrientes que el resumen móvil no devuelve por comida.</Muted>
+    </Panel>
     <SectionTitle title="Hidratación"/>
     <Panel>
       <View style={{flexDirection:"row",justifyContent:"space-between",alignItems:"baseline"}}>
