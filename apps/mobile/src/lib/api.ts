@@ -55,6 +55,33 @@ export function publicApi<T>(path: string, options: Omit<ApiRequestOptions, "bas
   return apiRequest<T>(path, { ...options, baseUrl: API_BASE_URL });
 }
 
+export async function apiUpload<T>(path: string, formData: FormData, token: string): Promise<T> {
+  const send = (activeToken: string) => fetch(API_BASE_URL + path, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + activeToken },
+    body: formData,
+  });
+  let response = await send(token);
+  if (response.status === 401 && !path.startsWith("/auth/session/")) {
+    const refreshed = await refreshSession();
+    if (refreshed) response = await send(refreshed.access_token);
+  }
+  if (!response.ok) {
+    let message = "Error de API (" + response.status + ")";
+    try {
+      const payload: unknown = await response.json();
+      if (payload && typeof payload === "object" && "detail" in payload && typeof payload.detail === "string") {
+        message = payload.detail;
+      }
+    } catch {
+      // La respuesta puede no ser JSON.
+    }
+    throw new ApiError(message, response.status);
+  }
+  if (response.status === 204) return undefined as T;
+  return response.json() as Promise<T>;
+}
+
 export type TokenResponse = SessionResponse;
 export type DashboardDay = {
   date: string;
