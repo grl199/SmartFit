@@ -1,5 +1,5 @@
-import React, { createElement, useMemo, useState } from "react";
-import { ActivityIndicator, Platform, Text, View } from "react-native";
+import React, { createElement, useEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Platform, Pressable, Text, View } from "react-native";
 import { WebView } from "react-native-webview";
 import { EXERCISE_ANIMATION_HTML } from "@/lib/exercise-animation-html";
 import { colors } from "@/theme";
@@ -11,6 +11,8 @@ const REQUESTED_EXERCISE_LINE =
 
 export function ExerciseAnimation({ exerciseName }: Props) {
   const [failed, setFailed] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
+  useEffect(() => { setFailed(false); setReloadKey(value => value + 1); }, [exerciseName]);
   const html = useMemo(() => {
     const selectedName = JSON.stringify(exerciseName.trim());
     const replacement =
@@ -27,8 +29,11 @@ export function ExerciseAnimation({ exerciseName }: Props) {
     }}>
       <Text style={{ color: colors.text, fontWeight: "800", textAlign: "center" }}>No se pudo cargar la animación 3D</Text>
       <Text style={{ color: colors.muted, fontSize: 12, textAlign: "center" }}>
-        Comprueba tu conexión a internet y vuelve a abrir la ficha. El motor 3D carga Three.js desde una CDN.
+        Comprueba tu conexión a internet. El motor 3D carga Three.js desde una CDN.
       </Text>
+      <Pressable onPress={() => { setFailed(false); setReloadKey(value => value + 1); }} accessibilityRole="button" style={{ paddingVertical: 8, paddingHorizontal: 14 }}>
+        <Text style={{ color: colors.accent, fontWeight: "800" }}>Reintentar animación</Text>
+      </Pressable>
     </View>;
   }
 
@@ -52,6 +57,7 @@ export function ExerciseAnimation({ exerciseName }: Props) {
     borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface,
   }}>
     <WebView
+      key={exerciseName + ":" + reloadKey}
       source={{ html, baseUrl: "https://smartfit.local" }}
       originWhitelist={["*"]}
       javaScriptEnabled
