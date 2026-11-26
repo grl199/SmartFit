@@ -38,8 +38,7 @@ jobs:
           python -m pip install -r backend/requirements.txt
 
       - name: Run backend unit and OpenAPI tests
-        working-directory: backend
-        run: pytest -q tests/test_pure.py tests/test_openapi.py
+        run: cd backend && PYTHONPATH="$PWD" pytest -q tests/test_pure.py tests/test_openapi.py
 
       - name: Install workspace
         run: pnpm install --no-frozen-lockfile
