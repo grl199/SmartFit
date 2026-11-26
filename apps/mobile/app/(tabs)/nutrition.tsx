@@ -532,8 +532,57 @@ export default function NutritionScreen() {
     } finally { setLoading(false); }
   }
 
+  function recalculateFoodEstimate(items: FoodEstimate["items"], original: FoodEstimate): FoodEstimate {
+    const total_grams = items.reduce((sum, item) => sum + (Number.isFinite(item.grams) ? item.grams : 0), 0);
+    const totals = {
+      kcal: items.reduce((sum, item) => sum + item.kcal_per_100g * item.grams / 100, 0),
+      protein_g: items.reduce((sum, item) => sum + item.protein_g_per_100g * item.grams / 100, 0),
+      carbs_g: items.reduce((sum, item) => sum + item.carbs_g_per_100g * item.grams / 100, 0),
+      sugars_g: items.reduce((sum, item) => sum + item.sugars_g_per_100g * item.grams / 100, 0),
+      fat_g: items.reduce((sum, item) => sum + item.fat_g_per_100g * item.grams / 100, 0),
+      sat_fat_g: items.reduce((sum, item) => sum + item.sat_fat_g_per_100g * item.grams / 100, 0),
+      fiber_g: items.reduce((sum, item) => sum + item.fiber_g_per_100g * item.grams / 100, 0),
+      sodium_mg: items.reduce((sum, item) => sum + item.sodium_mg_per_100g * item.grams / 100, 0),
+    };
+    const factor = total_grams > 0 ? 100 / total_grams : 0;
+    return {
+      ...original,
+      items,
+      total_grams,
+      totals,
+      per_100g: {
+        kcal_per_100g: totals.kcal * factor,
+        protein_g_per_100g: totals.protein_g * factor,
+        carbs_g_per_100g: totals.carbs_g * factor,
+        sugars_g_per_100g: totals.sugars_g * factor,
+        fat_g_per_100g: totals.fat_g * factor,
+        sat_fat_g_per_100g: totals.sat_fat_g * factor,
+        fiber_g_per_100g: totals.fiber_g * factor,
+        sodium_mg_per_100g: totals.sodium_mg * factor,
+      },
+    };
+  }
+
+  function updateEstimateItem(index: number, patch: Partial<FoodEstimate["items"][number]>) {
+    setEstimateResult(current => current
+      ? recalculateFoodEstimate(current.items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item), current)
+      : current);
+  }
+
+  function removeEstimateItem(index: number) {
+    setEstimateResult(current => current
+      ? recalculateFoodEstimate(current.items.filter((_, itemIndex) => itemIndex !== index), current)
+      : current);
+  }
+
   async function confirmEstimate() {
     if (!token || !estimateResult) return;
+    if (estimateResult.items.length === 0 || estimateResult.items.some(item =>
+      !item.name.trim() || !Number.isFinite(item.grams) || item.grams <= 0 || item.grams > 5000) ||
+      estimateResult.total_grams <= 0 || estimateResult.total_grams > 5000) {
+      setError("Revisa los ingredientes: debe quedar al menos uno y las cantidades deben sumar entre 1 y 5000 gramos.");
+      return;
+    }
     const values = estimateResult.per_100g;
     setLoading(true); setError(""); setNotice("");
     try {
@@ -885,9 +934,12 @@ export default function NutritionScreen() {
         {estimateResult ? <View style={{ gap: 8 }}>
           <Text style={{ color: colors.text, fontWeight: "900", fontSize: 16 }}>{estimateResult.name}</Text>
           <Text style={{ color: colors.accent, fontWeight: "800" }}>{fmt(estimateResult.total_grams)} g · {fmt(estimateResult.per_100g.kcal_per_100g * estimateResult.total_grams / 100)} kcal estimadas</Text>
-          {estimateResult.items.map((item, index) => <View key={index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7 }}>
-            <Text style={{ color: colors.text, fontWeight: "700" }}>{item.name} · {fmt(item.grams)} g</Text>
+          <SectionTitle title="Revisar y ajustar ingredientes" action={estimateResult.items.length + " ingredientes"} />
+          {estimateResult.items.map((item, index) => <View key={index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 7, gap: 5 }}>
+            <Field label="Ingrediente" value={item.name} onChangeText={value => updateEstimateItem(index, { name: value })} />
+            <Field label="Cantidad estimada (g)" value={String(item.grams)} onChangeText={value => updateEstimateItem(index, { grams: Number(value.replace(",", ".")) })} keyboardType="decimal-pad" />
             <Muted>{fmt(item.kcal_per_100g)} kcal/100 g · confianza {item.confidence === "medium" ? "media" : "baja"}</Muted>
+            <Text onPress={() => removeEstimateItem(index)} style={{ color: colors.danger, fontWeight: "700", paddingVertical: 4 }}>Eliminar ingrediente</Text>
           </View>)}
           {estimateResult.assumptions.map((item, index) => <Muted key={index}>• {item}</Muted>)}
           <Muted>La estimación es orientativa, no equivale a un análisis de laboratorio.</Muted>
