@@ -1,6 +1,7 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, Image, Platform, Pressable, Text, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from "expo-audio";
 import { api, apiUpload, type DashboardDay, type FoodSearchResult } from "@/lib/api";
 import { localDateISO, formatKcal, clampPercent } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
@@ -75,6 +76,10 @@ export default function NutritionScreen() {
   const [barcodeResult, setBarcodeResult] = useState<BarcodeResult | null>(null);
   const [barcodeScannerVisible, setBarcodeScannerVisible] = useState(false);
   const [estimatePhoto, setEstimatePhoto] = useState<ImagePicker.ImagePickerAsset | null>(null);
+  const [voiceNoteUri, setVoiceNoteUri] = useState<string | null>(null);
+  const voiceRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
+  const voiceRecorderState = useAudioRecorderState(voiceRecorder, 400);
+  const wasRecording = useRef(false);
   const [estimateCapabilities, setEstimateCapabilities] = useState<{ description: boolean; photo: boolean; audio: boolean } | null>(null);
   const [estimateDescription, setEstimateDescription] = useState("");
   const [estimateResult, setEstimateResult] = useState<FoodEstimate | null>(null);
@@ -116,6 +121,13 @@ export default function NutritionScreen() {
   }, [token, date]);
 
   useEffect(() => { void load(); }, [load]);
+
+  useEffect(() => {
+    if (wasRecording.current && !voiceRecorderState.isRecording && !voiceNoteUri && voiceRecorder.uri) {
+      setVoiceNoteUri(voiceRecorder.uri);
+    }
+    wasRecording.current = voiceRecorderState.isRecording;
+  }, [voiceRecorderState.isRecording, voiceRecorder, voiceNoteUri]);
 
   useEffect(() => {
     if (!token) return;
@@ -332,6 +344,62 @@ export default function NutritionScreen() {
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudo abrir la cámara o la galería.");
     }
+  }
+
+  async function startVoiceNote() {
+    if (estimateCapabilities?.audio === false) {
+      setError("La transcripción de audio no está configurada en el servidor.");
+      return;
+    }
+    setError("");
+    try {
+      const permission = await AudioModule.requestRecordingPermissionsAsync();
+      if (!permission.granted) {
+        setError("Necesitas permitir el acceso al micrófono para grabar una nota de voz.");
+        return;
+      }
+      await setAudioModeAsync({ playsInSilentMode: true, allowsRecording: true });
+      await voiceRecorder.prepareToRecordAsync();
+      setVoiceNoteUri(null);
+      voiceRecorder.record({ forDuration: 120 });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo iniciar la grabación.");
+    }
+  }
+
+  async function stopVoiceNote() {
+    try {
+      await voiceRecorder.stop();
+      setVoiceNoteUri(voiceRecorder.uri);
+      await setAudioModeAsync({ allowsRecording: false, playsInSilentMode: true });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo finalizar la grabación.");
+    }
+  }
+
+  async function transcribeVoiceNote() {
+    if (!token || !voiceNoteUri) return;
+    setLoading(true); setError(""); setNotice("");
+    try {
+      const form = new FormData();
+      if (Platform.OS === "web") {
+        const response = await fetch(voiceNoteUri);
+        const blob = await response.blob();
+        form.append("audio", blob, "nota-de-voz.webm");
+      } else {
+        form.append("audio", {
+          uri: voiceNoteUri,
+          name: "nota-de-voz.m4a",
+          type: "audio/mp4",
+        } as unknown as Blob);
+      }
+      const result = await apiUpload<{ transcript: string }>("/foods/transcribe-audio", form, token);
+      setEstimateDescription(current => current.trim() ? current.trim() + "\\n" + result.transcript : result.transcript);
+      setVoiceNoteUri(null);
+      setNotice("Nota de voz transcrita. Revisa el texto y pulsa «Estimar nutrientes».");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo transcribir la nota de voz.");
+    } finally { setLoading(false); }
   }
 
   async function estimateFood() {
@@ -659,6 +727,27 @@ export default function NutritionScreen() {
       <Panel>
         <Muted>Describe el plato o adjunta una foto. SmartFit propondrá ingredientes, cantidades y nutrientes aproximados. Revisa la estimación antes de guardarla.</Muted>
         <Field label="Descripción (opcional con foto)" value={estimateDescription} onChangeText={setEstimateDescription} multiline numberOfLines={3} maxLength={2000} placeholder="Ej. Arroz con pollo, verduras y aceite de oliva…" />
+        <View style={{ flexDirection: "row", gap: 8 }}>
+          <View style={{ flex: 1 }}><AppButton
+            title={voiceRecorderState.isRecording ? "Grabando…" : "Grabar nota de voz"}
+            onPress={() => void startVoiceNote()} loading={loading}
+            disabled={voiceRecorderState.isRecording || estimateCapabilities?.audio === false}
+            variant="secondary"
+          /></View>
+          <View style={{ flex: 1 }}><AppButton
+            title="Detener grabación"
+            onPress={() => void stopVoiceNote()}
+            disabled={!voiceRecorderState.isRecording}
+            variant="quiet"
+          /></View>
+        </View>
+        {voiceRecorderState.isRecording ? <Muted>Grabando {Math.floor(voiceRecorderState.durationMillis / 1000)} s · máximo 120 s</Muted> : null}
+        {voiceNoteUri ? <View style={{ gap: 6 }}>
+          <Muted>Nota de voz preparada ({Math.round(voiceRecorderState.durationMillis / 1000)} s).</Muted>
+          <AppButton title="Transcribir nota de voz" onPress={() => void transcribeVoiceNote()} loading={loading} />
+          <Text onPress={() => setVoiceNoteUri(null)} style={{ color: colors.danger, fontWeight: "800", padding: 5 }}>Descartar audio</Text>
+        </View> : null}
+        {estimateCapabilities?.audio === false ? <Muted>La transcripción de audio no está habilitada en este servidor.</Muted> : null}
         <View style={{ flexDirection: "row", gap: 8 }}>
           <View style={{ flex: 1 }}><AppButton title="Hacer foto" variant="secondary" onPress={() => void chooseMealPhoto("camera")} loading={loading} /></View>
           <View style={{ flex: 1 }}><AppButton title="Galería" variant="secondary" onPress={() => void chooseMealPhoto("library")} loading={loading} /></View>
