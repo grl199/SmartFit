@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, Alert, Text, View } from "react-native";
+import { ActivityIndicator, Alert, Linking, Text, View } from "react-native";
 import { api } from "@/lib/api";
 import { dateLabel, localDateISO } from "@/lib/format";
 import { useAuth } from "@/auth/AuthProvider";
@@ -21,7 +21,9 @@ type PlanExercise = { id: number; exercise_id: number; exercise: string; sets: n
 type PlanDay = { id: number; position: number; label: string; muscle_focus: string[]; exercises: PlanExercise[] };
 type PlanResponse = { has_plan: boolean; plan?: { id: number; name: string; source: string; days: PlanDay[] } | null; legacy_markdown?: string | null };
 type MuscleSummary = { start: string; end: string; sessions: number; muscles: Record<string, { sets: number; strength_sets: number; cardio_sets: number; volume_kg: number; exercises: string[] }> };
-type Content = { description?: string | null; start_position?: string | null; instructions?: string[]; common_mistakes?: string[]; image_url?: string | null; video_url?: string | null };
+type Content = { description?: string | null; start_position?: string | null; instructions?: string[]; common_mistakes?: string[]; image_url?: string | null; video_url?: string | null; media_type?: string | null; media_credit?: string | null };
+type ExerciseHistory = Array<{ workout_id: number; date: string; sets: Array<{ set_number: number; reps: number; weight_kg?: number | null; reached_failure?: boolean | null; rpe?: number | null }> }>;
+type ExerciseProgress = Array<{ date: string; best_weight_kg?: number | null; est_1rm_kg?: number | null; sets: number; volume_kg: number }>;
 type Tab = "session" | "plan" | "history" | "muscles";
 type PlanExerciseDraft = { exercise_id: number; exercise: string; sets: string; reps_min: string; reps_max: string; rest_s: string; notes: string };
 const muscleOptions = ["chest","shoulders","biceps","triceps","forearms","abs","quadriceps","hamstrings","glutes","calves","lats","upper_back","lower_back","traps","neck","abductors","adductors"];
@@ -45,6 +47,8 @@ export default function TrainingScreen() {
   const [query, setQuery] = useState("");
   const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
   const [exerciseContent, setExerciseContent] = useState<Content | null>(null);
+  const [exerciseHistory, setExerciseHistory] = useState<ExerciseHistory>([]);
+  const [exerciseProgress, setExerciseProgress] = useState<ExerciseProgress>([]);
   const [date, setDate] = useState(localDateISO());
   const [name, setName] = useState("Entrenamiento");
   const [category, setCategory] = useState("strength");
@@ -113,10 +117,19 @@ export default function TrainingScreen() {
     if (!token) return;
     setSelectedExercise(exercise);
     setExerciseContent(null);
+    setExerciseHistory([]);
+    setExerciseProgress([]);
     try {
-      setExerciseContent(await api<Content>("/exercises/" + exercise.id + "/content", token));
+      const [content, history, progress] = await Promise.all([
+        api<Content>("/exercises/" + exercise.id + "/content", token),
+        api<ExerciseHistory>("/exercises/" + exercise.id + "/history?limit=10", token),
+        api<ExerciseProgress>("/exercises/" + exercise.id + "/progress", token),
+      ]);
+      setExerciseContent(content);
+      setExerciseHistory(history);
+      setExerciseProgress(progress);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "No se pudo cargar la ficha del ejercicio.");
+      setError(reason instanceof Error ? reason.message : "No se pudo cargar el historial del ejercicio.");
     }
   }
 
@@ -373,6 +386,22 @@ export default function TrainingScreen() {
         {exerciseContent?.start_position ? <Text style={{ color: colors.text, fontWeight: "700" }}>Posición inicial: {exerciseContent.start_position}</Text> : null}
         {exerciseContent?.instructions?.map((instruction, index) => <Muted key={index}>{index + 1}. {instruction}</Muted>)}
         {exerciseContent?.common_mistakes?.length ? <Muted>Errores frecuentes: {exerciseContent.common_mistakes.join(" · ")}</Muted> : null}
+        {exerciseContent?.image_url ? <Text onPress={() => void Linking.openURL(exerciseContent.image_url!)} style={{ color: colors.accent, fontWeight: "800", paddingVertical: 5 }}>Abrir imagen demostrativa ↗</Text> : null}
+        {exerciseContent?.video_url ? <Text onPress={() => void Linking.openURL(exerciseContent.video_url!)} style={{ color: colors.accent, fontWeight: "800", paddingVertical: 5 }}>Ver vídeo demostrativo ↗</Text> : null}
+        {exerciseContent?.media_credit ? <Muted>Crédito: {exerciseContent.media_credit}</Muted> : null}
+        <SectionTitle title="Evolución de cargas" action={exerciseProgress.length + " sesiones"} />
+        {exerciseProgress.length ? exerciseProgress.slice().reverse().map((item, index) => <View key={item.date + index} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
+          <Text style={{ color: colors.text, fontWeight: "800" }}>{dateLabel(item.date)}</Text>
+          <Muted>Mejor peso {fmt(item.best_weight_kg, 1)} kg · 1RM estimado {fmt(item.est_1rm_kg, 1)} kg</Muted>
+          <Muted>{item.sets} series · volumen {fmt(item.volume_kg)} kg</Muted>
+        </View>) : <Muted>Aún no hay suficientes sesiones para calcular la evolución.</Muted>}
+        <SectionTitle title="Últimas sesiones del ejercicio" action={exerciseHistory.length + " registros"} />
+        {exerciseHistory.map(item => <View key={item.workout_id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
+          <Text style={{ color: colors.text, fontWeight: "800" }}>{dateLabel(item.date)}</Text>
+          <Muted>{item.sets.map(set => "S" + set.set_number + ": " + set.reps + " reps" +
+            (set.weight_kg == null ? "" : " × " + fmt(set.weight_kg, 1) + " kg") +
+            (set.reached_failure ? " · fallo" : "")).join("  |  ")}</Muted>
+        </View>)}
         <Text onPress={() => setSelectedExercise(null)} style={{ color: colors.accent, fontWeight: "800" }}>Cerrar ficha</Text>
       </Panel> : null}
       {drafts.map(item => <Panel key={item.exercise.id}>
