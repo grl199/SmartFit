@@ -10,11 +10,11 @@ permissions:
 
 jobs:
   backend-and-contracts:
-    name: Python tests, API contracts and web
+    name: Python tests, API contracts, web and mobile
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     env:
-      PYTHONPATH: ${{ github.workspace }}/backend
+      PYTHONPATH: \${{ github.workspace }}/backend
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -49,11 +49,17 @@ jobs:
       - name: Generate OpenAPI and TypeScript contracts
         run: pnpm contracts:generate
 
-      - name: Type-check contracts and web
+      - name: Type-check contracts, web and mobile
         run: pnpm typecheck
+
+      - name: Test mobile helpers
+        run: pnpm test:mobile
 
       - name: Build web
         run: pnpm build:web
+
+      - name: Export mobile bundles
+        run: pnpm build:mobile
 
       - name: Build production web container
         run: docker build -f apps/web/Dockerfile -t smartfit-web:ci .

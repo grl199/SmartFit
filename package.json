@@ -2,11 +2,14 @@
   "name": "smartfit",
   "private": true,
   "packageManager": "pnpm@10.12.1",
-  "engines": { "node": ">=20.19.0" },
+  "engines": { "node": ">=22.13.0" },
   "scripts": {
     "contracts:generate": "python backend/scripts/export_openapi.py && pnpm --filter @smartfit/contracts generate",
-    "typecheck": "pnpm --filter @smartfit/contracts typecheck && pnpm --filter @smartfit/api-client typecheck && pnpm --filter @smartfit/web typecheck",
+    "typecheck": "pnpm --filter @smartfit/contracts typecheck && pnpm --filter @smartfit/api-client typecheck && pnpm --filter @smartfit/web typecheck && pnpm --filter @smartfit/mobile typecheck",
     "dev:web": "pnpm --filter @smartfit/web dev",
-    "build:web": "pnpm --filter @smartfit/web build"
+    "build:web": "pnpm --filter @smartfit/web build",
+    "dev:mobile": "pnpm --filter @smartfit/mobile dev",
+    "test:mobile": "pnpm --filter @smartfit/mobile test",
+    "build:mobile": "pnpm --filter @smartfit/mobile export"
   }
 }

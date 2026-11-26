@@ -1,0 +1,11 @@
+{
+  "expo":{
+    "name":"SmartFit","slug":"smartfit-mobile","scheme":"smartfit","version":"0.1.0",
+    "orientation":"portrait","userInterfaceStyle":"dark","newArchEnabled":true,
+    "plugins":["expo-router",["expo-secure-store",{"configureAndroidBackup":true,"faceIDPermission":"Permite a SmartFit proteger tu sesión."}]],
+    "experiments":{"typedRoutes":true},
+    "ios":{"supportsTablet":true,"bundleIdentifier":"com.smartfit.mobile"},
+    "android":{"package":"com.smartfit.mobile","adaptiveIcon":{"backgroundColor":"#101914"}},
+    "web":{"bundler":"metro"}
+  }
+}
