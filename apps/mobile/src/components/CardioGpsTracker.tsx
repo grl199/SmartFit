@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert, AppState, Platform, Text, View } from "react-native";
+import { Alert, AppState, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { useKeepAwake } from "expo-keep-awake";
 import { WebView } from "react-native-webview";
