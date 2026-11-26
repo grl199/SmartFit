@@ -30,7 +30,6 @@ export default function AssistantScreen() {
   const audioRecorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const audioRecorderState = useAudioRecorderState(audioRecorder, 400);
   const wasRecording = useRef(false);
-  const wasRecording = useRef(false);
   const [renamingId, setRenamingId] = useState<number | null>(null);
   const [renameTitle, setRenameTitle] = useState("");
   const [loading, setLoading] = useState(true);
@@ -92,13 +91,6 @@ export default function AssistantScreen() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [selectedId, token]);
-
-  useEffect(() => {
-    if (wasRecording.current && !audioRecorderState.isRecording && !audioUri && audioRecorder.uri) {
-      setAudioUri(audioRecorder.uri);
-    }
-    wasRecording.current = audioRecorderState.isRecording;
-  }, [audioRecorderState.isRecording, audioRecorder, audioUri]);
 
   function startConversation() {
     setSelectedId(null);
