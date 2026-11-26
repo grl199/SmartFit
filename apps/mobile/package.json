@@ -1,12 +1,40 @@
 {
-  "name":"@smartfit/mobile","version":"0.1.0","private":true,"main":"expo-router/entry",
-  "engines":{"node":">=22.13.0"},
-  "scripts":{"dev":"expo start","android":"expo start --android","ios":"expo start --ios","web":"expo start --web","typecheck":"tsc --noEmit","test":"jest --runInBand","export":"expo export --platform all"},
-  "dependencies":{
-    "@expo/vector-icons":"^15.0.2","@smartfit/api-client":"workspace:*","@smartfit/contracts":"workspace:*",
-    "expo":"~58.0.26","expo-router":"~58.0.32","expo-secure-store":"~58.0.2","expo-status-bar":"~58.0.4",
-    "react":"19.3.0","react-dom":"19.3.0","react-native":"0.88.0","react-native-web":"~0.21.4",
-    "react-native-safe-area-context":"~5.11.1"
+  "name": "@smartfit/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "expo-router/entry",
+  "engines": {
+    "node": ">=22.13.0"
   },
-  "devDependencies":{"@types/jest":"^30.0.0","@types/react":"~19.2.2","jest":"^30.1.3","jest-expo":"~58.0.12","typescript":"~5.9.3"}
+  "scripts": {
+    "dev": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "test": "jest --runInBand",
+    "export": "expo export --platform all"
+  },
+  "dependencies": {
+    "@expo/vector-icons": "^15.0.2",
+    "@smartfit/api-client": "workspace:*",
+    "@smartfit/contracts": "workspace:*",
+    "expo": "~58.0.26",
+    "expo-router": "~58.0.32",
+    "expo-secure-store": "~58.0.2",
+    "expo-status-bar": "~58.0.4",
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "react-native": "0.88.0",
+    "react-native-web": "~0.21.4",
+    "react-native-safe-area-context": "~5.11.1",
+    "react-native-webview": "14.0.1"
+  },
+  "devDependencies": {
+    "@types/jest": "^30.0.0",
+    "@types/react": "~19.2.2",
+    "jest": "^30.1.3",
+    "jest-expo": "~58.0.12",
+    "typescript": "~5.9.3"
+  }
 }
