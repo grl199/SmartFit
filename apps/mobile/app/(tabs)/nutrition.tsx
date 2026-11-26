@@ -12,6 +12,7 @@ type OwnedFood = {
   kcal: number; protein_g: number; carbs_g: number; sugars_g: number; fat_g: number;
   sat_fat_g: number; fiber_g: number; sodium_mg: number; times_used: number; share_status: string;
 };
+type FoodCatalogSection = { id: string; title: string; description?: string; icon?: string; count: number; foods: FoodSearchResult[] };
 type FoodDraft = {
   name: string; brand: string; barcode: string; serving_g: string; kcal: string; protein_g: string;
   carbs_g: string; sugars_g: string; fat_g: string; sat_fat_g: string; fiber_g: string; sodium_mg: string;
@@ -60,7 +61,7 @@ const fmt = (value: number | null | undefined) => value == null ? "—" : Math.r
 
 export default function NutritionScreen() {
   const { token } = useAuth();
-  const [section, setSection] = useState<"diary" | "recipes" | "foods">("diary");
+  const [section, setSection] = useState<"diary" | "recipes" | "foods" | "catalog">("diary");
   const [date, setDate] = useState(localDateISO());
   const [data, setData] = useState<DashboardDay | null>(null);
   const [query, setQuery] = useState("");
@@ -73,6 +74,9 @@ export default function NutritionScreen() {
   const [estimateResult, setEstimateResult] = useState<FoodEstimate | null>(null);
   const [recipes, setRecipes] = useState<RecipeSummary[]>([]);
   const [ownedFoods, setOwnedFoods] = useState<OwnedFood[]>([]);
+  const [catalogSections, setCatalogSections] = useState<FoodCatalogSection[]>([]);
+  const [catalogCategory, setCatalogCategory] = useState("");
+  const [catalogQuery, setCatalogQuery] = useState("");
   const [foodDraft, setFoodDraft] = useState<FoodDraft>(emptyFoodDraft());
   const [editingFoodId, setEditingFoodId] = useState<number | null>(null);
   const [selectedRecipe, setSelectedRecipe] = useState<RecipeDetail | null>(null);
@@ -115,6 +119,18 @@ export default function NutritionScreen() {
       setRecipes(items);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "No se pudieron cargar las recetas.");
+    } finally { setLoading(false); }
+  }
+
+  async function loadCatalog() {
+    if (!token) return;
+    setLoading(true); setError("");
+    try {
+      const result = await api<{ sections: FoodCatalogSection[] }>("/foods/catalog", token);
+      setCatalogSections(result.sections);
+      setCatalogCategory(current => result.sections.some(item => item.id === current) ? current : result.sections[0]?.id ?? "");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : "No se pudo cargar el catálogo de alimentos.");
     } finally { setLoading(false); }
   }
 
@@ -537,8 +553,8 @@ export default function NutritionScreen() {
 
   return <Screen>
     <PageTitle eyebrow="Nutrición" title="Alimenta tu progreso" subtitle="Diario de alimentos y recetas, sincronizados con tu cuenta." />
-    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); if (value === "foods") void loadOwnedFoods(); }} options={[
-      { value: "diary", label: "Diario" }, { value: "recipes", label: "Recetas" }, { value: "foods", label: "Mis alimentos" },
+    <ChoiceRow value={section} onChange={value => { setSection(value); setError(""); if (value === "recipes") void loadRecipes(); if (value === "foods") void loadOwnedFoods(); if (value === "catalog") void loadCatalog(); }} options={[
+      { value: "diary", label: "Diario" }, { value: "catalog", label: "Catálogo" }, { value: "recipes", label: "Recetas" }, { value: "foods", label: "Mis alimentos" },
     ]} />
     <ErrorMessage message={error} />
     {notice ? <Text style={{ color: colors.accent, fontSize: 13 }}>{notice}</Text> : null}
@@ -627,6 +643,37 @@ export default function NutritionScreen() {
         </View> : null}
       </Panel>
       <AppButton title="Actualizar resumen" variant="quiet" onPress={() => void load()} />
+    </> : null}
+
+    {section === "catalog" ? <>
+      <SectionTitle title="Catálogo de alimentos" action={catalogSections.reduce((sum, item) => sum + item.count, 0) + " alimentos"} />
+      <Muted>Explora alimentos por categoría y añádelos al diario con la cantidad y comida seleccionadas.</Muted>
+      <Field label="Filtrar esta categoría" value={catalogQuery} onChangeText={setCatalogQuery} placeholder="Buscar por nombre…" />
+      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 7 }}>
+        {catalogSections.map(item => <Pressable key={item.id} onPress={() => setCatalogCategory(item.id)} style={{
+          paddingVertical: 8, paddingHorizontal: 11, borderRadius: 12, borderWidth: 1,
+          borderColor: item.id === catalogCategory ? colors.accent : colors.border,
+          backgroundColor: item.id === catalogCategory ? colors.accentDark : colors.surfaceRaised,
+        }}>
+          <Text style={{ color: item.id === catalogCategory ? colors.accent : colors.muted, fontWeight: "800", fontSize: 11 }}>
+            {item.title} · {item.count}
+          </Text>
+        </Pressable>)}
+      </View>
+      {loading ? <ActivityIndicator color={colors.accent} /> : null}
+      {catalogSections.filter(item => item.id === catalogCategory).flatMap(item => item.foods)
+        .filter(food => !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
+          (food.brand ?? "").toLowerCase().includes(catalogQuery.trim().toLowerCase()))
+        .map(food => <Pressable key={food.id} onPress={() => void addFood(food)} style={{
+          paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 3,
+        }}>
+          <Text style={{ color: colors.text, fontWeight: "800" }}>{food.name}</Text>
+          <Muted>{food.brand ?? "Alimento genérico"} · {fmt(food.kcal)} kcal/100 g · proteína {fmt(food.protein_g)} g</Muted>
+          <Text style={{ color: colors.accent, fontSize: 12, fontWeight: "800" }}>＋ Añadir {grams} g a {meals.find(item => item.value === meal)?.label.toLowerCase()}</Text>
+        </Pressable>)}
+      {!loading && !catalogSections.some(item => item.id === catalogCategory && item.foods.some(food =>
+        !catalogQuery.trim() || food.name.toLowerCase().includes(catalogQuery.trim().toLowerCase()) ||
+        (food.brand ?? "").toLowerCase().includes(catalogQuery.trim().toLowerCase()))) ? <Muted>No hay alimentos en esta categoría con ese filtro.</Muted> : null}
     </> : null}
 
     {section === "foods" ? <>
