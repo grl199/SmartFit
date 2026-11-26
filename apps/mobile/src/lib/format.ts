@@ -3,7 +3,8 @@ export function clampPercent(value: number, target: number): number {
   return Math.max(0, Math.min(100, (value / target) * 100));
 }
 export function formatKcal(value: number | null | undefined): string {
-  return Math.round(value ?? 0).toLocaleString("es-ES");
+  const rounded = String(Math.round(value ?? 0));
+  return rounded.replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 }
 export function localDateISO(date = new Date()): string {
   const year = date.getFullYear();
