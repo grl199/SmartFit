@@ -368,7 +368,7 @@ export default function NutritionScreen() {
   }
 
   const searchFoods = useCallback(async () => {
-    if (!token || !query.trim()) { setResults([]); return; }
+    if (!token || !query.trim() || foodEntryMode !== "openfoodfacts") { setResults([]); return; }
     setLoading(true); setError("");
     try {
       const params = new URLSearchParams({
@@ -383,7 +383,7 @@ export default function NutritionScreen() {
       setError(reason instanceof Error ? reason.message : "Falló la búsqueda.");
       setResults([]);
     } finally { setLoading(false); }
-  }, [token, query, foodSearchSource]);
+  }, [token, query, foodSearchSource, foodEntryMode]);
 
   useEffect(() => {
     const canSearch = section === "diary" && foodEntryMode === "openfoodfacts" && query.trim().length > 0;
