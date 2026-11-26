@@ -6,13 +6,14 @@ import { useAuth } from "@/auth/AuthProvider";
 import { AppButton, ChoiceRow, ErrorMessage, Field, Muted, PageTitle, Panel, Screen, SectionTitle } from "@/components/ui";
 import { colors } from "@/theme";
 import { ExerciseAnimation } from "@/components/ExerciseAnimation";
-import { CardioGpsTracker } from "@/components/CardioGpsTracker";
+import { CardioGpsTracker, RouteMapPreview } from "@/components/CardioGpsTracker";
 
 type Exercise = { id: number; name: string; kind: string; primary_muscle: string; secondary_muscles: string[]; equipment: string[] };
 type SetDraft = { reps: string; weight_kg: string; reached_failure: string };
+type RoutePoint = { lat: number; lng: number; altitude_m: number | null; accuracy_m: number | null; recorded_at: string };
 type DraftExercise = { exercise: Exercise; sets: SetDraft[]; duration_min: string };
 type Workout = {
-  id: number; performed_on: string; kind: string; category?: string | null; duration_min: number;
+  id: number; performed_on: string; kind: string; category?: string | null; duration_min: number; route_points?: RoutePoint[];
   kcal_burned?: number | null; kcal_source?: string | null; kcal_note?: string | null;
   distance_km?: number | null; elevation_gain_m?: number | null; steps?: number | null;
   avg_hr_bpm?: number | null; notes?: string | null;
@@ -526,6 +527,7 @@ export default function TrainingScreen() {
             <Text style={{ color: colors.accent, fontWeight: "900" }}>{fmt(workout.kcal_burned)} kcal</Text>
           </View>
           {workout.distance_km != null ? <Muted>{fmt(workout.distance_km, 2)} km · {fmt(workout.steps)} pasos · desnivel {fmt(workout.elevation_gain_m)} m</Muted> : null}
+          {workout.route_points && workout.route_points.length > 1 ? <View style={{ gap: 6 }}><Muted>Recorrido GPS · {workout.route_points.length} puntos</Muted><RouteMapPreview points={workout.route_points} height={220} /></View> : null}
           {workout.exercises.map(exercise => <View key={exercise.exercise_id} style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 }}>
             <Text style={{ color: colors.text, fontWeight: "800" }}>{exercise.exercise}</Text>
             <Muted>{exercise.duration_min != null ? "Tiempo: " + exercise.duration_min + " min · " : ""}{exercise.sets.map(set => set.reps + " reps" + (set.weight_kg == null ? "" : " × " + fmt(set.weight_kg, 1) + " kg") + (set.reached_failure ? " · fallo" : "")).join("  |  ")}</Muted>
