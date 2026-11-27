@@ -2,7 +2,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { GeoRouteMap } from "@/components/geo-route-map";
-import { GAP_MS, RoutePoint, acceptFix, fixRejectionReason, lastPointTime, minutesText, routeStats } from "@/lib/route";
+import { GAP_MS, RoutePoint, fixRejectionReason, lastPointTime, minutesText, routeStats } from "@/lib/route";
 import { RemoteDraft, StoredDraft, clearLocalDraft, loadLocalDraft, newClientId, pickDraft, saveLocalDraft } from "@/lib/route-draft";
 
 type Props = {
@@ -15,7 +15,7 @@ type Props = {
   onSaved: () => void;
 };
 
-const SYNC_EVERY_MS=15000,PERSIST_EVERY_MS=5000,SYNC_BATCH=500,STALE_SIGNAL_S=45;
+const SYNC_EVERY_MS=15000,SYNC_BATCH=500,STALE_SIGNAL_S=45;
 
 const durationText = (milliseconds: number) => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
@@ -132,7 +132,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     setName(category === "running" ? "Correr" : "Andar");
   }, [category]);
 
-  useEffect(()=>{let cancelled=false;(async()=>{const local=loadLocalDraft(owner);let remote:RemoteDraft|null=null;try{remote=await apiRequest<RemoteDraft|null>("/activity-drafts/active",{token});}catch{/* recuperar copia local sin red */}if(cancelled||startedAt.current!=null)return;const candidate=pickDraft(owner,local,remote);if(!candidate)return;if(candidate.points.length<2){clearLocalDraft();void apiRequest("/activity-drafts/"+candidate.clientId,{method:"DELETE",token}).catch(()=>undefined);return;}setRecovered(candidate);})();return()=>{cancelled=true;};},[token,owner]);
+  useEffect(()=>{let cancelled=false;(async()=>{const local=loadLocalDraft(owner);let remote:RemoteDraft|null=null;try{remote=await apiRequest<RemoteDraft|null>("/activity-drafts/active",{token});}catch{/* recuperar copia local sin red */}if(cancelled||startedAt.current!=null)return;const candidate=pickDraft(owner,local,remote);if(!candidate)return;if(candidate.points.length<1){clearLocalDraft();void apiRequest("/activity-drafts/"+candidate.clientId,{method:"DELETE",token}).catch(()=>undefined);return;}setRecovered(candidate);})();return()=>{cancelled=true;};},[token,owner]);
   function stopGps() {
     if (watchId.current != null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null; }
     if (watchRetryTimer.current != null) { window.clearTimeout(watchRetryTimer.current); watchRetryTimer.current = null; }
