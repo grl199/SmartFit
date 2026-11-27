@@ -72,7 +72,7 @@ function shouldAccept(previous: CardioRoutePoint | undefined, next: CardioRouteP
   if (!(seconds > 0)) return false;
   const metres = distanceMeters(previous, next);
   const jitterLimit = Math.max(1, Math.min(3, ((previous.accuracy_m ?? 8) + (next.accuracy_m ?? 8)) * 0.1));
-  if (metres < jitterLimit && seconds < 3) return false;
+  if (metres < jitterLimit && metres / seconds < 1) return false;
   return metres / seconds <= MAX_SPEED_MS;
 }
 
@@ -212,6 +212,7 @@ export async function startCardioBackgroundUpdates(key: string) {
   if (await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK)) return;
   await Location.startLocationUpdatesAsync(CARDIO_LOCATION_TASK, {
     accuracy: Location.Accuracy.High,
+    activityType: Location.ActivityType.Fitness,
     timeInterval: 1000,
     distanceInterval: 3,
     pausesUpdatesAutomatically: false,
