@@ -290,26 +290,26 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     const clientId = clientIdRef.current;
     const startMs = startedAtRef.current;
     if (!owner || !clientId || startMs == null) return;
-    const meta = metaRef.current;
-    const previous = await readLocalCardioDraft(localDraftKey);
-    const draft: CardioLocalDraft = {
-      owner,
-      client_id: clientId,
-      kind: meta.name.trim().slice(0,100) || "Actividad",
-      category: meta.category,
-      performed_on: meta.date,
-      started_at: new Date(startMs).toISOString(),
-      points: pointsRef.current,
-      point_count: pointsRef.current.length,
-      synced_point_count: previous?.synced_point_count ?? syncedUpToRef.current,
-      received_fix_count: receivedFixCountRef.current,
-      accepted_fix_count: acceptedFixCountRef.current,
-      rejected_fix_count: rejectedFixCountRef.current,
-      last_fix_at: previous?.last_fix_at ?? null,
-      last_accuracy_m: previous?.last_accuracy_m ?? null,
-      last_location_error: previous?.last_location_error ?? null,
-    };
     try {
+      const meta = metaRef.current;
+      const previous = await readLocalCardioDraft(localDraftKey);
+      const draft: CardioLocalDraft = {
+        owner,
+        client_id: clientId,
+        kind: meta.name.trim().slice(0,100) || "Actividad",
+        category: meta.category,
+        performed_on: meta.date,
+        started_at: new Date(startMs).toISOString(),
+        points: pointsRef.current,
+        point_count: pointsRef.current.length,
+        synced_point_count: previous?.synced_point_count ?? syncedUpToRef.current,
+        received_fix_count: receivedFixCountRef.current,
+        accepted_fix_count: acceptedFixCountRef.current,
+        rejected_fix_count: rejectedFixCountRef.current,
+        last_fix_at: previous?.last_fix_at ?? null,
+        last_accuracy_m: previous?.last_accuracy_m ?? null,
+        last_location_error: previous?.last_location_error ?? null,
+      };
       await saveLocalCardioDraft(localDraftKey, draft);
       lastLocalPersistRef.current = Date.now();
     } catch {
@@ -373,7 +373,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
         candidate = { ...remote, synced_point_count: remote.points.length };
       }
       if (!candidate) return;
-      if (candidate.points.length >= 2) {
+      if (candidate.points.length >= 1) {
         setRecovered(candidate);
       } else {
         if (local) await clearLocalDraft();
@@ -415,6 +415,8 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
           if (!draft || draft.client_id !== clientIdRef.current) return;
           pointsRef.current = draft.points;
           setPoints(draft.points);
+          lastFixAtRef.current = Date.parse(draft.last_fix_at || "") || lastFixAtRef.current;
+          if (draft.last_accuracy_m != null) setAccuracy(draft.last_accuracy_m);
           receivedFixCountRef.current = draft.received_fix_count ?? 0;
           acceptedFixCountRef.current = draft.accepted_fix_count ?? draft.points.length;
           rejectedFixCountRef.current = draft.rejected_fix_count ?? 0;
@@ -518,6 +520,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
           setError(backgroundError instanceof Error ? backgroundError.message : "No se pudo activar el servicio GPS en segundo plano.");
         }
       } else {
+        await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
         backgroundTrackingRef.current = false;
         setBackgroundTracking(false);
         setNotice("Para registrar con la pantalla bloqueada, permite el acceso a la ubicación siempre en los ajustes del teléfono.");
@@ -544,19 +547,29 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     void startGps(recovered);
   }
 
-  function saveRecoveredAsIs() {
+  async function saveRecoveredAsIs() {
     if (!recovered) return;
+    await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
+    backgroundTrackingRef.current = false;
+    setBackgroundTracking(false);
     const startMs = Date.parse(recovered.started_at);
     const endMs = Date.parse(recovered.points[recovered.points.length - 1].recorded_at);
     clientIdRef.current = recovered.client_id;
     pointsRef.current = recovered.points;
-    syncedUpToRef.current = recovered.points.length;
+    syncedUpToRef.current = recovered.synced_point_count ?? recovered.points.length;
+    receivedFixCountRef.current = recovered.received_fix_count ?? recovered.points.length;
+    acceptedFixCountRef.current = recovered.accepted_fix_count ?? recovered.points.length;
+    rejectedFixCountRef.current = recovered.rejected_fix_count ?? 0;
     startedAtRef.current = startMs;
     endedAtRef.current = endMs;
+    lastFixAtRef.current = Date.parse(recovered.last_fix_at || "") || endMs;
     setCategory(recovered.category);
     setName(recovered.kind);
     setDate(recovered.performed_on ?? localDateISO());
     setPoints(recovered.points);
+    setReceivedFixCount(receivedFixCountRef.current);
+    setAcceptedFixCount(acceptedFixCountRef.current);
+    setRejectedFixCount(rejectedFixCountRef.current);
     setElapsed(endMs - startMs);
     setStatus("finished");
     setRecovered(null);
@@ -676,9 +689,14 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
           <View style={{ flex: 1 }}><AppButton title="Guardar ruta" variant="secondary" onPress={saveRecoveredAsIs} /></View>
         </View>
         <AppButton title="Descartar recorrido" variant="quiet" onPress={() => {
-          void api("/activity-drafts/" + recovered.client_id, token, { method: "DELETE" }).catch(() => undefined);
-          void clearLocalDraft();
-          setRecovered(null);
+          void (async () => {
+            await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
+            await api("/activity-drafts/" + recovered.client_id, token, { method: "DELETE" }).catch(() => undefined);
+            await clearLocalDraft();
+            backgroundTrackingRef.current = false;
+            setBackgroundTracking(false);
+            setRecovered(null);
+          })();
         }} />
       </Panel> : null}
       {status === "idle" ? <AppButton title="Iniciar recorrido GPS" onPress={() => void startGps()} loading={busy} /> : null}
