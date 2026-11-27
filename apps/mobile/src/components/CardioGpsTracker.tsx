@@ -1,10 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Alert, AppState, Text, View } from "react-native";
 import * as Location from "expo-location";
 import { useKeepAwake } from "expo-keep-awake";
 import { WebView } from "react-native-webview";
 import { api } from "@/lib/api";
+import {
+  appendCardioLocations, clearLocalCardioDraft, readLocalCardioDraft, saveLocalCardioDraft,
+  startCardioBackgroundUpdates, stopCardioBackgroundUpdates, syncLocalCardioDraft,
+  type CardioLocalDraft,
+} from "@/lib/cardio-location-task";
 import { localDateISO } from "@/lib/format";
 import { AppButton, ErrorMessage, Field, Muted, Panel, SectionTitle } from "@/components/ui";
 import { colors } from "@/theme";
@@ -17,17 +21,16 @@ type RoutePoint = {
 type RemoteDraft = {
   client_id: string; kind: string; category: Category; performed_on?: string | null;
   started_at: string; points: RoutePoint[]; point_count: number; synced_point_count?: number;
+  received_fix_count?: number; accepted_fix_count?: number; rejected_fix_count?: number;
+  last_fix_at?: string | null; last_accuracy_m?: number | null; last_location_error?: string | null;
 };
-type LocalDraft = RemoteDraft & { owner: string };
 type Props = { token: string; owner: string; visible: boolean; initialCategory: Category; onSaved: () => void };
 type RouteStats = { distanceKm: number; elevationM: number; gapMs: number; activeMs: number };
 
 const MAX_POINTS = 10000;
 const LOCAL_PERSIST_MS = 5000;
-const SYNC_BATCH = 500;
 const GAP_MS = 120000;
-const MAX_ACCURACY_M = 50;
-const MAX_SPEED_MS = 12;
+const GPS_STALE_MS = 45000;
 const EARTH_RADIUS_KM = 6371.0088;
 
 function distanceKm(a: RoutePoint, b: RoutePoint) {
@@ -36,16 +39,6 @@ function distanceKm(a: RoutePoint, b: RoutePoint) {
   const dLng = rad(b.lng - a.lng);
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
   return EARTH_RADIUS_KM * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(Math.max(0, 1 - x)));
-}
-
-function acceptFix(previous: RoutePoint | undefined, next: RoutePoint) {
-  if (next.accuracy_m != null && next.accuracy_m > MAX_ACCURACY_M) return false;
-  if (!previous) return true;
-  const seconds = (Date.parse(next.recorded_at) - Date.parse(previous.recorded_at)) / 1000;
-  if (!(seconds > 0)) return false;
-  const km = distanceKm(previous, next);
-  if (km < 0.005 && seconds < 5) return false;
-  return km * 1000 / seconds <= MAX_SPEED_MS;
 }
 
 function routeStats(points: RoutePoint[], startMs: number | null, endMs: number | null): RouteStats {
@@ -193,6 +186,10 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [signalAge, setSignalAge] = useState<number | null>(null);
   const [syncState, setSyncState] = useState<"idle" | "syncing" | "ok" | "error">("idle");
+  const [receivedFixCount, setReceivedFixCount] = useState(0);
+  const [acceptedFixCount, setAcceptedFixCount] = useState(0);
+  const [rejectedFixCount, setRejectedFixCount] = useState(0);
+  const [backgroundTracking, setBackgroundTracking] = useState(false);
   const [recovered, setRecovered] = useState<RemoteDraft | null>(null);
   const [steps, setSteps] = useState("");
   const [heartRate, setHeartRate] = useState("");
@@ -202,6 +199,9 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   const [notice, setNotice] = useState("");
 
   const pointsRef = useRef<RoutePoint[]>([]);
+  const receivedFixCountRef = useRef(0);
+  const acceptedFixCountRef = useRef(0);
+  const rejectedFixCountRef = useRef(0);
   const lastLocalPersistRef = useRef(0);
   const localDraftKey = useMemo(() => "smartfit.activeRun.v1." + owner, [owner]);
   const startedAtRef = useRef<number | null>(null);
@@ -211,50 +211,88 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const syncPromiseRef = useRef<Promise<void> | null>(null);
   const lastFixAtRef = useRef<number | null>(null);
+  const watchActiveRef = useRef(false);
+  const backgroundTrackingRef = useRef(false);
+  const watchRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const watchRecoveryAttemptsRef = useRef(0);
+  const lastRecoveryAttemptRef = useRef(0);
+  const restartWatchRef = useRef<() => void>(() => undefined);
   const metaRef = useRef({ token, name, category, date });
   metaRef.current = { token, name, category, date };
 
   const stopWatch = useCallback(() => {
     subscriptionRef.current?.remove();
     subscriptionRef.current = null;
+    if (watchRecoveryTimerRef.current) {
+      clearTimeout(watchRecoveryTimerRef.current);
+      watchRecoveryTimerRef.current = null;
+    }
+    watchRecoveryAttemptsRef.current = 0;
   }, []);
 
   const onFix = useCallback((location: Location.LocationObject) => {
-    const coords = location.coords;
-    const next: RoutePoint = {
-      lat: coords.latitude,
-      lng: coords.longitude,
-      altitude_m: coords.altitude,
-      accuracy_m: coords.accuracy,
-      recorded_at: new Date(location.timestamp || Date.now()).toISOString(),
-    };
-    if (!acceptFix(pointsRef.current[pointsRef.current.length - 1], next)) return;
+    // La hora de recepción se actualiza aunque la lectura se descarte por ruido.
     lastFixAtRef.current = Date.now();
-    setAccuracy(coords.accuracy);
-    pointsRef.current = [...pointsRef.current, next].slice(-MAX_POINTS);
-    setPoints(pointsRef.current);
-  }, []);
+    setAccuracy(location.coords.accuracy);
+    void appendCardioLocations(localDraftKey, [location]).then(draft => {
+      if (!draft || draft.client_id !== clientIdRef.current) return;
+      pointsRef.current = draft.points;
+      receivedFixCountRef.current = draft.received_fix_count;
+      acceptedFixCountRef.current = draft.accepted_fix_count;
+      rejectedFixCountRef.current = draft.rejected_fix_count;
+      setPoints(draft.points);
+      setReceivedFixCount(draft.received_fix_count);
+      setAcceptedFixCount(draft.accepted_fix_count);
+      setRejectedFixCount(draft.rejected_fix_count);
+    }).catch(reason => {
+      setError(reason instanceof Error ? reason.message : "No se pudo guardar la lectura GPS localmente.");
+    });
+  }, [localDraftKey]);
 
   const startWatch = useCallback(async () => {
-    if (subscriptionRef.current) return;
-    subscriptionRef.current = await Location.watchPositionAsync(
+    if (subscriptionRef.current || !watchActiveRef.current || AppState.currentState !== "active") return;
+    const subscription = await Location.watchPositionAsync(
       {
         accuracy: Location.Accuracy.High,
-        distanceInterval: 5,
+        distanceInterval: 3,
         timeInterval: 1000,
         mayShowUserSettingsDialog: true,
       },
       onFix,
-      reason => setError(reason || "El proveedor de ubicación no pudo continuar."),
+      reason => {
+        subscriptionRef.current?.remove();
+        subscriptionRef.current = null;
+        setError(reason || "El proveedor GPS se interrumpió; SmartFit intentará recuperarlo.");
+        restartWatchRef.current();
+      },
     );
+    if (!watchActiveRef.current || AppState.currentState !== "active") {
+      subscription.remove();
+      return;
+    }
+    subscriptionRef.current = subscription;
+    watchRecoveryAttemptsRef.current = 0;
   }, [onFix]);
+
+  restartWatchRef.current = () => {
+    if (watchRecoveryTimerRef.current || !watchActiveRef.current || AppState.currentState !== "active") return;
+    const delay = Math.min(30000, 1000 * 2 ** Math.min(watchRecoveryAttemptsRef.current++, 5));
+    watchRecoveryTimerRef.current = setTimeout(() => {
+      watchRecoveryTimerRef.current = null;
+      void startWatch().catch(reason => {
+        setError(reason instanceof Error ? reason.message : "No se pudo reiniciar el observador GPS.");
+        restartWatchRef.current();
+      });
+    }, delay);
+  };
 
   const persistLocalDraft = useCallback(async () => {
     const clientId = clientIdRef.current;
     const startMs = startedAtRef.current;
     if (!owner || !clientId || startMs == null) return;
     const meta = metaRef.current;
-    const draft: LocalDraft = {
+    const previous = await readLocalCardioDraft(localDraftKey);
+    const draft: CardioLocalDraft = {
       owner,
       client_id: clientId,
       kind: meta.name.trim().slice(0,100) || "Actividad",
@@ -263,46 +301,38 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       started_at: new Date(startMs).toISOString(),
       points: pointsRef.current,
       point_count: pointsRef.current.length,
-      synced_point_count: syncedUpToRef.current,
+      synced_point_count: previous?.synced_point_count ?? syncedUpToRef.current,
+      received_fix_count: receivedFixCountRef.current,
+      accepted_fix_count: acceptedFixCountRef.current,
+      rejected_fix_count: rejectedFixCountRef.current,
+      last_fix_at: previous?.last_fix_at ?? null,
+      last_accuracy_m: previous?.last_accuracy_m ?? null,
+      last_location_error: previous?.last_location_error ?? null,
     };
     try {
-      await AsyncStorage.setItem(localDraftKey, JSON.stringify(draft));
+      await saveLocalCardioDraft(localDraftKey, draft);
       lastLocalPersistRef.current = Date.now();
     } catch {
-      // La copia remota seguirá sincronizándose cuando haya conexión.
+      setError("No se pudo persistir la copia local de la ruta.");
     }
   }, [owner, localDraftKey]);
 
   const clearLocalDraft = useCallback(async () => {
-    try { await AsyncStorage.removeItem(localDraftKey); }
+    try { await clearLocalCardioDraft(localDraftKey); }
     catch { /* Best effort: no bloquear el guardado de la actividad. */ }
   }, [localDraftKey]);
 
   const syncNow = useCallback((): Promise<void> => {
     if (syncPromiseRef.current) return syncPromiseRef.current;
-    const clientId = clientIdRef.current;
-    const startMs = startedAtRef.current;
-    if (!clientId || startMs == null) return Promise.resolve();
+    if (!clientIdRef.current || startedAtRef.current == null) return Promise.resolve();
     const run = (async () => {
       try {
-        while (syncedUpToRef.current < pointsRef.current.length) {
-          const from = syncedUpToRef.current;
-          const batch = pointsRef.current.slice(from, from + SYNC_BATCH);
-          if (!batch.length) break;
-          const meta = metaRef.current;
-          setSyncState("syncing");
-          await api("/activity-drafts/" + clientId, meta.token, {
-            method: "PUT",
-            body: {
-              kind: meta.name.trim().slice(0, 100) || "Actividad",
-              category: meta.category,
-              performed_on: meta.date,
-              started_at: new Date(startMs).toISOString(),
-              points: batch,
-            },
-          });
-          if (clientIdRef.current !== clientId) return;
-          syncedUpToRef.current = from + batch.length;
+        setSyncState("syncing");
+        const draft = await syncLocalCardioDraft(localDraftKey, metaRef.current.token);
+        if (draft && draft.client_id === clientIdRef.current) {
+          syncedUpToRef.current = draft.synced_point_count ?? 0;
+          pointsRef.current = draft.points;
+          setPoints(draft.points);
         }
         setSyncState("ok");
       } catch {
@@ -311,23 +341,17 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     })().finally(() => { syncPromiseRef.current = null; });
     syncPromiseRef.current = run;
     return run;
-  }, [api]);
+  }, [localDraftKey]);
 
   useEffect(() => {
     let active = true;
     async function recoverDraft() {
       const [remoteResult, localRaw] = await Promise.all([
         api<RemoteDraft | null>("/activity-drafts/active", token).then(value => ({ value, failed: false })).catch(() => ({ value: null, failed: true })),
-        AsyncStorage.getItem(localDraftKey).catch(() => null),
+        readLocalCardioDraft(localDraftKey).catch(() => null),
       ]);
       if (!active || startedAtRef.current != null) return;
-      let local: LocalDraft | null = null;
-      if (localRaw) {
-        try {
-          const parsed = JSON.parse(localRaw) as LocalDraft;
-          if (parsed.owner === owner && parsed.client_id && Array.isArray(parsed.points)) local = parsed;
-        } catch { local = null; }
-      }
+      const local: CardioLocalDraft | null = localRaw && localRaw.owner === owner ? localRaw : null;
       const remote = remoteResult.value;
       let candidate: RemoteDraft | null = null;
       if (local && remote && local.client_id === remote.client_id) {
@@ -336,7 +360,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
         for (const point of [...remote.points, ...local.points]) merged.set(point.recorded_at, point);
         const points = [...merged.values()].sort((a,b) => Date.parse(a.recorded_at)-Date.parse(b.recorded_at)).slice(-MAX_POINTS);
         const syncedCount = points.filter(point => remoteTimestamps.has(point.recorded_at)).length;
-        candidate = { ...remote, points, point_count: points.length, synced_point_count: syncedCount };
+        candidate = { ...remote, points, point_count: points.length, synced_point_count: syncedCount, received_fix_count: local.received_fix_count, accepted_fix_count: local.accepted_fix_count, rejected_fix_count: local.rejected_fix_count, last_fix_at: local.last_fix_at, last_accuracy_m: local.last_accuracy_m, last_location_error: local.last_location_error };
       } else if (local && remote) {
         const localLast = local.points.length ? Date.parse(local.points[local.points.length-1].recorded_at) : Date.parse(local.started_at);
         const remoteLast = remote.points.length ? Date.parse(remote.points[remote.points.length-1].recorded_at) : Date.parse(remote.started_at);
@@ -374,28 +398,57 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     const timer = setInterval(tick, 1000);
     const syncTimer = setInterval(() => { void syncNow(); }, 15000);
     const localTimer = setInterval(() => { if (Date.now() - lastLocalPersistRef.current >= LOCAL_PERSIST_MS) void persistLocalDraft(); }, 1000);
+    const watchdog = setInterval(() => {
+      const last = lastFixAtRef.current ?? startedAtRef.current;
+      if (AppState.currentState !== "active" || !watchActiveRef.current || last == null || Date.now() - last < GPS_STALE_MS) return;
+      if (Date.now() - lastRecoveryAttemptRef.current < GPS_STALE_MS) return;
+      lastRecoveryAttemptRef.current = Date.now();
+      void Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High })
+        .then(onFix)
+        .catch(() => undefined);
+      stopWatch();
+      restartWatchRef.current();
+    }, 15000);
     const appState = AppState.addEventListener("change", next => {
       if (next === "active") {
-        void startWatch().catch(() => setError("No se pudo reanudar la señal GPS."));
+        void readLocalCardioDraft(localDraftKey).then(draft => {
+          if (!draft || draft.client_id !== clientIdRef.current) return;
+          pointsRef.current = draft.points;
+          setPoints(draft.points);
+          receivedFixCountRef.current = draft.received_fix_count ?? 0;
+          acceptedFixCountRef.current = draft.accepted_fix_count ?? draft.points.length;
+          rejectedFixCountRef.current = draft.rejected_fix_count ?? 0;
+          setReceivedFixCount(receivedFixCountRef.current);
+          setAcceptedFixCount(acceptedFixCountRef.current);
+          setRejectedFixCount(rejectedFixCountRef.current);
+        }).catch(() => undefined);
+        void startWatch().catch(() => restartWatchRef.current());
         void syncNow();
+        setNotice(backgroundTrackingRef.current
+          ? "El servicio GPS sigue activo en segundo plano mediante la notificación de SmartFit."
+          : "El permiso de segundo plano no está activo; el GPS se registrará mientras SmartFit permanezca abierto.");
       } else {
         stopWatch();
         void persistLocalDraft();
         void syncNow();
-        setNotice("La ubicación se registra mientras SmartFit permanece en primer plano. Al salir de la app, el tramo puede quedar sin puntos GPS.");
+        setNotice(backgroundTrackingRef.current
+          ? "SmartFit continúa registrando la ruta en segundo plano."
+          : "La ubicación puede interrumpirse al salir de SmartFit porque no está activo el permiso de segundo plano.");
       }
     });
     return () => {
       clearInterval(timer);
       clearInterval(syncTimer);
       clearInterval(localTimer);
+      clearInterval(watchdog);
       appState.remove();
       void persistLocalDraft();
       void syncNow();
     };
-  }, [status, startWatch, stopWatch, syncNow, persistLocalDraft]);
+  }, [status, startWatch, stopWatch, syncNow, persistLocalDraft, localDraftKey, onFix]);
 
   useEffect(() => () => {
+    watchActiveRef.current = false;
     stopWatch();
     void persistLocalDraft();
     void syncNow();
@@ -417,6 +470,13 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
         setError("Necesitas permitir la ubicación mientras usas SmartFit para registrar una ruta GPS.");
         return;
       }
+      let allowBackground = false;
+      try {
+        const backgroundPermission = await Location.requestBackgroundPermissionsAsync();
+        allowBackground = backgroundPermission.status === "granted";
+      } catch {
+        allowBackground = false;
+      }
       const startMs = resume ? Date.parse(resume.started_at) : Date.now();
       const initialPoints = resume?.points ?? [];
       if (clientIdRef.current && !resume) {
@@ -427,6 +487,12 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       clientIdRef.current = id;
       pointsRef.current = initialPoints;
       syncedUpToRef.current = Math.min(resume?.synced_point_count ?? initialPoints.length, initialPoints.length);
+      receivedFixCountRef.current = resume?.received_fix_count ?? initialPoints.length;
+      acceptedFixCountRef.current = resume?.accepted_fix_count ?? initialPoints.length;
+      rejectedFixCountRef.current = resume?.rejected_fix_count ?? 0;
+      setReceivedFixCount(receivedFixCountRef.current);
+      setAcceptedFixCount(acceptedFixCountRef.current);
+      setRejectedFixCount(rejectedFixCountRef.current);
       startedAtRef.current = startMs;
       endedAtRef.current = null;
       lastFixAtRef.current = initialPoints.length ? Date.parse(initialPoints[initialPoints.length - 1].recorded_at) : startMs;
@@ -437,11 +503,33 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       setSignalAge(null);
       setSyncState(resume ? "ok" : "idle");
       setStatus("tracking");
-      await startWatch();
+      watchActiveRef.current = true;
+      lastRecoveryAttemptRef.current = 0;
       await persistLocalDraft();
+      if (allowBackground) {
+        try {
+          await startCardioBackgroundUpdates(localDraftKey);
+          backgroundTrackingRef.current = true;
+          setBackgroundTracking(true);
+        } catch (backgroundError) {
+          backgroundTrackingRef.current = false;
+          setBackgroundTracking(false);
+          setNotice("No se pudo activar el seguimiento en segundo plano. La actividad seguirá mientras SmartFit esté abierto.");
+          setError(backgroundError instanceof Error ? backgroundError.message : "No se pudo activar el servicio GPS en segundo plano.");
+        }
+      } else {
+        backgroundTrackingRef.current = false;
+        setBackgroundTracking(false);
+        setNotice("Para registrar con la pantalla bloqueada, permite el acceso a la ubicación siempre en los ajustes del teléfono.");
+      }
+      await startWatch();
       void syncNow();
     } catch (reason) {
+      watchActiveRef.current = false;
       stopWatch();
+      if (backgroundTrackingRef.current) await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
+      backgroundTrackingRef.current = false;
+      setBackgroundTracking(false);
       startedAtRef.current = null;
       setStatus("idle");
       setError(reason instanceof Error ? reason.message : "No se pudo iniciar el seguimiento GPS.");
@@ -476,13 +564,21 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
 
   async function discardGps() {
     const clientId = clientIdRef.current;
+    watchActiveRef.current = false;
     stopWatch();
+    if (backgroundTrackingRef.current) await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
+    backgroundTrackingRef.current = false;
+    setBackgroundTracking(false);
     startedAtRef.current = null;
     endedAtRef.current = null;
     clientIdRef.current = null;
     pointsRef.current = [];
     syncedUpToRef.current = 0;
     lastFixAtRef.current = null;
+    receivedFixCountRef.current = 0;
+    acceptedFixCountRef.current = 0;
+    rejectedFixCountRef.current = 0;
+    setReceivedFixCount(0); setAcceptedFixCount(0); setRejectedFixCount(0);
     setPoints([]);
     setElapsed(0);
     setAccuracy(null);
@@ -495,11 +591,16 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   }
 
   async function finishGps() {
+    watchActiveRef.current = false;
     stopWatch();
+    if (backgroundTrackingRef.current) await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
+    backgroundTrackingRef.current = false;
+    setBackgroundTracking(false);
     endedAtRef.current = Date.now();
     setElapsed(endedAtRef.current - (startedAtRef.current ?? endedAtRef.current));
-    setStatus("finished");
+    await persistLocalDraft();
     await syncNow();
+    setStatus("finished");
   }
 
   async function saveActivity() {
@@ -588,8 +689,9 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
           { text: "Cancelar", style: "cancel" }, { text: "Eliminar", style: "destructive", onPress: () => void discardGps() },
         ])} disabled={busy} /></View>
       </View> : null}
-      {status === "tracking" ? <Muted>La pantalla permanece encendida mientras registras. El GPS se pausa al llevar SmartFit al segundo plano; vuelve a la app para reanudar la señal.</Muted> : null}
-      {lastFixAge != null && lastFixAge > 20 && status === "tracking" ? <Text style={{ color: colors.danger, fontWeight: "700" }}>Sin señal GPS desde hace {lastFixAge} s. Comprueba los permisos o sal al exterior.</Text> : null}
+      {status === "tracking" ? <Muted>{backgroundTracking ? "GPS activo también en segundo plano. Android mostrará una notificación persistente de SmartFit." : "GPS activo mientras SmartFit está abierto. Activa el permiso de ubicación siempre para continuar con la pantalla bloqueada."}</Muted> : null}
+      {lastFixAge != null && lastFixAge > 45 && status === "tracking" ? <Text style={{ color: colors.danger, fontWeight: "700" }}>No se reciben lecturas GPS desde hace {lastFixAge} s. SmartFit está intentando recuperar el GPS.</Text> : null}
+      {status === "tracking" ? <Muted>Lecturas GPS: {receivedFixCount} · aceptadas: {acceptedFixCount} · filtradas: {rejectedFixCount}</Muted> : null}
       <View style={{ flexDirection: "row", gap: 10 }}>
         <Panel style={{ flex: 1 }}>
           <Muted>Tiempo activo</Muted>
@@ -619,7 +721,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       <Field label="Pasos (opcional)" value={steps} onChangeText={setSteps} keyboardType="number-pad" placeholder="Si los conoces" />
       <Field label="Frecuencia cardiaca media (ppm), opcional" value={heartRate} onChangeText={setHeartRate} keyboardType="number-pad" />
       <Field label="Notas" value={notes} onChangeText={setNotes} multiline numberOfLines={2} maxLength={1000} />
-      <Muted>Se conservan huecos GPS largos sin inventar distancia. Mantén SmartFit abierto durante la actividad para seguir recopilando puntos.</Muted>
+      <Muted>Las lecturas se guardan primero en el dispositivo y se sincronizan con tu cuenta. Los huecos largos no generan distancia inventada.</Muted>
       <ErrorMessage message={error} />
       {notice ? <Text style={{ color: colors.accent }}>{notice}</Text> : null}
     </Panel>
