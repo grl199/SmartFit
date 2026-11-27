@@ -190,6 +190,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   const [acceptedFixCount, setAcceptedFixCount] = useState(0);
   const [rejectedFixCount, setRejectedFixCount] = useState(0);
   const [backgroundTracking, setBackgroundTracking] = useState(false);
+  const [locationServiceError, setLocationServiceError] = useState("");
   const [recovered, setRecovered] = useState<RemoteDraft | null>(null);
   const [steps, setSteps] = useState("");
   const [heartRate, setHeartRate] = useState("");
@@ -242,6 +243,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       acceptedFixCountRef.current = draft.accepted_fix_count;
       rejectedFixCountRef.current = draft.rejected_fix_count;
       setPoints(draft.points);
+      setLocationServiceError(draft.last_location_error ?? "");
       setReceivedFixCount(draft.received_fix_count);
       setAcceptedFixCount(draft.accepted_fix_count);
       setRejectedFixCount(draft.rejected_fix_count);
@@ -375,6 +377,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
         candidate = { ...remote, synced_point_count: remote.points.length };
       }
       if (!candidate) return;
+      if (candidate.last_location_error) setLocationServiceError(candidate.last_location_error);
       if (candidate.points.length >= 1) {
         setRecovered(candidate);
       } else {
@@ -425,6 +428,12 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
           setReceivedFixCount(receivedFixCountRef.current);
           setAcceptedFixCount(acceptedFixCountRef.current);
           setRejectedFixCount(rejectedFixCountRef.current);
+          setLocationServiceError(draft.last_location_error ?? "");
+          if (draft.last_location_error && backgroundTrackingRef.current) {
+            void startCardioBackgroundUpdates(localDraftKey)
+              .then(() => setNotice("SmartFit ha reiniciado el servicio GPS en segundo plano."))
+              .catch(reason => setError(reason instanceof Error ? reason.message : "No se pudo recuperar el servicio GPS en segundo plano."));
+          }
         }).catch(() => undefined);
         void startWatch().catch(() => restartWatchRef.current());
         void syncNow();
@@ -467,7 +476,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   }, [category]);
 
   async function startGps(resume?: RemoteDraft) {
-    setError(""); setNotice("");
+    setError(""); setNotice(""); setLocationServiceError("");
     try {
       const permission = await Location.requestForegroundPermissionsAsync();
       if (permission.status !== "granted") {
@@ -716,6 +725,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       {status === "tracking" ? <Muted>{backgroundTracking ? "GPS activo también en segundo plano. Android mostrará una notificación persistente de SmartFit." : "GPS activo mientras SmartFit está abierto. Activa el permiso de ubicación siempre para continuar con la pantalla bloqueada."}</Muted> : null}
       {lastFixAge != null && lastFixAge > 45 && status === "tracking" ? <Text style={{ color: colors.danger, fontWeight: "700" }}>No se reciben lecturas GPS desde hace {lastFixAge} s. SmartFit está intentando recuperar el GPS.</Text> : null}
       {status === "tracking" ? <Muted>Lecturas GPS: {receivedFixCount} · aceptadas: {acceptedFixCount} · filtradas: {rejectedFixCount}</Muted> : null}
+      {locationServiceError ? <Text style={{ color: colors.danger }}>Aviso del servicio de ubicación: {locationServiceError}</Text> : null}
       <View style={{ flexDirection: "row", gap: 10 }}>
         <Panel style={{ flex: 1 }}>
           <Muted>Tiempo activo</Muted>
