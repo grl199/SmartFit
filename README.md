@@ -15,6 +15,10 @@ Streamlit ──HTTP──▶ FastAPI ──▶ PostgreSQL (+pgvector)
                       └─▶ Cloud Run Secret Manager (GEMINI_API_KEY inyectada como variable de entorno)
 ```
 
+## Aplicación móvil Android
+
+La aplicación Expo/React Native puede compilarse localmente en macOS con Android Studio, sin depender de la cuota de builds de EAS. Consulta la [guía de compilación Android local](docs/deployment/mobile-local-android.md).
+
 ## Puesta en marcha
 
 ```bash
