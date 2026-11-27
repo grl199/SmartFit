@@ -27,6 +27,19 @@ URL del backend según el entorno:
 - Simulador iOS: http://localhost:8000.
 - Móvil físico: http://IP_LAN_DEL_ORDENADOR:8000.
 
+## Compilar e instalar con Android Studio en macOS
+
+Para generar APK locales sin consumir la cuota de compilaciones en la nube de Expo, sigue [la guía de compilación Android local](../../docs/deployment/mobile-local-android.md). El proyecto Android se genera desde `app.json` mediante Expo Prebuild y se mantiene fuera de Git; no edites ni subas `apps/mobile/android/` salvo que se decida abandonar el flujo CNG.
+
+Comandos disponibles desde la raíz:
+
+~~~bash
+pnpm --filter @smartfit/mobile android:prebuild
+pnpm --filter @smartfit/mobile android:studio
+~~~
+
+Un APK de tipo `release` firmado desde Android Studio incluye el bundle JavaScript y funciona sin Metro ni el Mac. Para usar funciones sincronizadas, el móvil sí necesita Internet y el backend debe estar disponible.
+
 ## Funcionalidad
 
 - Registro e inicio de sesión con renovación de sesión mediante refresh token.
