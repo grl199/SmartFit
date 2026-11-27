@@ -209,7 +209,10 @@ export async function startCardioBackgroundUpdates(key: string) {
     throw new Error("El seguimiento GPS en segundo plano requiere una instalación nativa de SmartFit.");
   }
   await AsyncStorage.setItem(ACTIVE_DRAFT_KEY, key);
-  if (await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK)) return;
+  const alreadyStarted = await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK);
+  const draft = await readLocalCardioDraft(key);
+  if (alreadyStarted && !draft?.last_location_error) return;
+  if (alreadyStarted) await Location.stopLocationUpdatesAsync(CARDIO_LOCATION_TASK);
   await Location.startLocationUpdatesAsync(CARDIO_LOCATION_TASK, {
     accuracy: Location.Accuracy.High,
     activityType: Location.ActivityType.Fitness,
