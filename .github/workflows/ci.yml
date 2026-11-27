@@ -41,7 +41,7 @@ jobs:
         run: cd backend && PYTHONPATH="$PWD" pytest -q tests/test_pure.py tests/test_openapi.py
 
       - name: Install workspace
-        run: pnpm install --no-frozen-lockfile
+        run: pnpm install --frozen-lockfile
 
       - name: Generate OpenAPI and TypeScript contracts
         run: pnpm contracts:generate
