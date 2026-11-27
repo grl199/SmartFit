@@ -211,6 +211,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   const subscriptionRef = useRef<Location.LocationSubscription | null>(null);
   const syncPromiseRef = useRef<Promise<void> | null>(null);
   const lastFixAtRef = useRef<number | null>(null);
+  const lastFixPersistPromiseRef = useRef<Promise<void> | null>(null);
   const watchActiveRef = useRef(false);
   const backgroundTrackingRef = useRef(false);
   const watchRecoveryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -234,7 +235,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     // La hora de recepción se actualiza aunque la lectura se descarte por ruido.
     lastFixAtRef.current = Date.now();
     setAccuracy(location.coords.accuracy);
-    void appendCardioLocations(localDraftKey, [location]).then(draft => {
+    const pending = appendCardioLocations(localDraftKey, [location]).then(draft => {
       if (!draft || draft.client_id !== clientIdRef.current) return;
       pointsRef.current = draft.points;
       receivedFixCountRef.current = draft.received_fix_count;
@@ -247,6 +248,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     }).catch(reason => {
       setError(reason instanceof Error ? reason.message : "No se pudo guardar la lectura GPS localmente.");
     });
+    lastFixPersistPromiseRef.current = pending;
   }, [localDraftKey]);
 
   const startWatch = useCallback(async () => {
@@ -488,6 +490,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       const id = resume?.client_id ?? ("run-" + Math.random().toString(36).slice(2) + Date.now().toString(36));
       clientIdRef.current = id;
       pointsRef.current = initialPoints;
+      lastFixPersistPromiseRef.current = null;
       syncedUpToRef.current = Math.min(resume?.synced_point_count ?? initialPoints.length, initialPoints.length);
       receivedFixCountRef.current = resume?.received_fix_count ?? initialPoints.length;
       acceptedFixCountRef.current = resume?.accepted_fix_count ?? initialPoints.length;
@@ -599,6 +602,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     setSyncState("idle");
     setRecovered(null);
     setStatus("idle");
+    await lastFixPersistPromiseRef.current;
     if (clientId) await api("/activity-drafts/" + clientId, token, { method: "DELETE" }).catch(() => undefined);
     await clearLocalDraft();
   }
@@ -609,6 +613,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
     if (backgroundTrackingRef.current) await stopCardioBackgroundUpdates(localDraftKey).catch(() => undefined);
     backgroundTrackingRef.current = false;
     setBackgroundTracking(false);
+    await lastFixPersistPromiseRef.current;
     endedAtRef.current = Date.now();
     setElapsed(endedAtRef.current - (startedAtRef.current ?? endedAtRef.current));
     await persistLocalDraft();
@@ -617,6 +622,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
   }
 
   async function saveActivity() {
+    await lastFixPersistPromiseRef.current;
     if (pointsRef.current.length < 2 || !clientIdRef.current || startedAtRef.current == null) {
       setError("Necesitas al menos dos ubicaciones GPS válidas para guardar el recorrido.");
       return;
