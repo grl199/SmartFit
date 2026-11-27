@@ -231,10 +231,12 @@ export async function stopCardioBackgroundUpdates(key: string) {
 }
 
 export async function clearLocalCardioDraft(key: string) {
-  await AsyncStorage.removeItem(key);
-  if (await AsyncStorage.getItem(ACTIVE_DRAFT_KEY) === key) {
-    await AsyncStorage.removeItem(ACTIVE_DRAFT_KEY);
-  }
+  await withStorageQueue(async () => {
+    await AsyncStorage.removeItem(key);
+    if (await AsyncStorage.getItem(ACTIVE_DRAFT_KEY) === key) {
+      await AsyncStorage.removeItem(ACTIVE_DRAFT_KEY);
+    }
+  });
 }
 
 TaskManager.defineTask(CARDIO_LOCATION_TASK, async ({ data, error }) => {
