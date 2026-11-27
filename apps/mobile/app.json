@@ -46,8 +46,10 @@
         "expo-location",
         {
           "locationWhenInUsePermission": "SmartFit necesita acceder a tu ubicación mientras registras una ruta de andar o correr.",
-          "isIosBackgroundLocationEnabled": false,
-          "isAndroidBackgroundLocationEnabled": false
+          "isIosBackgroundLocationEnabled": true,
+          "isAndroidBackgroundLocationEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "SmartFit necesita usar tu ubicación durante tus recorridos, incluso con la pantalla bloqueada o al cambiar de aplicación.",
+          "isAndroidForegroundServiceEnabled": true
         }
       ]
     ],
