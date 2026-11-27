@@ -1,3 +1,4 @@
+import "@/lib/cardio-location-task";
 import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { AuthProvider } from "@/auth/AuthProvider";
