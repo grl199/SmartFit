@@ -2,7 +2,7 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest } from "@/lib/api";
 import { GeoRouteMap } from "@/components/geo-route-map";
-import { GAP_MS, RoutePoint, acceptFix, lastPointTime, minutesText, routeStats } from "@/lib/route";
+import { GAP_MS, RoutePoint, acceptFix, fixRejectionReason, lastPointTime, minutesText, routeStats } from "@/lib/route";
 import { RemoteDraft, StoredDraft, clearLocalDraft, loadLocalDraft, newClientId, pickDraft, saveLocalDraft } from "@/lib/route-draft";
 
 type Props = {
@@ -48,6 +48,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
   const [elapsed, setElapsed] = useState(0);
   const [accuracy, setAccuracy] = useState<number | null>(null);
   const [signalAge,setSignalAge]=useState<number|null>(null),[wake,setWake]=useState<"on"|"off"|"unsupported">("off"),[sync,setSync]=useState<"idle"|"ok"|"error">("idle");
+  const [receivedFixes,setReceivedFixes]=useState(0),[acceptedFixes,setAcceptedFixes]=useState(0),[rejectedFixes,setRejectedFixes]=useState(0);
   const [recovered,setRecovered]=useState<StoredDraft|null>(null),[notice,setNotice]=useState("");
   const [gpsError, setGpsError] = useState("");
   const [error, setError] = useState("");
@@ -55,15 +56,42 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
   const watchId = useRef<number | null>(null);
   const startedAt = useRef<number | null>(null);
   const clientId=useRef<string|null>(null),pointsRef=useRef<RoutePoint[]>([]),syncedUpTo=useRef(0),syncPromise=useRef<Promise<void>|null>(null),lastFixAt=useRef<number|null>(null),lastPersist=useRef(0),wakeLock=useRef<WakeLockSentinel|null>(null);
+  const trackingRef=useRef(false),watchRetryTimer=useRef<number|null>(null),watchRetryAttempts=useRef(0);
   const meta=useRef({token,owner,name,category,date});meta.current={token,owner,name,category,date};
 
   function persistNow(){if(!clientId.current||startedAt.current==null)return;const m=meta.current;lastPersist.current=Date.now();saveLocalDraft({clientId:clientId.current,owner:m.owner,kind:m.name,category:m.category,performedOn:m.date,startedAt:new Date(startedAt.current).toISOString(),points:pointsRef.current});}
   function syncNow():Promise<void>{if(syncPromise.current)return syncPromise.current;const id=clientId.current;if(!id||startedAt.current==null)return Promise.resolve();const startIso=new Date(startedAt.current).toISOString();const run=(async()=>{try{do{const from=syncedUpTo.current,batch=pointsRef.current.slice(from,from+SYNC_BATCH),m=meta.current;await apiRequest("/activity-drafts/"+id,{method:"PUT",token:m.token,body:{kind:m.name.trim().slice(0,100)||"Actividad",category:m.category,performed_on:m.date,started_at:startIso,points:batch}});if(clientId.current!==id)return;syncedUpTo.current=from+batch.length;}while(syncedUpTo.current<pointsRef.current.length);setSync("ok");}catch{setSync("error");}})().finally(()=>{syncPromise.current=null;});syncPromise.current=run;return run;}
   async function acquireWakeLock(){if(!("wakeLock" in navigator)){setWake("unsupported");return;}try{const s=await navigator.wakeLock.request("screen");wakeLock.current=s;setWake("on");s.addEventListener("release",()=>{if(wakeLock.current===s){wakeLock.current=null;setWake("off");}});}catch{setWake("off");}}
   function releaseWakeLock(){const s=wakeLock.current;wakeLock.current=null;if(s)void s.release().catch(()=>undefined);setWake("off");}
-  function onFix(position:GeolocationPosition){const q=position.coords,p:RoutePoint={lat:q.latitude,lng:q.longitude,altitude_m:q.altitude,accuracy_m:q.accuracy,recorded_at:new Date(position.timestamp||Date.now()).toISOString()};if(!acceptFix(pointsRef.current[pointsRef.current.length-1],p))return;lastFixAt.current=Date.now();setAccuracy(q.accuracy);pointsRef.current=[...pointsRef.current,p].slice(-10000);setPoints(pointsRef.current);if(Date.now()-lastPersist.current>PERSIST_EVERY_MS)persistNow();}
-  function onGeoError(e:GeolocationPositionError){setGpsError(e.code===1?"No se ha permitido el acceso a la ubicación. Activa el permiso en el navegador o registra la actividad manualmente.":e.code===2?"No se pudo obtener una señal GPS. Prueba en el exterior o usa el registro manual.":"La señal GPS ha tardado demasiado. Comprueba la ubicación del dispositivo.");if(e.code===1){stopGps();releaseWakeLock();persistNow();startedAt.current=null;setStatus("idle");onTrackingChange(false);}}
-  function beginWatch(){watchId.current=navigator.geolocation.watchPosition(onFix,onGeoError,{enableHighAccuracy:true,maximumAge:1000,timeout:20000});}
+  function onFix(position:GeolocationPosition){
+    const q=position.coords,p:RoutePoint={lat:q.latitude,lng:q.longitude,altitude_m:q.altitude,accuracy_m:q.accuracy,recorded_at:new Date(position.timestamp||Date.now()).toISOString()};
+    lastFixAt.current=Date.now();setReceivedFixes(value=>value+1);setAccuracy(q.accuracy);
+    const reason=fixRejectionReason(pointsRef.current[pointsRef.current.length-1],p);
+    if(reason){setRejectedFixes(value=>value+1);return;}
+    setAcceptedFixes(value=>value+1);
+    pointsRef.current=[...pointsRef.current,p].slice(-10000);setPoints(pointsRef.current);
+    if(Date.now()-lastPersist.current>PERSIST_EVERY_MS)persistNow();
+  }
+  function scheduleWatchRestart(){
+    if(watchRetryTimer.current!=null||!trackingRef.current||document.visibilityState!=="visible")return;
+    const delay=Math.min(30000,1000*2**Math.min(watchRetryAttempts.current++,5));
+    watchRetryTimer.current=window.setTimeout(()=>{
+      watchRetryTimer.current=null;
+      if(!trackingRef.current||document.visibilityState!=="visible"||!navigator.geolocation)return;
+      try{beginWatch();}catch{scheduleWatchRestart();}
+    },delay);
+  }
+  function onGeoError(e:GeolocationPositionError){
+    setGpsError(e.code===1?"No se ha permitido el acceso a la ubicación. Activa el permiso en el navegador o registra la actividad manualmente.":e.code===2?"El navegador no ha podido obtener una posición GPS. Reintentaremos automáticamente.":"La lectura GPS ha agotado el tiempo de espera. Reintentaremos automáticamente.");
+    if(watchId.current!=null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
+    if(e.code===1){trackingRef.current=false;stopGps();releaseWakeLock();persistNow();startedAt.current=null;setStatus("idle");onTrackingChange(false);return;}
+    scheduleWatchRestart();
+  }
+  function beginWatch(){
+    if(!navigator.geolocation||!trackingRef.current||document.visibilityState!=="visible"||watchId.current!=null)return;
+    watchId.current=navigator.geolocation.watchPosition(onFix,onGeoError,{enableHighAccuracy:true,maximumAge:2000,timeout:30000});
+    watchRetryAttempts.current=0;setGpsError("");
+  }
 
   const stats=useMemo(()=>{const live=status==="tracking"&&startedAt.current!=null,start=live?startedAt.current:session?.start??null,end=live?(startedAt.current as number)+elapsed:session?.end??null;return routeStats(points,start,end);},[points,status,session,elapsed]);
   const distance=stats.distanceKm,elevation=stats.elevationM,hasAltitude=stats.hasAltitude;
@@ -76,11 +104,18 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     tick();
     const timer = window.setInterval(tick, 1000);
     const syncTimer=window.setInterval(()=>{persistNow();void syncNow();},SYNC_EVERY_MS);
-    const onVisibility=()=>{if(document.visibilityState==="hidden"){persistNow();return;}void acquireWakeLock();if(navigator.geolocation){if(watchId.current!=null)navigator.geolocation.clearWatch(watchId.current);beginWatch();}void syncNow();const last=lastPointTime(pointsRef.current)??startedAt.current;if(last!=null&&Date.now()-last>GAP_MS)setNotice("El seguimiento estuvo interrumpido unos "+minutesText(Date.now()-last)+" (pantalla bloqueada o SmartFit en segundo plano). Ese tramo no cuenta en la distancia ni en el ritmo.");};
+    const watchdog=window.setInterval(()=>{
+      const last=lastFixAt.current??startedAt.current;
+      if(trackingRef.current&&document.visibilityState==="visible"&&last!=null&&Date.now()-last>45000){
+        if(watchId.current!=null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
+        scheduleWatchRestart();
+      }
+    },15000);
+    const onVisibility=()=>{if(document.visibilityState==="hidden"){persistNow();return;}void acquireWakeLock();if(trackingRef.current){if(watchId.current!=null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}if(watchRetryTimer.current!=null){window.clearTimeout(watchRetryTimer.current);watchRetryTimer.current=null;}beginWatch();}void syncNow();const last=lastPointTime(pointsRef.current)??startedAt.current;if(last!=null&&Date.now()-last>GAP_MS)setNotice("El seguimiento estuvo interrumpido unos "+minutesText(Date.now()-last)+" (pantalla bloqueada o SmartFit en segundo plano). Ese tramo no cuenta en la distancia ni en el ritmo.");};
     const onHide=()=>persistNow(),onOnline=()=>{void syncNow();};document.addEventListener("visibilitychange",onVisibility);window.addEventListener("pagehide",onHide);window.addEventListener("online",onOnline);
     const guard = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ""; };
     window.addEventListener("beforeunload", guard);
-    return () => { window.clearInterval(timer);window.clearInterval(syncTimer);document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("pagehide",onHide);window.removeEventListener("online",onOnline);window.removeEventListener("beforeunload",guard);persistNow();if(startedAt.current!=null)void syncNow(); };
+    return () => { window.clearInterval(timer);window.clearInterval(syncTimer);window.clearInterval(watchdog);document.removeEventListener("visibilitychange",onVisibility);window.removeEventListener("pagehide",onHide);window.removeEventListener("online",onOnline);window.removeEventListener("beforeunload",guard);persistNow();if(startedAt.current!=null)void syncNow(); };
   }, [status]);
 
   useEffect(() => () => {
@@ -94,20 +129,19 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
 
   useEffect(()=>{let cancelled=false;(async()=>{const local=loadLocalDraft(owner);let remote:RemoteDraft|null=null;try{remote=await apiRequest<RemoteDraft|null>("/activity-drafts/active",{token});}catch{/* recuperar copia local sin red */}if(cancelled||startedAt.current!=null)return;const candidate=pickDraft(owner,local,remote);if(!candidate)return;if(candidate.points.length<2){clearLocalDraft();void apiRequest("/activity-drafts/"+candidate.clientId,{method:"DELETE",token}).catch(()=>undefined);return;}setRecovered(candidate);})();return()=>{cancelled=true;};},[token,owner]);
   function stopGps() {
-    if (watchId.current != null && navigator.geolocation) {
-      navigator.geolocation.clearWatch(watchId.current);
-      watchId.current = null;
-    }
+    if (watchId.current != null && navigator.geolocation) { navigator.geolocation.clearWatch(watchId.current); watchId.current = null; }
+    if (watchRetryTimer.current != null) { window.clearTimeout(watchRetryTimer.current); watchRetryTimer.current = null; }
+    watchRetryAttempts.current=0;
   }
 
-  function startGps(resume?:StoredDraft){setError("");setGpsError("");setNotice("");if(!navigator.geolocation){setGpsError("Este navegador no permite geolocalización. Puedes registrar la actividad manualmente.");return;}if(!window.isSecureContext){setGpsError("El GPS requiere HTTPS. Puedes registrar la actividad manualmente.");return;}if(!resume&&clientId.current){const old=clientId.current;void apiRequest("/activity-drafts/"+old,{method:"DELETE",token}).catch(()=>undefined);}const startMs=resume?Date.parse(resume.startedAt):Date.now(),initial=resume?resume.points:[];if(resume)meta.current={...meta.current,name:resume.kind,category:resume.category,date:resume.performedOn};clientId.current=resume?resume.clientId:newClientId();pointsRef.current=initial;syncedUpTo.current=0;lastFixAt.current=null;startedAt.current=startMs;setRecovered(null);setPoints(initial);setSession(null);setElapsed(Date.now()-startMs);setAccuracy(null);setSignalAge(null);setSync("idle");setStatus("tracking");onTrackingChange(true);try{beginWatch();void acquireWakeLock();persistNow();void syncNow();}catch{stopGps();releaseWakeLock();startedAt.current=null;setStatus("idle");onTrackingChange(false);setGpsError("No se pudo iniciar el GPS. Comprueba los permisos del navegador.");}}
+  function startGps(resume?:StoredDraft){setError("");setGpsError("");setNotice("");if(!navigator.geolocation){setGpsError("Este navegador no permite geolocalización. Puedes registrar la actividad manualmente.");return;}if(!window.isSecureContext){setGpsError("El GPS requiere HTTPS. Puedes registrar la actividad manualmente.");return;}if(!resume&&clientId.current){const old=clientId.current;void apiRequest("/activity-drafts/"+old,{method:"DELETE",token}).catch(()=>undefined);}const startMs=resume?Date.parse(resume.startedAt):Date.now(),initial=resume?resume.points:[];if(resume)meta.current={...meta.current,name:resume.kind,category:resume.category,date:resume.performedOn};clientId.current=resume?resume.clientId:newClientId();pointsRef.current=initial;syncedUpTo.current=0;lastFixAt.current=null;startedAt.current=startMs;setRecovered(null);setPoints(initial);setSession(null);setElapsed(Date.now()-startMs);setAccuracy(null);setSignalAge(null);setSync("idle");setReceivedFixes(0);setAcceptedFixes(0);setRejectedFixes(0);trackingRef.current=true;setStatus("tracking");onTrackingChange(true);try{beginWatch();void acquireWakeLock();persistNow();void syncNow();}catch{stopGps();releaseWakeLock();startedAt.current=null;setStatus("idle");onTrackingChange(false);setGpsError("No se pudo iniciar el GPS. Comprueba los permisos del navegador.");}}
   function resumeRecovered(){if(!recovered)return;onCategoryChange(recovered.category);setName(recovered.kind);setDate(recovered.performedOn);startGps(recovered);}
   function saveRecoveredAsIs(){if(!recovered)return;const start=Date.parse(recovered.startedAt),end=lastPointTime(recovered.points)??start;clientId.current=recovered.clientId;pointsRef.current=recovered.points;syncedUpTo.current=recovered.points.length;onCategoryChange(recovered.category);setName(recovered.kind);setDate(recovered.performedOn);setPoints(recovered.points);setSession({start,end});setElapsed(end-start);setStatus("finished");setRecovered(null);}
 
 
-  function finishGps(){const end=Date.now(),start=startedAt.current??end;persistNow();void syncNow();stopGps();releaseWakeLock();startedAt.current=null;setSession({start,end});setElapsed(end-start);setStatus("finished");onTrackingChange(false);}
+  function finishGps(){const end=Date.now(),start=startedAt.current??end;persistNow();void syncNow();trackingRef.current=false;stopGps();releaseWakeLock();startedAt.current=null;setSession({start,end});setElapsed(end-start);setStatus("finished");onTrackingChange(false);}
 
-  function resetTracking(){stopGps();releaseWakeLock();startedAt.current=null;clientId.current=null;pointsRef.current=[];syncedUpTo.current=0;lastFixAt.current=null;clearLocalDraft();setPoints([]);setSession(null);setElapsed(0);setAccuracy(null);setSignalAge(null);setSync("idle");setNotice("");setRecovered(null);setGpsError("");setStatus("idle");onTrackingChange(false);}
+  function resetTracking(){trackingRef.current=false;stopGps();releaseWakeLock();startedAt.current=null;clientId.current=null;pointsRef.current=[];syncedUpTo.current=0;lastFixAt.current=null;clearLocalDraft();setPoints([]);setSession(null);setElapsed(0);setAccuracy(null);setSignalAge(null);setSync("idle");setNotice("");setRecovered(null);setGpsError("");setStatus("idle");onTrackingChange(false);}
   function discardGps(){const id=clientId.current,pending=syncPromise.current;resetTracking();if(id)void(async()=>{await pending;await apiRequest("/activity-drafts/"+id,{method:"DELETE",token}).catch(()=>undefined);})();}
   function discardRecovered(){if(!recovered)return;clearLocalDraft();void apiRequest("/activity-drafts/"+recovered.clientId,{method:"DELETE",token}).catch(()=>undefined);setRecovered(null);}
 
@@ -135,7 +169,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     }
     setBusy(true);
     try {
-      await syncPromise.current;
+      await syncNow();
       await apiRequest("/workouts", {
         method: "POST",
         token,
@@ -202,7 +236,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
               {status === "tracking" && <button type="button" className="primary-button cardio-main-action" onClick={finishGps}>Finalizar recorrido</button>}
               {status === "finished" && <div className="cardio-route-actions"><button type="button" className="secondary-button" onClick={discardGps}>Descartar recorrido</button><button type="button" className="primary-button" onClick={()=>startGps()}>Repetir recorrido</button></div>}
               {status!=="tracking"&&<p className="muted">Al iniciar, el navegador solicitará permiso de ubicación. Mantén SmartFit abierto y la pantalla encendida. Con el móvil bloqueado el navegador puede dejar de entregar ubicaciones.</p>}
-              {status==="tracking"&&<div className="cardio-tracking-health"><span className={wake==="on"?"ok":"warn"}>{wake==="on"?"Pantalla activa":wake==="unsupported"?"Pantalla: desactiva el bloqueo automático":"Pantalla: no se puede mantener encendida"}</span><span className={sync==="error"?"warn":"ok"}>{sync==="error"?"Sin conexión: copia local guardada":sync==="ok"?"Recorrido guardado":"Guardando…"}</span></div>}
+              {status==="tracking"&&<div className="cardio-tracking-health"><span className={wake==="on"?"ok":"warn"}>{wake==="on"?"Pantalla activa":wake==="unsupported"?"Pantalla: desactiva el bloqueo automático":"Pantalla: no se puede mantener encendida"}</span><span className={sync==="error"?"warn":"ok"}>{sync==="error"?"Sin conexión: copia local guardada":sync==="ok"?"Recorrido guardado":"Guardando…"}</span><span>GPS: {receivedFixes} lecturas · {acceptedFixes} aceptadas · {rejectedFixes} filtradas</span></div>}
               {status==="tracking"&&signalAge!=null&&signalAge>STALE_SIGNAL_S&&<p className="cardio-gps-error">Sin señal GPS desde hace {signalAge<120?signalAge+" s":minutesText(signalAge*1000)}. Mantén SmartFit en pantalla.</p>}
               {notice&&<p className="cardio-gps-error">{notice}</p>}
               {gpsError && <p className="cardio-gps-error">{gpsError}</p>}
