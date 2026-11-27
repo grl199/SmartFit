@@ -56,7 +56,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
   const watchId = useRef<number | null>(null);
   const startedAt = useRef<number | null>(null);
   const clientId=useRef<string|null>(null),pointsRef=useRef<RoutePoint[]>([]),syncedUpTo=useRef(0),syncPromise=useRef<Promise<void>|null>(null),lastFixAt=useRef<number|null>(null),lastPersist=useRef(0),wakeLock=useRef<WakeLockSentinel|null>(null);
-  const trackingRef=useRef(false),watchRetryTimer=useRef<number|null>(null),watchRetryAttempts=useRef(0);
+  const trackingRef=useRef(false),watchRetryTimer=useRef<number|null>(null),watchRetryAttempts=useRef(0),lastGpsProbeAt=useRef(0);
   const meta=useRef({token,owner,name,category,date});meta.current={token,owner,name,category,date};
 
   function persistNow(){if(!clientId.current||startedAt.current==null)return;const m=meta.current;lastPersist.current=Date.now();saveLocalDraft({clientId:clientId.current,owner:m.owner,kind:m.name,category:m.category,performedOn:m.date,startedAt:new Date(startedAt.current).toISOString(),points:pointsRef.current});}
@@ -105,11 +105,15 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     const timer = window.setInterval(tick, 1000);
     const syncTimer=window.setInterval(()=>{persistNow();void syncNow();},SYNC_EVERY_MS);
     const watchdog=window.setInterval(()=>{
-      const last=lastFixAt.current??startedAt.current;
-      if(trackingRef.current&&document.visibilityState==="visible"&&last!=null&&Date.now()-last>45000){
-        if(watchId.current!=null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
-        scheduleWatchRestart();
-      }
+      const now=Date.now(),last=lastFixAt.current??startedAt.current;
+      if(!trackingRef.current||document.visibilityState!=="visible"||last==null||now-last<=45000||now-lastGpsProbeAt.current<45000)return;
+      lastGpsProbeAt.current=now;
+      navigator.geolocation.getCurrentPosition(position=>{
+        // A stationary user may not trigger watchPosition repeatedly; this probe distinguishes that from a dead provider.
+        lastFixAt.current=Date.now();setReceivedFixes(value=>value+1);setAccuracy(position.coords.accuracy);
+        if(watchId.current!=null){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
+        beginWatch();
+      },onGeoError,{enableHighAccuracy:true,maximumAge:0,timeout:15000});
     },15000);
     const onVisibility=()=>{if(document.visibilityState==="hidden"){persistNow();return;}void acquireWakeLock();if(trackingRef.current){if(watchId.current!=null&&navigator.geolocation){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}if(watchRetryTimer.current!=null){window.clearTimeout(watchRetryTimer.current);watchRetryTimer.current=null;}beginWatch();}void syncNow();const last=lastPointTime(pointsRef.current)??startedAt.current;if(last!=null&&Date.now()-last>GAP_MS)setNotice("El seguimiento estuvo interrumpido unos "+minutesText(Date.now()-last)+" (pantalla bloqueada o SmartFit en segundo plano). Ese tramo no cuenta en la distancia ni en el ritmo.");};
     const onHide=()=>persistNow(),onOnline=()=>{void syncNow();};document.addEventListener("visibilitychange",onVisibility);window.addEventListener("pagehide",onHide);window.addEventListener("online",onOnline);
