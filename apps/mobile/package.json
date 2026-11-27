@@ -13,7 +13,9 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "test": "jest --runInBand",
-    "export": "expo export --platform all"
+    "export": "expo export --platform all",
+    "android:prebuild": "expo prebuild --platform android",
+    "android:studio": "expo prebuild --platform android && open -a \"Android Studio\" ./android"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.2",
