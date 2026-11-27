@@ -109,8 +109,8 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
       if(!trackingRef.current||document.visibilityState!=="visible"||last==null||now-last<=45000||now-lastGpsProbeAt.current<45000)return;
       lastGpsProbeAt.current=now;
       navigator.geolocation.getCurrentPosition(position=>{
-        // A stationary user may not trigger watchPosition repeatedly; this probe distinguishes that from a dead provider.
-        lastFixAt.current=Date.now();setReceivedFixes(value=>value+1);setAccuracy(position.coords.accuracy);
+        // Route the probe through the same validation and persistence path as watchPosition.
+        onFix(position);
         if(watchId.current!=null){navigator.geolocation.clearWatch(watchId.current);watchId.current=null;}
         beginWatch();
       },onGeoError,{enableHighAccuracy:true,maximumAge:0,timeout:15000});
