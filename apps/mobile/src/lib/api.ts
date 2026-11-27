@@ -4,6 +4,10 @@ import { ApiError, apiRequest, type ApiRequestOptions } from "@smartfit/api-clie
 
 const ACCESS_KEY = "smartfit.access-token";
 const REFRESH_KEY = "smartfit.refresh-token";
+
+export function getStoredAccessToken(): Promise<string | null> {
+  return TokenStorage.getItemAsync(ACCESS_KEY);
+}
 export const API_BASE_URL = (process.env.EXPO_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/+$/, "");
 
 export type SmartFitUser = components["schemas"]["UserOut"];
