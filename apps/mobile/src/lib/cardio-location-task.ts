@@ -204,6 +204,9 @@ export function syncLocalCardioDraft(key: string, providedToken?: string) {
 }
 
 export async function startCardioBackgroundUpdates(key: string) {
+  if (!(await TaskManager.isAvailableAsync())) {
+    throw new Error("El seguimiento GPS en segundo plano requiere una instalación nativa de SmartFit.");
+  }
   await AsyncStorage.setItem(ACTIVE_DRAFT_KEY, key);
   if (await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK)) return;
   await Location.startLocationUpdatesAsync(CARDIO_LOCATION_TASK, {
@@ -222,7 +225,8 @@ export async function startCardioBackgroundUpdates(key: string) {
 }
 
 export async function stopCardioBackgroundUpdates(key: string) {
-  if (await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK)) {
+  if (await TaskManager.isAvailableAsync()
+    && await Location.hasStartedLocationUpdatesAsync(CARDIO_LOCATION_TASK)) {
     await Location.stopLocationUpdatesAsync(CARDIO_LOCATION_TASK);
   }
   if (await AsyncStorage.getItem(ACTIVE_DRAFT_KEY) === key) {
