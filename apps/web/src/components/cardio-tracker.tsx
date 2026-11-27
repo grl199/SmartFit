@@ -70,7 +70,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     if(reason){setRejectedFixes(value=>value+1);return;}
     setAcceptedFixes(value=>value+1);
     pointsRef.current=[...pointsRef.current,p].slice(-10000);setPoints(pointsRef.current);
-    if(Date.now()-lastPersist.current>PERSIST_EVERY_MS)persistNow();
+    persistNow();
   }
   function scheduleWatchRestart(){
     if(watchRetryTimer.current!=null||!trackingRef.current||document.visibilityState!=="visible")return;
@@ -119,7 +119,8 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
   }, [status]);
 
   useEffect(() => () => {
-    if (watchId.current != null && navigator.geolocation) navigator.geolocation.clearWatch(watchId.current);
+    trackingRef.current=false;
+    stopGps();
     if(wakeLock.current)void wakeLock.current.release().catch(()=>undefined);
   }, []);
 
@@ -134,7 +135,7 @@ export function CardioTracker({ token, owner="", category, onCategoryChange, onE
     watchRetryAttempts.current=0;
   }
 
-  function startGps(resume?:StoredDraft){setError("");setGpsError("");setNotice("");if(!navigator.geolocation){setGpsError("Este navegador no permite geolocalización. Puedes registrar la actividad manualmente.");return;}if(!window.isSecureContext){setGpsError("El GPS requiere HTTPS. Puedes registrar la actividad manualmente.");return;}if(!resume&&clientId.current){const old=clientId.current;void apiRequest("/activity-drafts/"+old,{method:"DELETE",token}).catch(()=>undefined);}const startMs=resume?Date.parse(resume.startedAt):Date.now(),initial=resume?resume.points:[];if(resume)meta.current={...meta.current,name:resume.kind,category:resume.category,date:resume.performedOn};clientId.current=resume?resume.clientId:newClientId();pointsRef.current=initial;syncedUpTo.current=0;lastFixAt.current=null;startedAt.current=startMs;setRecovered(null);setPoints(initial);setSession(null);setElapsed(Date.now()-startMs);setAccuracy(null);setSignalAge(null);setSync("idle");setReceivedFixes(0);setAcceptedFixes(0);setRejectedFixes(0);trackingRef.current=true;setStatus("tracking");onTrackingChange(true);try{beginWatch();void acquireWakeLock();persistNow();void syncNow();}catch{stopGps();releaseWakeLock();startedAt.current=null;setStatus("idle");onTrackingChange(false);setGpsError("No se pudo iniciar el GPS. Comprueba los permisos del navegador.");}}
+  function startGps(resume?:StoredDraft){setError("");setGpsError("");setNotice("");if(!navigator.geolocation){setGpsError("Este navegador no permite geolocalización. Puedes registrar la actividad manualmente.");return;}if(!window.isSecureContext){setGpsError("El GPS requiere HTTPS. Puedes registrar la actividad manualmente.");return;}if(!resume&&clientId.current){const old=clientId.current;void apiRequest("/activity-drafts/"+old,{method:"DELETE",token}).catch(()=>undefined);}const startMs=resume?Date.parse(resume.startedAt):Date.now(),initial=resume?resume.points:[];if(resume)meta.current={...meta.current,name:resume.kind,category:resume.category,date:resume.performedOn};clientId.current=resume?resume.clientId:newClientId();pointsRef.current=initial;syncedUpTo.current=0;lastFixAt.current=null;startedAt.current=startMs;setRecovered(null);setPoints(initial);setSession(null);setElapsed(Date.now()-startMs);setAccuracy(null);setSignalAge(null);setSync("idle");setReceivedFixes(0);setAcceptedFixes(0);setRejectedFixes(0);trackingRef.current=true;setStatus("tracking");onTrackingChange(true);try{beginWatch();void acquireWakeLock();persistNow();void syncNow();}catch{trackingRef.current=false;stopGps();releaseWakeLock();startedAt.current=null;setStatus("idle");onTrackingChange(false);setGpsError("No se pudo iniciar el GPS. Comprueba los permisos del navegador.");}}
   function resumeRecovered(){if(!recovered)return;onCategoryChange(recovered.category);setName(recovered.kind);setDate(recovered.performedOn);startGps(recovered);}
   function saveRecoveredAsIs(){if(!recovered)return;const start=Date.parse(recovered.startedAt),end=lastPointTime(recovered.points)??start;clientId.current=recovered.clientId;pointsRef.current=recovered.points;syncedUpTo.current=recovered.points.length;onCategoryChange(recovered.category);setName(recovered.kind);setDate(recovered.performedOn);setPoints(recovered.points);setSession({start,end});setElapsed(end-start);setStatus("finished");setRecovered(null);}
 
