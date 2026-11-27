@@ -15,7 +15,7 @@ type Props = {
   onSaved: () => void;
 };
 
-const SYNC_EVERY_MS=15000,PERSIST_EVERY_MS=5000,SYNC_BATCH=500,STALE_SIGNAL_S=20;
+const SYNC_EVERY_MS=15000,PERSIST_EVERY_MS=5000,SYNC_BATCH=500,STALE_SIGNAL_S=45;
 
 const durationText = (milliseconds: number) => {
   const seconds = Math.max(0, Math.floor(milliseconds / 1000));
