@@ -500,7 +500,7 @@ export function CardioGpsTracker({ token, owner, visible, initialCategory, onSav
       setRejectedFixCount(rejectedFixCountRef.current);
       startedAtRef.current = startMs;
       endedAtRef.current = null;
-      lastFixAtRef.current = initialPoints.length ? Date.parse(initialPoints[initialPoints.length - 1].recorded_at) : startMs;
+      lastFixAtRef.current = Date.parse(resume?.last_fix_at || "") || (initialPoints.length ? Date.parse(initialPoints[initialPoints.length - 1].recorded_at) : startMs);
       setPoints(initialPoints);
       setRecovered(null);
       setElapsed(Date.now() - startMs);
