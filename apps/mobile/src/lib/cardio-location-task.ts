@@ -1,6 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as Location from "expo-location";
 import * as TaskManager from "expo-task-manager";
+import { Platform } from "react-native";
 import { api, getStoredAccessToken } from "@/lib/api";
 
 export type CardioRoutePoint = {
@@ -243,7 +244,7 @@ export async function clearLocalCardioDraft(key: string) {
   });
 }
 
-TaskManager.defineTask(CARDIO_LOCATION_TASK, async ({ data, error }) => {
+if (Platform.OS !== "web") TaskManager.defineTask(CARDIO_LOCATION_TASK, async ({ data, error }) => {
   const key = await AsyncStorage.getItem(ACTIVE_DRAFT_KEY);
   if (!key) return;
   if (error) {
